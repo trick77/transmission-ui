@@ -1,7 +1,12 @@
-# Production stack: transmission-daemon 4.0.5 with this UI baked in (see Containerfile), reached
-# directly on :9091 with the daemon's own RPC user/pass.
+# Production stack: transmission-daemon 4.0.5 with this UI baked in (see Containerfile).
 #
-#   cp .env.example .env   # fill in TM_USER / TM_PASS and the paths
+# Two ways in, both to the same container port:
+#   - the UI at https://${TM_HOST} through an external Traefik that terminates TLS
+#     (requires the external "traefik" network: `docker network create traefik`)
+#   - the RPC directly on :9091 on the LAN, for radarr/sonarr and transmission-remote
+# The daemon's own RPC basic auth (TM_USER / TM_PASS) applies on both paths.
+#
+#   cp .env.example .env   # fill in TM_HOST, TM_USER / TM_PASS and the paths
 #   docker compose up -d                 # pulls ghcr.io/trick77/transmission-ui (release.yaml)
 #   docker compose up -d --build         # or build locally from the Containerfile
 #
@@ -24,8 +29,13 @@ services:
       PASS: "${TM_PASS}"
       # Where the daemon serves the UI from (baked into the image at /web).
       TRANSMISSION_WEB_HOME: /web
-      # Alternative speed limits and everything else live in settings.json under /config
-      # and are changed from the UI's Settings dialog.
+      # The daemon answers 421 to any Host header it does not know. The public
+      # name Traefik forwards must therefore be whitelisted: the image writes
+      # HOST_WHITELIST into settings.json's rpc-host-whitelist (localhost implied).
+      HOST_WHITELIST: "${TM_HOST}"
+      # Fixed peer port matching the mapping below (disables random port selection).
+      PEERPORT: "${TM_PEER_PORT:-51413}"
+      # Everything else in settings.json is changed from the UI's Settings dialog.
 
     volumes:
       - ./config:/config                       # settings.json, resume data, torrent files
@@ -33,7 +43,9 @@ services:
       - "${TM_WATCH:-./watch}:/watch"          # drop .torrent files here to auto-add
 
     ports:
+      # RPC + UI on the LAN. Traefik reaches the same port over the traefik network.
       - "9091:9091"
+      # Peer port: BitTorrent traffic, not HTTP; never goes through Traefik.
       - "${TM_PEER_PORT:-51413}:51413"
       - "${TM_PEER_PORT:-51413}:51413/udp"
 
@@ -45,6 +57,10 @@ services:
       start_interval: 5s
       retries: 3
 
+    networks:
+      - default
+      - traefik
+
     deploy:
       resources:
         limits:
@@ -52,3 +68,15 @@ services:
           # Daemon RSS stays under ~300 MB with a few hundred torrents; the rest is page cache for
           # the pieces being verified or seeded. 1g is comfortable; raise if verify runs get slow.
           memory: 1g
+
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: traefik
+      traefik.http.routers.transmission.rule: Host(`${TM_HOST}`)
+      traefik.http.routers.transmission.entrypoints: websecure
+      traefik.http.routers.transmission.tls: "true"
+      traefik.http.services.transmission.loadbalancer.server.port: "9091"
+
+networks:
+  traefik:
+    external: true
