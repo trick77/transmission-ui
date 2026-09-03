@@ -29,11 +29,11 @@ services:
       PASS: "${TM_PASS}"
       # Where the daemon serves the UI from (baked into the image at /web).
       TRANSMISSION_WEB_HOME: /web
-      # The daemon answers 421 to any Host header it does not know. The public
-      # name Traefik forwards must therefore be whitelisted: the image writes
-      # HOST_WHITELIST into settings.json's rpc-host-whitelist (localhost implied).
-      HOST_WHITELIST: "${TM_HOST}"
-      # Fixed peer port matching the mapping below (disables random port selection).
+      # No HOST_WHITELIST: with RPC auth on, the daemon accepts any Host header
+      # (rpc-server.cc isHostnameAllowed), so Traefik's public name needs no entry.
+      # Peer port. The image rewrites settings.json from this on EVERY start, so
+      # .env is the source of truth; a change in Settings › Network is reverted at
+      # the next restart. Keep it equal to the mapping below.
       PEERPORT: "${TM_PEER_PORT:-51413}"
       # Everything else in settings.json is changed from the UI's Settings dialog.
 
@@ -45,9 +45,10 @@ services:
     ports:
       # RPC + UI on the LAN. Traefik reaches the same port over the traefik network.
       - "9091:9091"
-      # Peer port: BitTorrent traffic, not HTTP; never goes through Traefik.
-      - "${TM_PEER_PORT:-51413}:51413"
-      - "${TM_PEER_PORT:-51413}:51413/udp"
+      # Peer port: BitTorrent traffic, not HTTP; never goes through Traefik. Same
+      # number on both sides because PEERPORT above makes the daemon listen on it.
+      - "${TM_PEER_PORT:-51413}:${TM_PEER_PORT:-51413}"
+      - "${TM_PEER_PORT:-51413}:${TM_PEER_PORT:-51413}/udp"
 
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:9091/transmission/web/"]
