@@ -113,9 +113,15 @@ test('inspector tabs show real detail data', async ({ page }) => {
   await shot(page, 'inspector-trackers')
 })
 
-test('tracker down notice appears for the dead fixture tracker', async ({ page }) => {
-  await expect(page.locator('.notice')).toContainText('127.0.0.1')
-  await expect(page.locator('.sidebar .side-item.two .sub.down')).toBeVisible()
+test('dead fixture tracker shows as failing in the sidebar; down + notice once the outage is 10 min old', async ({ page }) => {
+  // "down" needs every announced torrent failing for ≥ 10 min. On a daemon started seconds ago
+  // (CI) the host is still "issues"; on a long-running local daemon it is "down" with the notice.
+  const sub = page.locator('.sidebar .side-item.two .sub').first()
+  await expect(sub).toHaveText(/down · |of \d+ failing/)
+  if (/^down/.test((await sub.textContent()) ?? '')) {
+    await expect(page.locator('.notice')).toContainText('127.0.0.1')
+    await expect(sub).toHaveClass(/down/)
+  }
 })
 
 test('add by magnet then remove from list', async ({ page }) => {
