@@ -51,7 +51,9 @@ services:
       - "${TM_PEER_PORT:-51413}:${TM_PEER_PORT:-51413}/udp"
 
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:9091/transmission/web/"]
+      # Basic auth covers /transmission/web/ too, so the probe must authenticate;
+      # unauthenticated it would 401 forever and mark the container unhealthy.
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null -u \"$USER:$PASS\" http://127.0.0.1:9091/transmission/web/"]
       interval: 60s
       timeout: 5s
       start_period: 30s
