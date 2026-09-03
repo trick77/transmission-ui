@@ -65,9 +65,16 @@ jobs:
       # served.spec.ts needs the built bundle mounted into the daemon at /web.
       - run: npm run build
         working-directory: ui
+      # lscr.io rate-limits anonymous pulls; several Dependabot PRs starting at
+      # once has tripped "toomanyrequests" on the first attempt. Retry with
+      # backoff rather than failing the whole job on a transient pull.
       - name: Start daemon
         run: |
           mkdir -p hack/state hack/downloads hack/watch
+          for i in 1 2 3 4 5; do
+            docker compose -f compose.dev.yaml pull && break
+            echo "pull attempt $i failed, retrying in $((i * 20))s"; sleep $((i * 20))
+          done
           docker compose -f compose.dev.yaml up -d
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' -u dev:devpass http://localhost:9091/transmission/rpc || true)

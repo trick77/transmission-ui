@@ -6,6 +6,13 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # vitest and @vitest/coverage-v8 share a major; bumping one alone makes
+      # `npm ci` fail on ERESOLVE, so they always travel together.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+      # vite and its react plugin likewise.
+      vite:
+        patterns: ["vite", "@vitejs/*"]
       npm-minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
