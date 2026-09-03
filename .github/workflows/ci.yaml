@@ -65,11 +65,13 @@ jobs:
       # served.spec.ts needs the built bundle mounted into the daemon at /web.
       - run: npm run build
         working-directory: ui
-      # Anonymous pulls got "toomanyrequests" when several Dependabot PRs started
-      # at once. The image lives on ghcr.io (compose.dev.yaml pulls it from there
+      # One anonymous pull got a transient "toomanyrequests" from the registry
+      # (its own message said 44000/minute allowed, so not this repo's load).
+      # The image lives on ghcr.io (compose.dev.yaml pulls it from there
       # directly; lscr.io is only a redirect to it), so authenticate with the
-      # job token, which lifts the anonymous limit, and keep one bounded retry
-      # for the residual transient case. Fails fast on the last attempt.
+      # job token, which moves the pull off the anonymous quota, and keep one
+      # bounded retry for the residual transient case. Fails fast on the last
+      # attempt.
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
