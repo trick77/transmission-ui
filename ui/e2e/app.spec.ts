@@ -113,15 +113,17 @@ test('inspector tabs show real detail data', async ({ page }) => {
   await shot(page, 'inspector-trackers')
 })
 
-test('dead fixture tracker shows as failing in the sidebar; down + notice once the outage is 10 min old', async ({ page }) => {
-  // "down" needs every announced torrent failing for ≥ 10 min. On a daemon started seconds ago
-  // (CI) the host is still "issues"; on a long-running local daemon it is "down" with the notice.
-  const sub = page.locator('.sidebar .side-item.two .sub').first()
-  await expect(sub).toHaveText(/down · |of \d+ failing/)
-  if (/^down/.test((await sub.textContent()) ?? '')) {
-    await expect(page.locator('.notice')).toContainText('127.0.0.1')
-    await expect(sub).toHaveClass(/down/)
-  }
+test('dead fixture tracker: issues on a fresh daemon, down + notice once the outage is 10 min old', async ({ page }) => {
+  // Every announced fixture torrent fails against 127.0.0.1:1, but "down" also needs the outage
+  // to be ≥ 10 min old, which a daemon started seconds ago (CI) cannot provide. The UI remembers
+  // when it first saw a host failing (localStorage tm.trkfail), so seed that with an old time
+  // and reload: the state is then deterministically "down" and the notice must appear.
+  const item = page.locator('.sidebar .side-item', { hasText: '127.0.0.1' })
+  await expect(item.locator('.sub')).toHaveText(/down · |of \d+ failing/)
+  await page.evaluate(() => localStorage.setItem('tm.trkfail', JSON.stringify([['127.0.0.1', Math.floor(Date.now() / 1000) - 700]])))
+  await page.reload()
+  await expect(page.locator('.notice')).toContainText('127.0.0.1', { timeout: 15000 })
+  await expect(item.locator('.sub.down')).toHaveText(/^down · /)
 })
 
 test('add by magnet then remove from list', async ({ page }) => {
