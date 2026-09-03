@@ -57,15 +57,31 @@ function ConfirmRemove({ ids, deleteData, onClose }: { ids: number[]; deleteData
 function Labels({ ids, onClose }: { ids: number[]; onClose: () => void }) {
   const torrents = useStore(s => s.torrents)
   const existing = labelCounts(torrents).map(l => l.label)
+  // Multi-select shows the labels every selected torrent shares. Saving applies the DIFF
+  // (labels toggled on / off here) to each torrent's own list, so a label only some of them
+  // carry is never stripped from the others.
   const initial = ids.length === 1 ? (get().byId.get(ids[0])?.labels ?? []) : existing.filter(l => ids.every(id => get().byId.get(id)?.labels.includes(l)))
   const [sel, setSel] = useState<string[]>(initial)
   const [draft, setDraft] = useState('')
   const toggle = (l: string) => setSel(s => s.includes(l) ? s.filter(x => x !== l) : [...s, l])
   const add = () => { const v = draft.trim(); if (v && !sel.includes(v)) setSel(s => [...s, v]); setDraft('') }
+  const save = () => {
+    const added = sel.filter(l => !initial.includes(l)), removed = initial.filter(l => !sel.includes(l))
+    const groups = new Map<string, number[]>()
+    for (const id of ids) {
+      const cur = get().byId.get(id)?.labels ?? []
+      const next = [...cur.filter(l => !removed.includes(l)), ...added.filter(l => !cur.includes(l))]
+      if (next.length === cur.length && next.every(l => cur.includes(l))) continue
+      const key = JSON.stringify(next)
+      groups.set(key, [...(groups.get(key) ?? []), id])
+    }
+    onClose()
+    if (groups.size) void run('Labels', () => Promise.all([...groups].map(([k, g]) => api.setTorrent(g, { labels: JSON.parse(k) as string[] }))))
+  }
   return (
     <Modal title="Labels" width={440} onClose={onClose}
-      footer={<><span className="hint">{ids.length > 1 ? `Applies to ${ids.length} torrents` : names(ids)[0]}</span><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
-        <button className="btn primary" onClick={() => { onClose(); void run('Labels', () => api.setTorrent(ids, { labels: sel })) }}>Save</button></>}>
+      footer={<><span className="hint">{ids.length > 1 ? `Applies to ${ids.length} torrents · shows labels they all share` : names(ids)[0]}</span><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
+        <button className="btn primary" onClick={save}>Save</button></>}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         {[...new Set([...existing, ...sel])].map(l => (
           <button key={l} className="chip lbl" style={sel.includes(l) ? { background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'transparent', height: 26, padding: '0 10px' } : { height: 26, padding: '0 10px' }} onClick={() => toggle(l)}>{l}</button>
@@ -137,10 +153,12 @@ function Limits({ ids, onClose }: { ids: number[]; onClose: () => void }) {
 
 function TrackersEdit({ id, onClose }: { id: number; onClose: () => void }) {
   const [text, setText] = useState<string | null>(null)
-  useEffect(() => { api.getTorrentDetail(id).then(d => setText(d.trackerList)).catch(() => setText('')) }, [id])
+  const [failed, setFailed] = useState(false)
+  // On a failed load text stays null so Save stays disabled: saving an empty list would strip every tracker.
+  useEffect(() => { api.getTorrentDetail(id).then(d => { if (d) setText(d.trackerList); else setFailed(true) }).catch(() => setFailed(true)) }, [id])
   return (
     <Modal title="Trackers" width={560} onClose={onClose}
-      footer={<><span className="hint">One announce URL per line; a blank line starts a new tier.</span><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
+      footer={<><span className="hint">{failed ? <span style={{ color: 'var(--err)' }}>Could not load the tracker list; nothing will be saved.</span> : 'One announce URL per line; a blank line starts a new tier.'}</span><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={text == null} onClick={() => { onClose(); void run('Trackers', () => api.setTorrent([id], { trackerList: text ?? '' }).then(refreshNow)) }}>Save</button></>}>
       <textarea value={text ?? ''} onChange={e => setText(e.target.value)} spellCheck={false}
         style={{ width: '100%', minHeight: 220, resize: 'vertical', background: 'var(--surface-2)', color: 'var(--ink)', border: '1px solid transparent', borderRadius: 'var(--r)', padding: 10, font: '12px var(--mono)', outline: 'none' }} />

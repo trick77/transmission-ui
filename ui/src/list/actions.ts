@@ -25,8 +25,8 @@ export function torrentMenu(ids: number[]): MenuItem[] {
     { icon: 'gear', label: 'Limits & priority…', onClick: () => set({ dialog: { kind: 'limits', ids } }) },
     { sep: true, label: '' },
     ...(one ? [
-      { icon: 'magnet' as const, label: 'Copy magnet link', k: '⌘C', onClick: () => void copyMagnet(one.id) },
-      { icon: 'link' as const, label: 'Copy hash', onClick: () => void copyHash(one.id) },
+      { icon: 'magnet' as const, label: 'Copy magnet link', k: '⌘C', onClick: () => copyText(one.magnetLink, 'Magnet link copied') },
+      { icon: 'link' as const, label: 'Copy hash', onClick: () => copyText(one.hashString, 'Hash copied') },
       { sep: true, label: '' },
     ] : []),
     { icon: 'x', label: ids.length > 1 ? `Remove ${ids.length} from list` : 'Remove from list', k: '⌫', danger: true, onClick: () => set({ dialog: { kind: 'confirm-remove', ids, deleteData: false } }) },
@@ -46,9 +46,7 @@ export function viewMenu(ids: number[], selectAll: () => void): MenuItem[] {
   ]
 }
 
-async function copyMagnet(id: number) {
-  try { const d = await api.getTorrentDetail(id); await navigator.clipboard.writeText(d.magnetLink); toast('Magnet link copied') } catch { toast('Copy failed') }
-}
-async function copyHash(id: number) {
-  try { const d = await api.getTorrentDetail(id); await navigator.clipboard.writeText(d.hashString); toast('Hash copied') } catch { toast('Copy failed') }
+// Synchronous in the click handler: Safari only allows clipboard writes inside user activation.
+function copyText(text: string, done: string) {
+  navigator.clipboard.writeText(text).then(() => toast(done), () => toast('Copy failed'))
 }

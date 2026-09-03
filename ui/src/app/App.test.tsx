@@ -391,6 +391,41 @@ describe('dialogs', () => {
     await waitFor(() => expect(daemon.of('torrent-set')[0]).toEqual({ ids: [1], labels: ['archive', 'fresh'] }))
   })
 
+  it('Labels on a multi-select applies the diff per torrent instead of overwriting with the intersection', async () => {
+    await mount()
+    // 1: [linux], 2: [blender]  → shared set is empty; add "fresh" → each keeps its own label
+    set({ dialog: { kind: 'labels', ids: [1, 2] } })
+    const dlg = await screen.findByRole('dialog')
+    const inp = within(dlg).getByPlaceholderText(/New label/)
+    fireEvent.change(inp, { target: { value: 'fresh' } }); fireEvent.keyDown(inp, { key: 'Enter' })
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(daemon.of('torrent-set')).toHaveLength(2))
+    expect(daemon.of('torrent-set')).toEqual(expect.arrayContaining([{ ids: [1], labels: ['linux', 'fresh'] }, { ids: [2], labels: ['blender', 'fresh'] }]))
+    // removing a shared label leaves the others intact
+    set({ dialog: { kind: 'labels', ids: [1, 2] } })
+    const dlg2 = await screen.findByRole('dialog')
+    fireEvent.click(within(dlg2).getByRole('button', { name: 'fresh' }))
+    fireEvent.click(within(dlg2).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(daemon.of('torrent-set')).toHaveLength(4))
+    expect(daemon.of('torrent-set').slice(2)).toEqual(expect.arrayContaining([{ ids: [1], labels: ['linux'] }, { ids: [2], labels: ['blender'] }]))
+  })
+
+  it('Edit trackers keeps Save disabled when the list could not be loaded', async () => {
+    await mount()
+    daemon.torrents = daemon.torrents.map(t => t.id === 8 ? { ...t, trackerList: undefined as unknown as string } : t)
+    const original = globalThis.fetch
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const body = JSON.parse(String(init?.body)) as { method: string; arguments: { ids?: number[]; fields?: string[] } }
+      if (body.method === 'torrent-get' && body.arguments.fields?.includes('trackerList')) return new Response('', { status: 500 })
+      return original(url, init)
+    })
+    set({ dialog: { kind: 'trackers', id: 8 } })
+    const dlg = await screen.findByRole('dialog')
+    await screen.findByText(/Could not load the tracker list/)
+    expect(within(dlg).getByRole('button', { name: 'Save' })).toBeDisabled()
+    spy.mockRestore()
+  })
+
   it('Set location moves data, Rename renames, Limits writes through', async () => {
     await mount()
     set({ dialog: { kind: 'location', ids: [1] } })

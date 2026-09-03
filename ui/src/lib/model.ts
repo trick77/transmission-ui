@@ -2,7 +2,7 @@
 // Ported from the logic in design/src/rows.html so the mock and the app agree.
 
 import { Status, type TorrentSummary, type TrackerStat } from '../rpc/types'
-import { daysSince, gb } from './format'
+import { daysSince, gb, ratioValue } from './format'
 
 export type ChipKind = 'dl' | 'seed' | 'wait' | 'stop' | 'err'
 
@@ -136,7 +136,7 @@ export function filterFn(filter: string, base: string): { label: string; f: (t: 
   if (filter.startsWith('label:')) { const l = filter.slice(6); return { label: l, f: t => t.labels.includes(l) } }
   if (filter.startsWith('dir:')) { const d = filter.slice(4); return { label: relDir(d, base) || d, f: t => t.downloadDir === d || t.downloadDir.startsWith(d + '/') } }
   if (filter.startsWith('tracker:')) { const h = filter.slice(8); return { label: h, f: t => t.trackerStats.some(ts => hostOf(ts.announce) === h) } }
-  return FILTERS[(filter as FilterKey) in FILTERS ? (filter as FilterKey) : 'all']
+  return FILTERS[Object.hasOwn(FILTERS, filter) ? (filter as FilterKey) : 'all']
 }
 
 // ─── attribute filters ───
@@ -146,7 +146,7 @@ export type Adv = Partial<Record<AdvKey, string>>
 export const ADV: Record<AdvKey, Record<string, (t: TorrentSummary) => boolean>> = {
   size: { lt1: t => gb(t.sizeWhenDone) < 1, '1to10': t => gb(t.sizeWhenDone) >= 1 && gb(t.sizeWhenDone) <= 10, gt10: t => gb(t.sizeWhenDone) > 10 },
   age: { '1d': t => daysSince(t.addedDate) < 1, '7d': t => daysSince(t.addedDate) < 7, '30d': t => daysSince(t.addedDate) < 30, older: t => daysSince(t.addedDate) >= 30 },
-  ratio: { lt1: t => t.uploadRatio < 1, gte1: t => t.uploadRatio >= 1, gte2: t => t.uploadRatio >= 2 },
+  ratio: { lt1: t => ratioValue(t.uploadRatio) < 1, gte1: t => ratioValue(t.uploadRatio) >= 1, gte2: t => ratioValue(t.uploadRatio) >= 2 },
   idle: { active: isActive, idle7: t => !isActive(t) && daysSince(t.activityDate) > 7, idle30: t => !isActive(t) && daysSince(t.activityDate) > 30 },
 }
 export const ADV_OPTIONS: Record<AdvKey, { v: string; l: string }[]> = {
@@ -190,7 +190,7 @@ export function sortFn(key: SortKey, dir: 1 | -1): (a: TorrentSummary, b: Torren
     case 'progress': return num(t => t.percentDone)
     case 'down': return num(t => t.rateDownload)
     case 'up': return num(t => t.rateUpload)
-    case 'ratio': return num(t => t.uploadRatio)
+    case 'ratio': return num(t => ratioValue(t.uploadRatio))
     case 'eta': return num(t => (t.eta < 0 ? Number.MAX_SAFE_INTEGER : t.eta))
     case 'added': return num(t => t.addedDate)
     case 'activity': return num(t => t.activityDate)

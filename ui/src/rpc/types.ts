@@ -88,12 +88,14 @@ export interface TorrentSummary {
   metadataPercentComplete: number
   trackerStats: TrackerStat[]
   bandwidthPriority: -1 | 0 | 1
+  // In the summary so "Copy magnet / hash" can write the clipboard synchronously in the
+  // click handler; Safari refuses clipboard writes after an awaited round-trip.
+  hashString: string
+  magnetLink: string
 }
 
 /** Extra fields fetched for the selected torrent only. */
 export interface TorrentDetail extends TorrentSummary {
-  hashString: string
-  magnetLink: string
   torrentFile: string
   comment: string
   creator: string
@@ -132,12 +134,12 @@ export const SUMMARY_FIELDS: (keyof TorrentSummary)[] = [
   'id', 'name', 'status', 'error', 'errorString', 'percentDone', 'sizeWhenDone', 'totalSize', 'leftUntilDone',
   'rateDownload', 'rateUpload', 'uploadRatio', 'eta', 'peersConnected', 'peersSendingToUs', 'peersGettingFromUs',
   'labels', 'downloadDir', 'isFinished', 'queuePosition', 'addedDate', 'activityDate', 'doneDate',
-  'recheckProgress', 'metadataPercentComplete', 'trackerStats', 'bandwidthPriority',
+  'recheckProgress', 'metadataPercentComplete', 'trackerStats', 'bandwidthPriority', 'hashString', 'magnetLink',
 ]
 
 export const DETAIL_FIELDS: (keyof TorrentDetail)[] = [
   ...SUMMARY_FIELDS,
-  'hashString', 'magnetLink', 'torrentFile', 'comment', 'creator', 'dateCreated', 'isPrivate', 'pieceCount', 'pieceSize',
+  'torrentFile', 'comment', 'creator', 'dateCreated', 'isPrivate', 'pieceCount', 'pieceSize',
   'pieces', 'availability', 'haveValid', 'haveUnchecked', 'corruptEver', 'downloadedEver', 'uploadedEver',
   'secondsDownloading', 'secondsSeeding', 'peersFrom', 'seedRatioLimit', 'seedRatioMode', 'seedIdleLimit', 'seedIdleMode',
   'honorsSessionLimits', 'downloadLimit', 'downloadLimited', 'uploadLimit', 'uploadLimited', 'peer-limit',
