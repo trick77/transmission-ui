@@ -65,9 +65,26 @@ jobs:
       # served.spec.ts needs the built bundle mounted into the daemon at /web.
       - run: npm run build
         working-directory: ui
+      # One anonymous pull got a transient "toomanyrequests" from the registry
+      # (its own message said 44000/minute allowed, so not this repo's load).
+      # The image lives on ghcr.io (compose.dev.yaml pulls it from there
+      # directly; lscr.io is only a redirect to it), so authenticate with the
+      # job token, which moves the pull off the anonymous quota, and keep one
+      # bounded retry for the residual transient case. Fails fast on the last
+      # attempt.
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Start daemon
         run: |
           mkdir -p hack/state hack/downloads hack/watch
+          for i in 1 2 3; do
+            docker compose -f compose.dev.yaml pull && break
+            [ "$i" = 3 ] && { echo "::error::image pull failed 3 times"; exit 1; }
+            echo "pull attempt $i failed, retrying in $((i * 20))s"; sleep $((i * 20))
+          done
           docker compose -f compose.dev.yaml up -d
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' -u dev:devpass http://localhost:9091/transmission/rpc || true)
