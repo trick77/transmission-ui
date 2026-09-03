@@ -10,7 +10,9 @@
 # http://localhost:9091/transmission/web/ (creds dev / devpass), the same way the server serves it.
 services:
   transmission:
-    image: lscr.io/linuxserver/transmission:4.0.5-r3-ls240
+    # Same image as lscr.io/linuxserver/transmission (lscr.io only redirects here);
+    # pulling ghcr.io directly lets CI authenticate and avoids the anonymous rate limit.
+    image: ghcr.io/linuxserver/transmission:4.0.5-r3-ls240
     container_name: tm-dev
     environment:
       PUID: "1000"
