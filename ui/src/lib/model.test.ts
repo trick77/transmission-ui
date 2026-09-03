@@ -21,7 +21,7 @@ function tor(o: Partial<TorrentSummary> = {}): TorrentSummary {
     id: nextId++, name: `t${nextId}`, status: Status.Seed, error: 0, errorString: '', percentDone: 1, sizeWhenDone: 2e9, totalSize: 2e9, leftUntilDone: 0,
     rateDownload: 0, rateUpload: 0, uploadRatio: 1.5, eta: -1, peersConnected: 0, peersSendingToUs: 0, peersGettingFromUs: 0, labels: [],
     downloadDir: '/data/torrents/iso', isFinished: false, queuePosition: 0, addedDate: now - 86400 * 2, activityDate: now - 3600, doneDate: now - 3600,
-    recheckProgress: 0, metadataPercentComplete: 1, trackerStats: [ts()], bandwidthPriority: 0, ...o,
+    recheckProgress: 0, metadataPercentComplete: 1, trackerStats: [ts()], bandwidthPriority: 0, hashString: 'h', magnetLink: 'magnet:?xt=urn:btih:h', ...o,
   }
 }
 
@@ -135,6 +135,7 @@ describe('filters', () => {
     expect(set.filter(filterFn('dir:/data/torrents/radarr', base).f)).toHaveLength(1)
     expect(set.filter(filterFn('tracker:tracker.example.org', base).f)).toHaveLength(8)
     expect(filterFn('bogus', base).label).toBe('All torrents')
+    expect(filterFn('constructor', base).label).toBe('All torrents')   // prototype keys are not filters
     expect(filterFn('dir:/elsewhere', base).label).toBe('/elsewhere')
   })
   it('attribute filters', () => {
@@ -172,6 +173,9 @@ describe('sort', () => {
     expect([a, b].sort(sortFn('down', -1))[0]).toBe(b)
     expect([a, b].sort(sortFn('up', -1))[0]).toBe(a)
     expect([a, b].sort(sortFn('ratio', -1))[0]).toBe(b)
+    const inf = tor({ name: 'inf', uploadRatio: -2 })
+    expect([a, inf, b].sort(sortFn('ratio', -1))[0]).toBe(inf)          // infinite ratio sorts first, not below zero
+    expect(ADV.ratio.gte2(inf)).toBe(true)
     expect([b, a].sort(sortFn('eta', 1))[0]).toBe(a)   // unknown eta sorts last
     expect([a, b].sort(sortFn('added', -1))[0]).toBe(b)
     expect([a, b].sort(sortFn('activity', -1))[0]).toBe(b)

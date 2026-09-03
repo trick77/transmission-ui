@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ago, bytes, compact, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio } from './format'
+import { ago, bytes, compact, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioValue } from './format'
 
 describe('bytes', () => {
   it('formats SI units with sensible digits', () => {
@@ -23,7 +23,10 @@ describe('rates', () => {
 })
 
 describe('ratio / eta / duration', () => {
-  it('ratio', () => { expect(ratio(-1)).toBe('—'); expect(ratio(3.4167)).toBe('3.42') })
+  it('ratio handles the daemon sentinels: -1 n/a, -2 infinite', () => {
+    expect(ratio(-1)).toBe('—'); expect(ratio(-2)).toBe('∞'); expect(ratio(3.4167)).toBe('3.42')
+    expect(ratioValue(-1)).toBe(0); expect(ratioValue(-2)).toBe(Infinity); expect(ratioValue(1.5)).toBe(1.5)
+  })
   it('eta', () => { expect(eta(-1)).toBe('—'); expect(eta(10, true)).toBe('∞'); expect(eta(192)).toBe('3m 12s') })
   it('duration', () => {
     expect(duration(5)).toBe('5 s')

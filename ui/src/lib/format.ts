@@ -22,7 +22,10 @@ export function rateParts(bps: number): [string, string] {
   return [num, `${unit}/s`]
 }
 
-export function ratio(r: number): string { return r < 0 ? '—' : r.toFixed(2) }
+// Transmission sentinels: -1 = not available (nothing downloaded and nothing uploaded), -2 = infinite.
+export const RATIO_NA = -1, RATIO_INF = -2
+export function ratioValue(r: number): number { return r === RATIO_INF ? Infinity : r < 0 ? 0 : r }
+export function ratio(r: number): string { return r === RATIO_INF ? '∞' : r < 0 ? '—' : r.toFixed(2) }
 
 export function eta(seconds: number, finished = false): string {
   if (finished) return '∞'

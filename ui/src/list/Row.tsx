@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Icon } from '../icons/Icon'
-import { bytes, compact, eta, percent, rateParts, ratio } from '../lib/format'
+import { bytes, compact, eta, percent, rateParts, ratio, ratioValue } from '../lib/format'
 import { relDir, statusView, swarmOf } from '../lib/model'
 import { Status, type TorrentSummary } from '../rpc/types'
 import * as api from '../rpc/methods'
@@ -49,7 +49,7 @@ export const Row = memo(function Row({ t, selected, focused, base, onMore }: { t
       </div>
       <Speed bps={t.rateDownload} dir="dl" />
       <Speed bps={t.rateUpload} dir="ul" />
-      <span className={'num r' + (t.uploadRatio >= 1 ? '' : ' muted')}>{ratio(t.uploadRatio)}</span>
+      <span className={'num r' + (ratioValue(t.uploadRatio) >= 1 ? '' : ' muted')}>{ratio(t.uploadRatio)}</span>
       <span className="num r muted">{eta(t.eta, t.status === Status.Seed || t.status === Status.SeedWait)}</span>
     </div>
   )

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes } from '../lib/format'
 import { parseTorrent, toBase64, type TorrentInfo } from '../lib/bencode'
-import { folderTree, labelCounts, relDir } from '../lib/model'
+import { folderTree, hostOf, labelCounts, relDir } from '../lib/model'
 import * as api from '../rpc/methods'
 import { get, refreshNow, toast, useStore } from '../state/store'
 import { Modal } from './Dialogs'
@@ -106,7 +106,7 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
             <div key={i} className="opt" style={{ padding: '6px 0' }}>
               <Icon name={s.kind === 'file' ? 'file' : 'magnet'} style={{ color: 'var(--ink-3)' }} />
               <div className="txt"><div className="l" style={{ overflowWrap: 'anywhere' }}>{s.kind === 'file' ? s.info.name : s.name}</div>
-                <div className="d">{s.kind === 'file' ? `${bytes(s.info.totalSize)} · ${s.info.files.length} file${s.info.files.length > 1 ? 's' : ''}${s.info.private ? ' · private' : ''}${s.info.announce[0] ? ' · ' + new URL(s.info.announce[0]).hostname : ''}` : 'Metadata is fetched after adding'}</div></div>
+                <div className="d">{s.kind === 'file' ? `${bytes(s.info.totalSize)} · ${s.info.files.length} file${s.info.files.length > 1 ? 's' : ''}${s.info.private ? ' · private' : ''}${s.info.announce[0] ? ' · ' + hostOf(s.info.announce[0]) : ''}` : 'Metadata is fetched after adding'}</div></div>
               <button className="btn ghost icon" style={{ width: 26, height: 26 }} onClick={() => setSources(x => x.filter((_, j) => j !== i))}><Icon name="x" size={13} /></button>
             </div>
           ))}

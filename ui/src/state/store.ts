@@ -86,6 +86,8 @@ const LIST_MS = 2000, HIDDEN_MS = 5000, FULL_EVERY = 30, SPACE_MS = 30000
 let timer: ReturnType<typeof setTimeout> | null = null
 let ticks = 0
 let haveFull = false
+let inFlight = false
+let pollAgain = false
 
 function mergeTorrents(list: TorrentSummary[], removed: number[] | undefined, full: boolean) {
   const byId = full ? new Map<number, TorrentSummary>() : new Map(snap.byId)
@@ -94,7 +96,12 @@ function mergeTorrents(list: TorrentSummary[], removed: number[] | undefined, fu
   set({ torrents: [...byId.values()], byId })
 }
 
+// Exactly one poll chain: a call while a poll is in flight only asks for one more pass
+// right after it, instead of starting a second loop that would then re-arm forever.
 async function pollOnce() {
+  if (inFlight) { pollAgain = true; return }
+  inFlight = true
+  if (timer) { clearTimeout(timer); timer = null }
   try {
     const full = !haveFull || ticks % FULL_EVERY === 0
     const [tr, st] = await Promise.all([api.getTorrents(full ? undefined : 'recently-active'), api.getStats()])
@@ -114,7 +121,9 @@ async function pollOnce() {
     set({ connection: msg === 'unauthorized' ? 'unauthorized' : 'error', lastError: msg })
   } finally {
     ticks++
-    timer = setTimeout(pollOnce, document.hidden ? HIDDEN_MS : LIST_MS)
+    inFlight = false
+    if (pollAgain) { pollAgain = false; void pollOnce() }
+    else timer = setTimeout(pollOnce, document.hidden ? HIDDEN_MS : LIST_MS)
   }
 }
 
@@ -139,17 +148,18 @@ function mountOf(dir: string, base: string): string {
   return '/' + parts.slice(0, Math.min(2, parts.length)).join('/')
 }
 
+let started = false
 export function startPolling() {
-  if (timer) return
+  if (started) return
+  started = true
   void refreshSession().then(() => pollOnce())
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && timer) { clearTimeout(timer); timer = null; void pollOnce() } })
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void pollOnce() })
 }
 
 /** Force the next poll to be a full refresh (after add/remove) and run it now. */
 export function refreshNow() {
   haveFull = false
   ticks = 0   // also re-reads session and free space on this pass
-  if (timer) { clearTimeout(timer); timer = null }
   void pollOnce()
 }
 
