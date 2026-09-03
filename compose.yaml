@@ -1,0 +1,54 @@
+# Production stack: transmission-daemon 4.0.5 with this UI baked in (see Containerfile), reached
+# directly on :9091 with the daemon's own RPC user/pass.
+#
+#   cp .env.example .env   # fill in TM_USER / TM_PASS and the paths
+#   docker compose up -d                 # pulls ghcr.io/trick77/transmission-ui (release.yaml)
+#   docker compose up -d --build         # or build locally from the Containerfile
+#
+# Pinned to the 4.0.x line on purpose: 4.0.6, 4.1.0 and 4.1.1 were blacklisted by trackers
+# (announce flooding); only bump after the trackers in use accept the new user-agent.
+services:
+  transmission:
+    image: ghcr.io/trick77/transmission-ui:latest
+    build:
+      context: .
+      dockerfile: Containerfile
+    restart: unless-stopped
+
+    environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      TZ: "${TZ:-Europe/Zurich}"
+      # RPC basic auth. The browser prompts once; the UI never stores these.
+      USER: "${TM_USER}"
+      PASS: "${TM_PASS}"
+      # Where the daemon serves the UI from (baked into the image at /web).
+      TRANSMISSION_WEB_HOME: /web
+      # Alternative speed limits and everything else live in settings.json under /config
+      # and are changed from the UI's Settings dialog.
+
+    volumes:
+      - ./config:/config                       # settings.json, resume data, torrent files
+      - "${TM_DOWNLOADS:-./downloads}:/downloads"  # download-dir; subfolders (buffer, radarr, sonarr…) appear in the sidebar
+      - "${TM_WATCH:-./watch}:/watch"          # drop .torrent files here to auto-add
+
+    ports:
+      - "9091:9091"
+      - "${TM_PEER_PORT:-51413}:51413"
+      - "${TM_PEER_PORT:-51413}:51413/udp"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:9091/transmission/web/"]
+      interval: 60s
+      timeout: 5s
+      start_period: 30s
+      start_interval: 5s
+      retries: 3
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          # Daemon RSS stays under ~300 MB with a few hundred torrents; the rest is page cache for
+          # the pieces being verified or seeded. 1g is comfortable; raise if verify runs get slow.
+          memory: 1g

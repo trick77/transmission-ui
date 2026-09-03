@@ -1,0 +1,54 @@
+name: Cleanup images
+
+on:
+  schedule:
+    # Weekly, Sundays at 04:00 UTC
+    - cron: "0 4 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Preview deletions without removing anything"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cleanup-images
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      # container-retention-policy panics rather than no-op'ing when the package
+      # does not exist, so check first (this repo may not have released yet).
+      - id: package-check
+        name: Check whether the package exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "users/${{ github.repository_owner }}/packages/container/transmission-ui" --silent 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No transmission-ui container package yet — nothing to clean." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Keeps the 10 most recent tagged versions and removes the rest, including
+      # orphaned untagged versions. v3.1.0+ protects multi-arch / attestation
+      # child manifests of the kept images.
+      - if: steps.package-check.outputs.exists == 'true'
+        uses: snok/container-retention-policy@v3.1.0
+        with:
+          account: user
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: "transmission-ui"
+          tag-selection: both
+          keep-n-most-recent: 10
+          # Protect anything pushed in the last hour so a fresh release is never
+          # caught by a concurrently scheduled cleanup.
+          cut-off: 1h
+          dry-run: ${{ github.event.inputs.dry-run || 'false' }}

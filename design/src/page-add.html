@@ -1,0 +1,48 @@
+  </div>
+</div>
+<div class="scrim">
+  <div class="modal" style="width:680px">
+    <div class="modal-h"><span class="t">Add torrent</span><div class="spacer"></div><button class="btn ghost icon"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="modal-b" style="display:grid;gap:18px">
+      <div class="drop">
+        <svg class="i big"><use href="#i-upload"/></svg>
+        <div><b>Drop .torrent files here</b> <span class="faint">or</span> <span style="color:var(--accent);font-weight:500">browse</span></div>
+        <div class="hint">Multiple files are added as separate torrents</div>
+      </div>
+      <div class="field">
+        <label>Magnet link or URL</label>
+        <div class="input mono"><svg class="i" style="color:var(--ink-3)"><use href="#i-magnet"/></svg><input value="magnet:?xt=urn:btih:6b7a2c1f2e9d8a4b3c0e5f7a1d9c8b2e4f6a0c3d&dn=archlinux-2026.08.01-x86_64.iso&tr=https%3A%2F%2Ftracker.archlinux.org%3A6969"></div>
+        <div class="hint" style="display:flex;align-items:center;gap:6px"><svg class="i" style="width:13px;height:13px;color:var(--seed)"><use href="#i-check"/></svg>Metadata fetched · archlinux-2026.08.01-x86_64.iso · 1.23 GB · 2 files</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="field"><label>Save to</label><div class="input"><svg class="i" style="color:var(--ink-3)"><use href="#i-folder"/></svg><input value="/data/torrents/iso"><span class="unit">1.8 TB free</span></div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:2px"><span class="chip lbl" style="background:var(--accent-soft);color:var(--accent);border-color:transparent">iso</span><span class="chip lbl">buffer</span><span class="chip lbl">radarr</span><span class="chip lbl">sonarr</span><span class="chip lbl">audiobooks</span></div></div>
+        <div class="field"><label>Label</label><div class="input"><svg class="i" style="color:var(--ink-3)"><use href="#i-tag"/></svg><input value="linux"><svg class="i" style="width:14px;height:14px;color:var(--ink-3)"><use href="#i-chevd"/></svg></div></div>
+      </div>
+
+      <div>
+        <div class="sec" style="margin-top:0">Files · 1.23 GB selected of 1.23 GB</div>
+        <div class="tree" style="background:var(--bg);border-radius:var(--r);padding:6px 8px">
+          <div class="f"><span class="chk on"></span><svg class="i" style="width:14px;height:14px"><use href="#i-chevd"/></svg><span class="n dir">archlinux-2026.08.01-x86_64</span><span class="num r">1.23 GB</span><span></span><span class="r"><span class="pri norm">Normal</span></span></div>
+          <div class="f d1"><span class="chk on"></span><svg class="i" style="width:14px;height:14px;color:var(--ink-3)"><use href="#i-file"/></svg><span class="n">archlinux-2026.08.01-x86_64.iso</span><span class="num r">1.23 GB</span><span></span><span class="r"><span class="pri norm">Normal</span></span></div>
+          <div class="f d1"><span class="chk on"></span><svg class="i" style="width:14px;height:14px;color:var(--ink-3)"><use href="#i-file"/></svg><span class="n">archlinux-2026.08.01-x86_64.iso.sig</span><span class="num r">310 B</span><span></span><span class="r"><span class="pri norm">Normal</span></span></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">
+        <div class="opt"><div class="txt"><div class="l">Start when added</div></div><div class="ctl"><span class="toggle on"></span></div></div>
+        <div class="opt"><div class="txt"><div class="l">Bandwidth priority</div></div><div class="ctl"><div class="seg"><button>Low</button><button class="on">Normal</button><button>High</button></div></div></div>
+        <div class="opt"><div class="txt"><div class="l">Delete .torrent file after adding</div></div><div class="ctl"><span class="toggle"></span></div></div>
+        <div class="opt"><div class="txt"><div class="l">Sequential download</div><div class="d">Pieces in order, for previewing</div></div><div class="ctl"><span class="toggle"></span></div></div>
+      </div>
+    </div>
+    <div class="modal-f">
+      <span class="hint">Adds to the download queue (position 2 of 2)</span>
+      <div class="spacer"></div>
+      <button class="btn ghost">Cancel</button>
+      <button class="btn primary"><svg class="i"><use href="#i-plus"/></svg>Add torrent</button>
+    </div>
+  </div>
+</div>
+<script>renderRows(null);</script>

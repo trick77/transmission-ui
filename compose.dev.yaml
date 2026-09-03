@@ -1,0 +1,31 @@
+# Local development: a throwaway transmission-daemon 4.0.5 on :9091 with fixed dev credentials,
+# state under hack/. Never point this at real data or the server.
+#
+#   docker compose -f compose.dev.yaml up -d
+#   hack/fixtures.sh                       # seeds every torrent state the UI shows
+#   cd ui && npm run dev                   # UI on http://localhost:5173, proxies RPC here
+#   docker compose -f compose.dev.yaml down
+#
+# ui/dist is mounted as the daemon's web home so `npm run build` can be checked at
+# http://localhost:9091/transmission/web/ (creds dev / devpass), the same way the server serves it.
+services:
+  transmission:
+    image: lscr.io/linuxserver/transmission:4.0.5-r3-ls240
+    container_name: tm-dev
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Europe/Zurich
+      USER: dev
+      PASS: devpass
+      TRANSMISSION_WEB_HOME: /web
+    volumes:
+      - ./hack/state:/config
+      - ./hack/downloads:/downloads
+      - ./hack/watch:/watch
+      - ./ui/dist:/web:ro
+    ports:
+      - "9091:9091"
+      - "51413:51413"
+      - "51413:51413/udp"
+    restart: unless-stopped

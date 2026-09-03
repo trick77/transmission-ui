@@ -1,0 +1,133 @@
+<script>
+// Sample session — mixed states so every status colour appears.
+const T = [
+  {id:1, name:"debian-13.1.0-amd64-DVD-1.iso", st:"download", p:63, size:"4.71 GB", dl:"12.4 MB/s", ul:"1.21 MB/s", ratio:"0.18", eta:"3m 12s", peers:"42 · 18", swarm:"1.2k", av:"3.4", lbl:["linux"], age:0, idle:0, dir:"/data/torrents/iso"},
+  {id:2, name:"Cosmos Laundromat (2015) 2160p Blender Open Movie", st:"download", p:91, size:"3.02 GB", dl:"3.14 MB/s", ul:"612 kB/s", ratio:"0.44", eta:"1m 28s", peers:"27 · 11", swarm:"318", av:"9.1", lbl:["blender"], age:1, idle:0, dir:"/data/torrents/buffer"},
+  {id:3, name:"enwiki-20260801-pages-articles-multistream.xml.bz2", st:"download", p:34, size:"24.1 GB", dl:"88 kB/s", ul:"0", ratio:"0.02", eta:"2d 4h", peers:"3 · 1", swarm:"4", av:"0.9", lbl:["archive"], age:12, idle:0, dir:"/data/torrents/buffer"},
+  {id:4, name:"Big Buck Bunny (2008) 4K 60fps", st:"seed", p:100, size:"7.28 GB", dl:"0", ul:"840 kB/s", ratio:"3.42", eta:"∞", peers:"9 · 9", swarm:"1.4k", lbl:["blender"], age:400, idle:0, dir:"/data/torrents/radarr"},
+  {id:5, name:"Fedora-Workstation-Live-42-1.10.x86_64.iso", st:"seed", p:100, size:"2.34 GB", dl:"0", ul:"224 kB/s", ratio:"1.12", eta:"∞", peers:"14 · 6", swarm:"860", lbl:["linux"], age:90, idle:0, dir:"/data/torrents/iso"},
+  {id:6, name:"Sintel (2010) 1080p Blender Open Movie", st:"seed", p:100, size:"1.11 GB", dl:"0", ul:"0", ratio:"6.80", eta:"∞", peers:"2 · 0", swarm:"62", lbl:["blender"], age:800, idle:9, dir:"/data/torrents/radarr"},
+  {id:7, name:"Blender 4.5 LTS — all platforms", st:"seed", p:100, size:"1.94 GB", dl:"0", ul:"96 kB/s", ratio:"0.71", eta:"∞", peers:"5 · 2", swarm:"120", lbl:["blender"], age:30, idle:0, dir:"/data/torrents/buffer"},
+  {id:8, name:"Tears of Steel (2012) 4K", st:"seed-wait", p:100, size:"2.52 GB", dl:"0", ul:"0", ratio:"0.98", eta:"∞", peers:"0", lbl:["blender"], age:600, idle:41, dir:"/data/torrents/radarr"},
+  {id:9, name:"archlinux-2026.08.01-x86_64.iso", st:"download-wait", p:0, size:"1.23 GB", dl:"0", ul:"0", ratio:"0.00", eta:"—", peers:"0", lbl:["linux"], age:0, idle:0, dir:"/data/torrents/iso"},
+  {id:10, name:"ubuntu-26.04.1-desktop-amd64.iso", st:"check", p:41, size:"6.02 GB", dl:"0", ul:"0", ratio:"0.00", eta:"—", peers:"0", lbl:["linux"], age:2, idle:0, dir:"/data/torrents/iso"},
+  {id:11, name:"Pride and Prejudice — LibriVox (Karen Savage)", st:"stopped", p:100, size:"318 MB", dl:"0", ul:"0", ratio:"2.05", eta:"—", peers:"0", lbl:["audiobook"], age:200, idle:120, dir:"/data/torrents/audiobooks"},
+  {id:12, name:"Apollo 11 Flight Journal — Internet Archive", st:"error", p:57, av:"0.0", size:"912 MB", dl:"0", ul:"0", ratio:"0.30", eta:"—", peers:"0", lbl:["archive"], err:"Tracker gave HTTP response code 404 (Not Found)", age:45, idle:45, dir:"/data/torrents/sonarr/docs"},
+];
+const STATUS = {
+  "download":      {cls:"dl",   bar:"",       label:"Downloading"},
+  "seed":          {cls:"seed", bar:"seed",   label:"Seeding"},
+  "seed-wait":     {cls:"wait", bar:"wait striped", label:"Queued to seed"},
+  "download-wait": {cls:"wait", bar:"wait striped", label:"Queued"},
+  "check":         {cls:"wait", bar:"wait striped", label:"Verifying"},
+  "check-wait":    {cls:"wait", bar:"wait striped", label:"Queued to verify"},
+  "stopped":       {cls:"stop", bar:"stop",   label:"Stopped"},
+  "error":         {cls:"err",  bar:"err",    label:"Error"},
+};
+const LBL = {linux:"#3f8cd6", blender:"#e8712f", archive:"#9b6bd6", audiobook:"#3aa87c"};
+const spd = (v, dir) => v === "0"
+  ? `<span class="spd zero num">—</span>`
+  : `<span class="spd ${dir} num"><svg class="i arrow"><use href="#i-${dir==='dl'?'down':'up'}"/></svg>${v}</span>`;
+function row(t, sel){
+  const s = STATUS[t.st];
+  const [conn, act] = t.peers.split(' · ');
+  const sub = t.err ? `<span style="color:var(--err)">${t.err}</span>`
+    : s.label === "Verifying" ? `Verifying local data`
+    : conn === "0" ? `No peers` : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
+  return `<div class="row${sel?' sel':''}" data-id="${t.id}">
+    <span class="chk"></span>
+    <div class="name">
+      <div class="t"><span>${t.name}</span>${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
+        <span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span></div>
+      <div class="m"><span class="chip ${s.cls}"><span class="dot"></span>${s.label}</span><span class="sep"></span><span>${sub}</span><span class="sep"></span><span>${rel(t.dir)}/</span></div>
+    </div>
+    <span class="num r muted">${t.size}</span>
+    <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num"><span>${t.p}%</span>${t.swarm?`<span class="av" title="Seeds in swarm">${t.swarm} seeds</span>`:''}</span></div>
+    ${spd(t.dl,'dl')}
+    ${spd(t.ul,'ul')}
+    <span class="num r ${+t.ratio>=1?'':'muted'}">${t.ratio}</span>
+    <span class="num r muted">${t.eta}</span>
+  </div>`;
+}
+const FILTERS = {
+  all:        {label:"All torrents",  f:t=>true},
+  download:   {label:"Downloading",   f:t=>t.st==="download"},
+  seed:       {label:"Seeding",       f:t=>t.st==="seed"},
+  active:     {label:"Active",        f:t=>t.dl!=="0"||t.ul!=="0"},
+  inactive:   {label:"Inactive",      f:t=>t.dl==="0"&&t.ul==="0"&&t.st!=="check"&&!t.st.endsWith("wait")},
+  finished:   {label:"Finished",      f:t=>t.p===100},
+  queued:     {label:"Queued / Checking", f:t=>t.st==="check"||t.st.endsWith("wait")},
+  stopped:    {label:"Stopped",       f:t=>t.st==="stopped"},
+  error:      {label:"Error",         f:t=>t.st==="error"},
+  trackererr: {label:"Tracker error", f:t=>t.id===12||t.id===1},
+};
+// default sort: problems first, then by how much attention a torrent needs
+const RANK = t => t.st==="error" ? 0 : (t.trk ? 1 : t.st==="check"||t.st==="check-wait" ? 2 : t.st==="download-wait" ? 3 : t.st==="download" ? 4 : t.st==="seed-wait" ? 5 : t.st==="seed" ? 6 : 7);
+const ADV = {
+  size:  {lt1:t=>gb(t.size)<1, "1to10":t=>gb(t.size)>=1&&gb(t.size)<=10, gt10:t=>gb(t.size)>10},
+  age:   {"1d":t=>t.age<1, "7d":t=>t.age<7, "30d":t=>t.age<30, older:t=>t.age>=30},
+  ratio: {lt1:t=>+t.ratio<1, gte1:t=>+t.ratio>=1, gte2:t=>+t.ratio>=2},
+  idle:  {active:t=>t.dl!=="0"||t.ul!=="0", idle7:t=>t.idle>7, idle30:t=>t.idle>30},
+};
+const ADV_LABEL = {size:{lt1:"< 1 GB","1to10":"1–10 GB",gt10:"> 10 GB"}, age:{"1d":"added today","7d":"added < 7 d","30d":"added < 30 d",older:"added > 30 d"}, ratio:{lt1:"ratio < 1",gte1:"ratio ≥ 1",gte2:"ratio ≥ 2"}, idle:{active:"active now",idle7:"idle > 7 d",idle30:"idle > 30 d"}};
+let adv = {};
+const BASE = "/data/torrents";
+const rel = d => d.startsWith(BASE + "/") ? d.slice(BASE.length + 1) : d;
+const gb = s => s.endsWith("MB") ? parseFloat(s)/1024 : parseFloat(s);
+function renderRows(selId, filter){
+  const F = filter && filter.startsWith('dir:') ? {label: rel(filter.slice(4)), f: t => t.dir === filter.slice(4) || t.dir.startsWith(filter.slice(4) + '/')} : FILTERS[filter || 'all'];
+  T.forEach(t => { t.trk = t.id===1 || t.id===12; });
+  const list = T.filter(F.f).filter(t => Object.entries(adv).every(([k,v]) => !v || v==='any' || ADV[k][v](t))).sort((a,b) => RANK(a)-RANK(b) || a.idle-b.idle);
+  const fc2 = document.getElementById('fchips'); if (fc2) { const on = Object.entries(adv).filter(([k,v])=>v&&v!=='any');
+    fc2.innerHTML = on.map(([k,v])=>`<span class="fchip"><b>${ADV_LABEL[k][v]}</b><button data-k="${k}" title="Remove"><svg class="i" style="width:11px;height:11px"><use href="#i-x"/></svg></button></span>`).join('');
+    fc2.querySelectorAll('button').forEach(b=>b.onclick=()=>{ delete adv[b.dataset.k]; syncAdv(); renderRows(null, filter); });
+    const bd = document.getElementById('fbadge'); if (bd) { bd.hidden = !on.length; bd.textContent = on.length; } }
+  const fl = document.getElementById('folders');
+  if (fl) { const dirsAll = [...new Set(T.map(t=>t.dir))].sort();
+    const seen = new Set(); const out = [];
+    dirsAll.forEach(d => { const parts = rel(d).split('/'); for (let i=1;i<=parts.length;i++){ const p = BASE + '/' + parts.slice(0,i).join('/'); if (seen.has(p)) continue; seen.add(p);
+      const n = T.filter(t=>t.dir===p||t.dir.startsWith(p+'/')).length;
+      out.push(`<button class="side-item${filter==='dir:'+p?' on':''}" data-d="${p}" style="padding-left:${8+(i-1)*14}px"><svg class="i" style="width:14px;height:14px"><use href="#i-folder"/></svg><span class="lbl">${parts[i-1]}</span><span class="cnt">${n}</span></button>`); } });
+    fl.innerHTML = out.join(''); fl.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>renderRows(null,'dir:'+b.dataset.d)); }
+  document.getElementById('rows').innerHTML = list.length ? list.map(t=>row(t, t.id===selId)).join('')
+    : `<div class="empty"><div class="t">Nothing matches</div>${Object.values(adv).some(v=>v&&v!=='any') ? 'Try loosening a filter · <a href="#" id="eclear" style="color:var(--accent)">clear all</a>' : 'No torrents in this view'}</div>`;
+  const ec = document.getElementById('eclear'); if (ec) ec.onclick = e => { e.preventDefault(); adv = {}; syncAdv(); renderRows(null, filter); };
+  const sb = document.getElementById('selbar'); if (sb) sb.hidden = !selId;
+  const ft = document.getElementById('ftitle'), fc = document.getElementById('fcount');
+  if (ft) ft.textContent = F.label;
+  if (fc) fc.textContent = (list.length===T.length ? `${T.length}` : `${list.length} of ${T.length}`) + ` · ${list.reduce((a,t)=>a+gb(t.size),0).toFixed(1)} GB`;
+  document.querySelectorAll('.sidebar [data-f]').forEach(b=>{ b.classList.toggle('on', b.dataset.f===(filter||'all')); b.querySelector('.cnt').textContent = T.filter(FILTERS[b.dataset.f].f).length; });
+  const all = document.querySelector('.sidebar .side-item:not([data-f])'); if (all) all.classList.toggle('on', !filter || filter==='all');
+}
+function syncAdv(){ document.querySelectorAll('#fpop .seg').forEach(g => g.querySelectorAll('button').forEach(b => b.classList.toggle('on', (adv[g.dataset.k]||'any')===b.dataset.v))); }
+function contextMenu(rowEl){
+  const r = rowEl.getBoundingClientRect(); rowEl.classList.add('menu-open');
+  const m = document.createElement('div'); m.className = 'cmenu';
+  m.style.left = (r.right - 262) + 'px'; m.style.top = (r.top + 34) + 'px';
+  const it = (icon, label, k='', cls='') => `<div class="it ${cls}"><svg class="i"><use href="#i-${icon}"/></svg>${label}${k?`<span class="k">${k}</span>`:''}</div>`;
+  m.innerHTML = it('pause','Pause','␣') + it('globe','Re-announce') + it('check','Verify local data') + `<div class="sep"></div>` +
+    `<div class="it qpos hl"><svg class="i"><use href="#i-sort"/></svg>Queue position<svg class="i chev"><use href="#i-chev"/></svg>
+       <div class="cmenu sub">${it('up','Move to top')}${it('up','Move up')}${it('down','Move down')}${it('down','Move to bottom')}</div></div>` +
+    it('tag','Labels…') + it('folder','Set location…') + it('file','Rename…') + it('gear','Limits & priority…') + `<div class="sep"></div>` +
+    it('magnet','Copy magnet link','⌘C') + it('link','Open folder') + `<div class="sep"></div>` +
+    it('x','Remove from list','⌫','danger') + it('trash','Remove and delete data…','⌘⌫','danger');
+  document.body.appendChild(m);
+}
+function syncSel(){
+  const rows = [...document.querySelectorAll('.row')], sel = rows.filter(r=>r.classList.contains('sel'));
+  const sb = document.getElementById('selbar'); if (!sb) return; sb.hidden = !sel.length;
+  document.getElementById('selcount').textContent = sel.length + ' selected';
+  const a = document.getElementById('selall'); a.classList.toggle('on', sel.length && sel.length===rows.length); a.classList.toggle('some', sel.length && sel.length<rows.length);
+}
+function selectAll(){ const rows = document.querySelectorAll('.row'), all = [...rows].every(r=>r.classList.contains('sel'));
+  rows.forEach(r=>r.classList.toggle('sel', !all)); syncSel(); }
+function selectIds(ids){ document.querySelectorAll('.row').forEach(r=>r.classList.toggle('sel', ids.includes(+r.dataset.id))); syncSel(); }
+function toolbarMenu(anchor){
+  const r = anchor.getBoundingClientRect(); const m = document.createElement('div'); m.className='cmenu'; m.style.left=(r.right-250)+'px'; m.style.top=(r.bottom+6)+'px';
+  const it = (icon,label,k='') => `<div class="it"><svg class="i"><use href="#i-${icon}"/></svg>${label}${k?`<span class="k">${k}</span>`:''}</div>`;
+  m.innerHTML = `<div class="it" style="color:var(--ink-3);font-size:11px;letter-spacing:.06em;text-transform:uppercase;height:24px">Everything in this view · 12</div>` +
+    it('play','Resume all') + it('pause','Pause all') + it('globe','Re-announce all') + it('check','Verify all') + `<div class="sep"></div>` +
+    it('check','Select all','⌘A') + `<div class="sep"></div>` + it('sort','Columns…') + it('gear','View options…');
+  document.body.appendChild(m);
+}
+</script>

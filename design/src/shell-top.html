@@ -1,0 +1,100 @@
+<div class="app">
+  <header class="header">
+    <div class="brand"><span class="logo"><svg class="i" style="width:14px;height:14px;stroke-width:2.5"><use href="#i-down"/></svg></span>Transmission</div>
+    <div class="search"><svg class="i"><use href="#i-search"/></svg><input placeholder="Search torrents"><kbd>⌘F</kbd></div>
+    <div class="spacer"></div>
+    <div class="speeds" title="Session totals">
+      <svg class="spark" viewBox="0 0 96 22" preserveAspectRatio="none" aria-label="Speed, last 60 s">
+        <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" points="0,16 6,14 12,15 18,11 24,12 30,8 36,9 42,6 48,7 54,5 60,6 66,4 72,6 78,3 84,5 90,4 96,3"/>
+        <polyline fill="none" stroke="var(--ink-3)" stroke-width="1.5" stroke-linejoin="round" points="0,20 6,19 12,19 18,18 24,19 30,17 36,18 42,16 48,17 54,16 60,17 66,15 72,16 78,15 84,16 90,14 96,15"/>
+      </svg>
+      <span class="s dl"><span class="top"><svg class="i arrow"><use href="#i-down"/></svg><span class="num">15.6</span><span class="faint" style="font-size:11px">MB/s</span></span><span class="tot">5.14 GB this session</span></span>
+      <span class="s ul"><span class="top"><svg class="i arrow"><use href="#i-up"/></svg><span class="num">2.31</span><span class="faint" style="font-size:11px">MB/s</span></span><span class="tot">1.31 GB this session</span></span>
+      <span class="lim" id="lim" hidden>alt 2000/250</span>
+      <button class="turtle" id="turtle" title="Alternative speed limits"><svg class="i"><use href="#i-turtle"/></svg></button>
+      <div class="pop" id="pop" hidden>
+        <h4>Statistics</h4>
+        <table>
+          <tr><th></th><th>This session</th><th>All time</th></tr>
+          <tr><td>Downloaded</td><td class="num">5.14 GB</td><td class="num">218 GB</td></tr>
+          <tr><td>Uploaded</td><td class="num">1.31 GB</td><td class="num">391 GB</td></tr>
+          <tr><td>Ratio</td><td class="num">0.25</td><td class="num">1.79</td></tr>
+          <tr><td>Files added</td><td class="num">3</td><td class="num">412</td></tr>
+          <tr><td>Running</td><td class="num">6d 14h</td><td class="num">142d 3h</td></tr>
+          <tr><td>Sessions</td><td class="num">—</td><td class="num">37</td></tr>
+        </table>
+        <div class="foot">transmission-daemon 4.1.0 · DHT 127 nodes · port 51413 open</div>
+      </div>
+    </div>
+    <button class="btn ghost icon" title="Preferences"><svg class="i"><use href="#i-gear"/></svg></button>
+    <button class="btn primary"><svg class="i"><use href="#i-plus"/></svg>Add</button>
+  </header>
+
+  <nav class="sidebar">
+    <div class="side-h">Status</div>
+    <button class="side-item on"><span class="lbl">All</span><span class="cnt">12</span></button>
+    <button class="side-item" data-f="download"><span class="lbl">Downloading</span><span class="cnt">3</span></button>
+    <button class="side-item" data-f="seed"><span class="lbl">Seeding</span><span class="cnt">5</span></button>
+    <button class="side-item" data-f="active"><span class="lbl">Active</span><span class="cnt">7</span></button>
+    <button class="side-item" data-f="inactive"><span class="lbl">Inactive</span><span class="cnt">5</span></button>
+    <button class="side-item" data-f="finished"><span class="lbl">Finished</span><span class="cnt">7</span></button>
+    <button class="side-item" data-f="queued"><span class="lbl">Queued / Checking</span><span class="cnt">3</span></button>
+    <button class="side-item" data-f="stopped"><span class="lbl">Stopped</span><span class="cnt">1</span></button>
+    <button class="side-item" data-f="error"><span class="lbl">Error</span><span class="cnt">1</span></button>
+    <button class="side-item" data-f="trackererr"><span class="lbl">Tracker error</span><span class="cnt">2</span></button>
+
+    <div class="side-h">Labels</div>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">blender</span><span class="cnt">5</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">linux</span><span class="cnt">4</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">archive</span><span class="cnt">2</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">audiobook</span><span class="cnt">1</span></button>
+
+    <div class="side-h">Folders</div>
+    <div id="folders"></div>
+
+    <div class="side-h">Disk</div>
+    <div class="disk"><div class="p"><span>/data</span><b>1.8 TB free</b></div><div class="bar" style="--p:71%"><i></i></div></div>
+
+    <div class="side-h">Trackers</div>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">tracker.blender.org</span><span class="cnt">5</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">bttracker.debian.org</span><span class="cnt">1</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">torrent.fedoraproject.org</span><span class="cnt">1</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">tracker.archlinux.org</span><span class="cnt">1</span></button>
+    <button class="side-item two"><svg class="i" style="width:14px;height:14px;margin-top:2px"><use href="#i-globe"/></svg><span class="col"><span class="lbl">archive.org</span><span class="sub">1 of 3 failing · HTTP 404</span></span><span class="st issues" style="margin-top:5px"></span><span class="cnt">3</span></button>
+    <button class="side-item two"><svg class="i" style="width:14px;height:14px;margin-top:2px"><use href="#i-globe"/></svg><span class="col"><span class="lbl">tracker.opentrackr.org</span><span class="sub down">down · 42 min · timed out</span></span><span class="st down" style="margin-top:5px"></span><span class="cnt">5</span></button>
+  </nav>
+
+  <div class="main">
+    <section class="list">
+      <div class="toolbar">
+        <span class="title" id="ftitle">All torrents</span><span class="count" id="fcount">12 · 41.8 GB</span>
+        <span id="fchips" style="display:flex;gap:6px;margin-left:6px"></span>
+        <div class="spacer"></div>
+        <div class="sel-bar" id="selbar" hidden>
+          <span class="v" id="selcount">1 selected</span>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-play"/></svg>Resume</button>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-pause"/></svg>Pause</button>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-tag"/></svg>Labels</button>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-folder"/></svg>Move</button>
+          <button class="btn sm ghost danger"><svg class="i"><use href="#i-trash"/></svg>Remove</button>
+          <button class="btn sm ghost icon" title="More: verify, re-announce, queue, limits"><svg class="i"><use href="#i-more"/></svg></button>
+          <button class="x" id="selclear" title="Clear selection"><svg class="i" style="width:13px;height:13px"><use href="#i-x"/></svg></button>
+        </div>
+        <button class="btn ghost sm" id="fbtn"><svg class="i" style="width:14px;height:14px"><use href="#i-search"/></svg>Filter<span class="badge" id="fbadge" hidden>0</span></button>
+        <button class="btn ghost sm" title="Sort"><svg class="i" style="width:14px;height:14px"><use href="#i-sort"/></svg>State</button>
+        <div class="fpop" id="fpop" hidden>
+          <h4>Filter</h4>
+          <div class="frow"><span>Size</span><div class="seg" data-k="size"><button data-v="any" class="on">Any</button><button data-v="lt1">&lt; 1 GB</button><button data-v="1to10">1–10 GB</button><button data-v="gt10">&gt; 10 GB</button></div></div>
+          <div class="frow"><span>Added</span><div class="seg" data-k="age"><button data-v="any" class="on">Any</button><button data-v="1d">Today</button><button data-v="7d">&lt; 7 d</button><button data-v="30d">&lt; 30 d</button><button data-v="older">Older</button></div></div>
+          <div class="frow"><span>Ratio</span><div class="seg" data-k="ratio"><button data-v="any" class="on">Any</button><button data-v="lt1">&lt; 1</button><button data-v="gte1">≥ 1</button><button data-v="gte2">≥ 2</button></div></div>
+          <div class="frow"><span>Activity</span><div class="seg" data-k="idle"><button data-v="any" class="on">Any</button><button data-v="active">Active</button><button data-v="idle7">Idle 7 d+</button><button data-v="idle30">Idle 30 d+</button></div></div>
+          <div class="foot"><span class="hint" id="fhint">Combines with the sidebar filter</span><button class="btn sm ghost" id="fclear">Clear</button><button class="btn sm" id="fdone">Done</button></div>
+        </div>
+        <button class="btn ghost icon" id="tmenu" title="More"><svg class="i"><use href="#i-more"/></svg></button>
+      </div>
+      <div class="notice" id="notice" hidden><span class="st"></span><span><b>tracker.opentrackr.org</b> has been unreachable for 42 min · 5 torrents affected, DHT and PEX still finding peers</span><button class="btn sm ghost">Re-announce all</button><button class="btn sm ghost icon"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+      <div class="cols">
+        <span class="chk" id="selall" title="Select all"></span><span>Name</span><span class="r">Size</span><span>Progress</span><span class="r sort">Down <svg class="i" style="width:12px;height:12px"><use href="#i-chevd"/></svg></span><span class="r">Up</span><span class="r">Ratio</span><span class="r">ETA</span>
+      </div>
+      <div class="rows" id="rows"></div>
+    </section>

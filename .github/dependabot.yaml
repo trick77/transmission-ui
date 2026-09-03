@@ -1,0 +1,44 @@
+version: 2
+updates:
+  # React frontend
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Container base image (Containerfile, compose.dev.yaml).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        patterns: ["*"]
+    ignore:
+      # PINNED TO 4.0.5 ON PURPOSE, NOT BY NEGLECT.
+      #
+      # transmission 4.0.6 shipped an announce-flood race (no IPv6 → rapid
+      # re-announces) and got blacklisted by most private trackers on its
+      # user-agent. 4.1.0 and 4.1.1 replaced it with a duplicate-announce bug
+      # (transmission/transmission#8399) and were blacklisted too. The fix first
+      # shipped in 4.1.2 (June 2026); whether individual trackers have
+      # re-whitelisted 4.1.x is per-tracker and not documented anywhere.
+      #
+      # TO REVISIT: bump only after the trackers in use accept the new version,
+      # tested one tracker at a time. The UI shows "client rejected" per tracker
+      # in the sidebar within one announce cycle, which is the signal to use.
+      - dependency-name: lscr.io/linuxserver/transmission
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]

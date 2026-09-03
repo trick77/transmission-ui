@@ -1,0 +1,710 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transmission</title>
+<style>
+/* ───────── Tokens: warm editorial dark (ported from ../peeq ui/src/index.css) ───────── */
+@font-face{font-family:"Anthropic Sans";src:url("fonts/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
+@font-face{font-family:"Anthropic Serif";src:url("fonts/SerifWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
+:root{
+  color-scheme: dark;
+  --bg:        #1f1f1e;   /* peeq --color-bg */
+  --surface:   #1b1b1a;   /* --color-panel: header, inspector, modals */
+  --surface-2: #2c2c2a;   /* --color-active: hover, inputs */
+  --surface-3: #363632;   /* --color-elevated: pressed, track */
+  --line:      #323230;
+  --line-soft: #2a2a28;
+  --ink:       #faf9f5;
+  --ink-2:     #9c9a92;   /* --color-muted */
+  --ink-3:     #6f6d66;   /* --color-faint */
+  --accent:    #d97757;   /* --color-accent-strong: text/lines on dark */
+  --accent-fill:#c25f34;  /* --color-accent-fill: buttons, toggles */
+  --accent-ink:#faf9f5;
+  --accent-soft: rgba(198,97,63,.14);
+  --seed:      #9c9a92;   /* seeding: neutral, by decision */
+  --seed-soft: rgba(250,249,245,.06);
+  --seed-bar:  #454540;
+  --up:        #9c9a92;
+  --wait:      #6f6d66;
+  --wait-soft: rgba(250,249,245,.06);
+  --done:      #454540;   /* finished progress bars */
+  --err:       #d9584a;   /* --color-danger, lifted for text */
+  --err-soft:  rgba(193,70,56,.16);
+  --stop:      #6f6d66;
+  --stop-soft: rgba(250,249,245,.06);
+  --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  --shadow-lg: 0 24px 60px -18px rgba(0,0,0,.6);
+  --r: 10px; --r-sm: 8px; --r-lg: 12px;
+  --font: "Anthropic Sans", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: "Anthropic Serif", Georgia, "Times New Roman", Times, serif;
+  --mono: ui-monospace, "SF Mono", "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+  --sidebar-w: 224px; --inspector-w: 400px; --header-h: 52px;
+}
+
+/* ───────── Base ───────── */
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(1200px 600px at 20% -10%,rgba(198,97,63,.06),transparent 60%),radial-gradient(900px 500px at 100% 100%,rgba(214,161,90,.03),transparent 60%),var(--bg);color:var(--ink);font:13px/1.45 var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;letter-spacing:-.01em}
+.muted{color:var(--ink-2)}
+.faint{color:var(--ink-3)}
+kbd{font:11px var(--mono);color:var(--ink-3);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--surface)}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ───────── App shell ───────── */
+.app{display:grid;grid-template-rows:var(--header-h) 1fr;grid-template-columns:var(--sidebar-w) 1fr;height:100%}
+.header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em;width:calc(var(--sidebar-w) - 14px)}
+.brand .logo{width:22px;height:22px;border-radius:7px;background:linear-gradient(145deg,var(--accent),var(--accent-fill));display:grid;place-items:center;color:#faf9f5}
+.search{flex:0 1 380px;display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-3)}
+.search input{flex:1;border:0;background:none;outline:none;color:var(--ink)}
+.search input::placeholder{color:var(--ink-3)}
+.spacer{flex:1}
+.btn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:var(--r);background:var(--surface-2);color:var(--ink);font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--surface-3)}
+.btn.primary{background:var(--accent-fill);color:var(--accent-ink);box-shadow:0 0 0 1px rgba(217,119,87,.25),0 8px 20px -10px rgba(217,119,87,.5)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:none;color:var(--ink-2)}
+.btn.ghost:hover{background:var(--surface-2);color:var(--ink)}
+.btn.icon{width:32px;padding:0;justify-content:center}
+.btn.sm{height:26px;padding:0 9px;font-size:12px;border-radius:var(--r-sm)}
+.btn.danger{color:var(--err)}
+.btn.danger:hover{background:var(--err-soft)}
+.seg{display:inline-flex;background:var(--surface-2);border-radius:var(--r);padding:2px;gap:2px}
+.seg button{height:26px;padding:0 10px;border-radius:6px;color:var(--ink-2);font-weight:500}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+/* speed pill */
+.speeds{display:flex;align-items:center;gap:14px;height:36px;padding:0 6px 0 12px;border-radius:999px;border:1px solid var(--line);position:relative;cursor:pointer}
+.speeds:hover{background:var(--surface-2)}
+.speeds .s{flex-direction:column;align-items:flex-start;gap:0;line-height:1.1}
+.speeds .s .top{display:flex;align-items:center;gap:5px}
+.speeds .s .tot{font-family:var(--mono);font-size:10px;color:var(--ink-3);padding-left:19px}
+.speeds .lim{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:-4px}
+.pop{position:absolute;top:calc(100% + 8px);right:0;width:330px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);padding:14px 16px;z-index:30;cursor:default;text-align:left}
+.pop h4{margin:0 0 10px;font-family:var(--serif);font-weight:500;font-size:17px}
+.pop table{width:100%;border-collapse:collapse;font-size:12px}
+.pop th{text-align:right;font-weight:500;color:var(--ink-3);font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:0 0 6px}
+.pop th:first-child{text-align:left}
+.pop td{padding:5px 0;border-top:1px solid var(--line-soft);text-align:right}
+.pop td:first-child{text-align:left;color:var(--ink-2)}
+.pop .foot{margin-top:10px;font-size:11px;color:var(--ink-3)}
+.speeds .s{display:flex;align-items:center;gap:6px}
+.speeds .s .num{font-size:13px}
+.speeds .arrow{width:14px;height:14px}
+.speeds .dl{color:var(--accent)} .speeds .ul{color:var(--ink)} .speeds .ul .arrow{color:var(--ink-3)}
+.spark{width:96px;height:22px;display:block}
+.turtle{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;color:var(--ink-3)}
+.turtle.on{background:var(--accent-soft);color:var(--accent)}
+
+/* ───────── Sidebar ───────── */
+.sidebar{border-right:1px solid var(--line);padding:14px 10px;overflow:auto;background:var(--bg)}
+.side-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:0 8px;margin:14px 0 6px}
+.side-h:first-child{margin-top:0}
+.side-item{display:flex;align-items:center;gap:9px;height:30px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left}
+.side-item:hover{background:var(--surface-2);color:var(--ink)}
+.side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:500;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
+.side-item .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.side-item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-item .cnt{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.side-item.on .cnt{color:var(--accent)}
+.tag-dot{display:none}
+/* tracker health in the sidebar */
+.side-item .st{width:7px;height:7px;border-radius:50%;flex:none;margin-left:2px}
+.side-item .st.down{background:var(--err)}
+.side-item .st.issues{border:1.5px solid var(--ink-3);width:6px;height:6px}
+.side-item .sub{font-size:11px;color:var(--ink-3);white-space:nowrap}
+.side-item .sub.down{color:var(--err)}
+.side-item.two{height:auto;padding:5px 8px;align-items:flex-start}
+.side-item.two .col{flex:1;min-width:0;line-height:1.25}
+.side-item.two .col .lbl{display:block}
+/* tracker-down strip above the list */
+.notice{display:flex;align-items:center;gap:10px;margin:0 16px;padding:7px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:12px;color:var(--ink-2)}
+.notice .st{width:7px;height:7px;border-radius:50%;background:var(--err);flex:none}
+.notice b{color:var(--ink);font-weight:500}
+.notice .btn{margin-left:auto}
+
+.disk{padding:4px 8px 6px;font-size:12px}
+.disk .p{display:flex;justify-content:space-between;gap:8px;color:var(--ink-2)}
+.disk .p span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.disk .p b{white-space:nowrap;flex:none}
+.disk .p b{font-family:var(--mono);font-weight:400;color:var(--ink-3);font-size:11px}
+.disk .bar{height:3px;margin-top:5px}
+.disk .bar i{background:var(--ink-3)}
+.disk .bar.hot i{background:var(--accent)}
+
+/* ───────── Main ───────── */
+.main{display:grid;grid-template-columns:1fr auto;min-width:0;overflow:hidden}
+.list{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line-soft);position:relative;flex-wrap:wrap}
+.fchip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:500}
+.fchip b{font-weight:500;color:var(--ink)}
+.fchip button{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;color:var(--accent)}
+.fchip button:hover{background:rgba(217,119,87,.2)}
+.btn .badge{min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--accent-fill);color:var(--accent-ink);font:11px var(--mono);display:grid;place-items:center}
+.fpop{position:absolute;top:calc(100% - 4px);right:120px;width:420px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);padding:14px 16px;z-index:30}
+.fpop h4{margin:0 0 12px;font-family:var(--serif);font-weight:500;font-size:17px}
+.fpop .frow{display:grid;grid-template-columns:70px 1fr;align-items:center;gap:10px;margin-bottom:10px;font-size:12px;color:var(--ink-2)}
+.fpop .seg{width:100%}.fpop .seg button{flex:1;padding:0 4px;font-size:12px;white-space:nowrap}
+.fpop .foot{display:flex;gap:8px;margin-top:6px;align-items:center}
+.fpop .foot .hint{flex:1}
+.toolbar .title{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.01em;margin-right:6px}
+.toolbar .count{color:var(--ink-3)}
+.sel-bar{display:flex;align-items:center;gap:2px;padding:0 4px 0 10px;height:34px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:500;font-size:12px;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
+.sel-bar .v{margin-right:8px;white-space:nowrap}
+.sel-bar .btn{color:var(--ink);height:26px;padding:0 8px;gap:5px}
+.sel-bar .btn:hover{background:rgba(217,119,87,.18)}
+.sel-bar .btn svg{width:14px;height:14px}
+.sel-bar .btn.danger{color:var(--err)}
+.sel-bar .x{margin-left:2px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--accent)}
+.sel-bar .x:hover{background:rgba(217,119,87,.18)}
+.row .chk{cursor:pointer}
+.row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23faf9f5' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");background-size:12px;background-position:center;background-repeat:no-repeat}
+.chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
+
+/* ───────── Torrent rows ───────── */
+.cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px 16px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
+.cols .r{text-align:right}
+.cols .sort{color:var(--ink);display:inline-flex;align-items:center;gap:3px}
+.rows{overflow:auto;flex:1;padding-bottom:20px}
+.row{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
+.row:hover{background:var(--surface)}
+.row.sel{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.row .r{text-align:right}
+.chk{width:16px;height:16px;border:1.5px solid var(--line);border-radius:4px;background:var(--surface)}
+.row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill)}
+.name{min-width:0}
+.name .t{font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:8px;min-width:0}
+.name .t>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.name .t .chip{flex:none}
+.name .t .acts{margin-left:auto;display:flex;gap:2px;opacity:0;flex:none}
+.row:hover .name .t .acts,.row.menu-open .name .t .acts{opacity:1}
+.acts button{width:24px;height:22px;border-radius:6px;color:var(--ink-2);display:grid;place-items:center}
+.acts button:hover{background:var(--surface-3);color:var(--ink)}
+.acts button.on{background:var(--surface-3);color:var(--ink)}
+.cols .chk{cursor:pointer}
+.chk.some{background:linear-gradient(var(--ink-3),var(--ink-3)) center/8px 2px no-repeat}
+.name .m{display:flex;align-items:center;gap:8px;margin-top:4px;color:var(--ink-3);font-size:12px;white-space:nowrap;overflow:hidden;min-width:0}
+.name .m>*{flex:none}
+.name .m>span:not(.chip):not(.sep){flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.name .m>span:last-child{flex:0 4 auto}
+.name .m .sep{width:3px;height:3px;border-radius:50%;background:var(--ink-3);opacity:.6}
+.chip{display:inline-flex;align-items:center;gap:5px;height:18px;padding:0 7px;border-radius:99px;font-size:11px;font-weight:500;white-space:nowrap}
+.chip.dl{background:var(--accent-soft);color:var(--accent)}
+.chip.seed{background:var(--seed-soft);color:var(--ink-2)}
+.chip.wait{background:var(--wait-soft);color:var(--ink-3)}
+.chip.err{background:var(--err-soft);color:var(--err)}
+.chip.stop{background:var(--stop-soft);color:var(--ink-2)}
+.chip.lbl{background:none;color:var(--ink-2);font-weight:400;padding:0 7px;border:1px solid var(--line)}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.bar{height:5px;border-radius:99px;background:var(--surface-3);overflow:hidden;position:relative}
+.bar i{position:absolute;inset:0;width:var(--p);background:var(--accent);border-radius:99px}
+.bar.seed i{background:var(--done)} .bar.wait i{background:var(--done)} .bar.err i{background:var(--err)} .bar.stop i{background:var(--done)}
+.bar.striped i{background-image:repeating-linear-gradient(45deg,transparent 0 5px,rgba(255,255,255,.18) 5px 10px)}
+.prog{display:flex;flex-direction:column;gap:5px}
+.prog .num{font-size:11px;color:var(--ink-2);display:flex;justify-content:space-between}
+.prog .num .av{color:var(--ink-3)}
+.spd{display:flex;align-items:center;justify-content:flex-end;gap:5px;white-space:nowrap}
+.spd .arrow{width:12px;height:12px;stroke-width:2.2}
+.spd.dl{color:var(--accent)} .spd.ul{color:var(--ink-2)} .spd.ul .arrow{color:var(--ink-3)} .spd.zero{color:var(--ink-3)}
+
+/* with inspector docked: drop Ratio + ETA, keep the list readable */
+.main.has-insp .cols,.main.has-insp .row{grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
+.main.has-insp .cols>:nth-child(n+7),.main.has-insp .row>:nth-child(n+7){display:none}
+
+.empty{padding:60px 20px;text-align:center;color:var(--ink-3)}
+.empty .t{font-family:var(--serif);font-size:18px;color:var(--ink-2);margin-bottom:6px}
+
+/* ───────── Context menu ───────── */
+.cmenu{position:absolute;z-index:40;width:250px;background:var(--surface-3);border:1px solid #454540;border-radius:var(--r-lg);box-shadow:var(--shadow-lg);padding:6px;color:#f3f0e8;font-size:13px}
+.cmenu .it{display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border-radius:7px;cursor:default}
+.cmenu .it:hover,.cmenu .it.hl{background:var(--surface-2)}
+.cmenu .it svg{width:15px;height:15px;color:var(--ink-2)}
+.cmenu .it .k{margin-left:auto;font:11px var(--mono);color:var(--ink-3)}
+.cmenu .it .chev{margin-left:auto;width:13px;height:13px}
+.cmenu .sep{height:1px;background:#454540;margin:5px 4px}
+.cmenu .it.danger{color:var(--err)} .cmenu .it.danger svg{color:var(--err)}
+.cmenu .sub{position:absolute;right:calc(100% + 4px);left:auto;top:-6px;width:190px}
+.cmenu .it.qpos{position:relative}
+
+/* comfortable density (Interface setting) */
+:root[data-density="comfortable"] .row{padding:14px 16px}
+:root[data-density="comfortable"] .name .m{margin-top:6px}
+
+/* ───────── Inspector ───────── */
+.inspector{width:var(--inspector-w);border-left:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
+.insp-head{padding:14px 16px 0}
+.insp-head .t{font-family:var(--serif);font-weight:500;font-size:17px;line-height:1.3;overflow-wrap:anywhere}
+.insp-head .m{margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--ink-3);font-size:12px}
+.tabs{display:flex;gap:2px;padding:12px 12px 0;border-bottom:1px solid var(--line)}
+.tabs button{padding:6px 8px 9px;color:var(--ink-2);font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--ink);border-color:var(--accent)}
+.insp-body{overflow:auto;flex:1;padding:14px 16px 24px}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:12px}
+.kv dt{color:var(--ink-3)} .kv dd{margin:0;overflow-wrap:anywhere}
+.sec{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:18px 0 8px}
+.sec:first-child{margin-top:0}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--bg);border-radius:var(--r);padding:9px 11px}
+.stat .l{font-size:11px;color:var(--ink-3)}
+.stat .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;font-weight:500;margin-top:2px}
+.stat .v small{font-size:11px;color:var(--ink-3);font-weight:400}
+.avail{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-3)}
+.avail .bar{flex:1;height:4px}
+.avail .bar i{background:var(--ink-2)}
+.avail .num{color:var(--ink-2)}
+.pieces{display:grid;grid-template-columns:repeat(48,1fr);gap:2px;margin:8px 0 2px}
+.pieces i{height:8px;border-radius:1px;background:var(--surface-3)}
+.pieces i.d{background:var(--accent)} .pieces i.p{background:var(--accent);opacity:.4}
+
+/* file tree */
+.tree{font-size:12px}
+.tree .f{display:grid;grid-template-columns:18px 16px 1fr 64px 44px 60px;gap:0 8px;align-items:center;height:28px;padding-right:2px;border-radius:var(--r-sm)}
+.tree .f:hover{background:var(--surface-2)}
+.tree .f.d1{padding-left:18px} .tree .f.d2{padding-left:36px}
+.tree .f .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree .f .n.dir{font-weight:500}
+.tree .f .bar{height:4px}
+.tree .f .r{text-align:right}
+.tree .chk{width:14px;height:14px;border-radius:3px}
+.tree .chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
+.tree .chk.mixed{background:var(--accent-fill);border-color:var(--accent-fill);opacity:.45}
+.pri{display:inline-flex;align-items:center;justify-content:center;width:44px;height:20px;border-radius:4px;font-size:11px;font-weight:500;font-family:var(--mono)}
+.pri.high{background:var(--accent-soft);color:var(--accent)} .pri.norm{color:var(--ink-3)} .pri.low{background:var(--surface-2);color:var(--ink-3)}
+
+/* peers table */
+.tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+.tbl th{text-align:left;padding:4px;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid var(--line)}
+.tbl td{padding:6px 4px;border-bottom:1px solid var(--line-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl .r{text-align:right}
+.flag{display:inline-block;width:20px;font-family:var(--mono);color:var(--ink-3)}
+.flags{font-family:var(--mono);color:var(--ink-3);font-size:11px;letter-spacing:.06em}
+.mini{height:4px;width:34px;display:inline-block;border-radius:99px;background:var(--surface-3);overflow:hidden}
+.mini i{display:block;height:100%;width:var(--p);background:var(--ink-3);border-radius:99px}
+
+/* trackers */
+.tracker{padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.tracker .h{display:flex;align-items:center;gap:8px;font-weight:500}
+.tracker .h .tier{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.tracker .kv{margin-top:6px;grid-template-columns:90px 1fr}
+.ok{color:var(--ink)} .bad{color:var(--err)} .warn{color:var(--ink-2)}
+
+/* ───────── Modals ───────── */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(2px);display:grid;place-items:center;z-index:10}
+.modal{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 80px)}
+.modal-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.modal-h .t{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.01em}
+.modal-b{overflow:auto;padding:18px}
+.modal-f{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--line);background:var(--bg)}
+
+/* ───────── Forms ───────── */
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;font-weight:500;color:var(--ink-2)}
+.input{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:var(--r);background:var(--surface-2);border:1px solid transparent}
+.input:focus-within{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-soft)}
+.input input{flex:1;min-width:0;border:0;background:none;outline:none}
+.input input::placeholder{color:var(--ink-3)}
+.input .unit{color:var(--ink-3);font-size:12px}
+.input.mono input{font-family:var(--mono);font-size:12px}
+.select{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:var(--r);background:var(--surface-2)}
+.hint{font-size:12px;color:var(--ink-3)}
+.toggle{width:34px;height:20px;border-radius:99px;background:var(--surface-3);position:relative;flex:none;transition:background .15s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.toggle.on{background:var(--accent-fill)} .toggle.on::after{transform:translateX(14px)}
+.opt{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.opt:last-child{border-bottom:0}
+.opt .txt{flex:1;min-width:0}
+.opt .txt .l{font-weight:500}
+.opt .txt .d{font-size:12px;color:var(--ink-3);margin-top:1px}
+.opt .ctl{display:flex;align-items:center;gap:8px;flex:none}
+.opt .input{width:130px}
+.opt .input.wide{width:220px}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line);flex:none;position:relative}
+.radio.on{border-color:var(--accent);border-width:5px}
+.drop{border:1.5px dashed var(--line);border-radius:var(--r-lg);padding:26px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--ink-2);background:var(--bg)}
+.drop.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.drop .big{width:28px;height:28px}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:99px;border:3px solid transparent;background-clip:padding-box}
+</style>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-turtle" viewBox="0 0 24 24"><path d="M3 14h2a7 7 0 0 1 14 0h2M5 14v3h2v-3M17 14v3h2v-3M8 14v2M12 14v2M16 14v2"/><path d="M12 7V5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-magnet" viewBox="0 0 24 24"><path d="M6 4v8a6 6 0 0 0 12 0V4M6 4h4v8a2 2 0 0 0 4 0V4h4"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M12 5v14M8 15l4 4 4-4"/></symbol>
+  </defs>
+</svg>
+<div class="app">
+  <header class="header">
+    <div class="brand"><span class="logo"><svg class="i" style="width:14px;height:14px;stroke-width:2.5"><use href="#i-down"/></svg></span>Transmission</div>
+    <div class="search"><svg class="i"><use href="#i-search"/></svg><input placeholder="Search torrents"><kbd>⌘F</kbd></div>
+    <div class="spacer"></div>
+    <div class="speeds" title="Session totals">
+      <svg class="spark" viewBox="0 0 96 22" preserveAspectRatio="none" aria-label="Speed, last 60 s">
+        <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" points="0,16 6,14 12,15 18,11 24,12 30,8 36,9 42,6 48,7 54,5 60,6 66,4 72,6 78,3 84,5 90,4 96,3"/>
+        <polyline fill="none" stroke="var(--ink-3)" stroke-width="1.5" stroke-linejoin="round" points="0,20 6,19 12,19 18,18 24,19 30,17 36,18 42,16 48,17 54,16 60,17 66,15 72,16 78,15 84,16 90,14 96,15"/>
+      </svg>
+      <span class="s dl"><span class="top"><svg class="i arrow"><use href="#i-down"/></svg><span class="num">15.6</span><span class="faint" style="font-size:11px">MB/s</span></span><span class="tot">5.14 GB this session</span></span>
+      <span class="s ul"><span class="top"><svg class="i arrow"><use href="#i-up"/></svg><span class="num">2.31</span><span class="faint" style="font-size:11px">MB/s</span></span><span class="tot">1.31 GB this session</span></span>
+      <span class="lim" id="lim" hidden>alt 2000/250</span>
+      <button class="turtle" id="turtle" title="Alternative speed limits"><svg class="i"><use href="#i-turtle"/></svg></button>
+      <div class="pop" id="pop" hidden>
+        <h4>Statistics</h4>
+        <table>
+          <tr><th></th><th>This session</th><th>All time</th></tr>
+          <tr><td>Downloaded</td><td class="num">5.14 GB</td><td class="num">218 GB</td></tr>
+          <tr><td>Uploaded</td><td class="num">1.31 GB</td><td class="num">391 GB</td></tr>
+          <tr><td>Ratio</td><td class="num">0.25</td><td class="num">1.79</td></tr>
+          <tr><td>Files added</td><td class="num">3</td><td class="num">412</td></tr>
+          <tr><td>Running</td><td class="num">6d 14h</td><td class="num">142d 3h</td></tr>
+          <tr><td>Sessions</td><td class="num">—</td><td class="num">37</td></tr>
+        </table>
+        <div class="foot">transmission-daemon 4.1.0 · DHT 127 nodes · port 51413 open</div>
+      </div>
+    </div>
+    <button class="btn ghost icon" title="Preferences"><svg class="i"><use href="#i-gear"/></svg></button>
+    <button class="btn primary"><svg class="i"><use href="#i-plus"/></svg>Add</button>
+  </header>
+
+  <nav class="sidebar">
+    <div class="side-h">Status</div>
+    <button class="side-item on"><span class="lbl">All</span><span class="cnt">12</span></button>
+    <button class="side-item" data-f="download"><span class="lbl">Downloading</span><span class="cnt">3</span></button>
+    <button class="side-item" data-f="seed"><span class="lbl">Seeding</span><span class="cnt">5</span></button>
+    <button class="side-item" data-f="active"><span class="lbl">Active</span><span class="cnt">7</span></button>
+    <button class="side-item" data-f="inactive"><span class="lbl">Inactive</span><span class="cnt">5</span></button>
+    <button class="side-item" data-f="finished"><span class="lbl">Finished</span><span class="cnt">7</span></button>
+    <button class="side-item" data-f="queued"><span class="lbl">Queued / Checking</span><span class="cnt">3</span></button>
+    <button class="side-item" data-f="stopped"><span class="lbl">Stopped</span><span class="cnt">1</span></button>
+    <button class="side-item" data-f="error"><span class="lbl">Error</span><span class="cnt">1</span></button>
+    <button class="side-item" data-f="trackererr"><span class="lbl">Tracker error</span><span class="cnt">2</span></button>
+
+    <div class="side-h">Labels</div>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">blender</span><span class="cnt">5</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">linux</span><span class="cnt">4</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">archive</span><span class="cnt">2</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-tag"/></svg><span class="lbl">audiobook</span><span class="cnt">1</span></button>
+
+    <div class="side-h">Folders</div>
+    <div id="folders"></div>
+
+    <div class="side-h">Disk</div>
+    <div class="disk"><div class="p"><span>/data</span><b>1.8 TB free</b></div><div class="bar" style="--p:71%"><i></i></div></div>
+
+    <div class="side-h">Trackers</div>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">tracker.blender.org</span><span class="cnt">5</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">bttracker.debian.org</span><span class="cnt">1</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">torrent.fedoraproject.org</span><span class="cnt">1</span></button>
+    <button class="side-item"><svg class="i" style="width:14px;height:14px"><use href="#i-globe"/></svg><span class="lbl">tracker.archlinux.org</span><span class="cnt">1</span></button>
+    <button class="side-item two"><svg class="i" style="width:14px;height:14px;margin-top:2px"><use href="#i-globe"/></svg><span class="col"><span class="lbl">archive.org</span><span class="sub">1 of 3 failing · HTTP 404</span></span><span class="st issues" style="margin-top:5px"></span><span class="cnt">3</span></button>
+    <button class="side-item two"><svg class="i" style="width:14px;height:14px;margin-top:2px"><use href="#i-globe"/></svg><span class="col"><span class="lbl">tracker.opentrackr.org</span><span class="sub down">down · 42 min · timed out</span></span><span class="st down" style="margin-top:5px"></span><span class="cnt">5</span></button>
+  </nav>
+
+  <div class="main">
+    <section class="list">
+      <div class="toolbar">
+        <span class="title" id="ftitle">All torrents</span><span class="count" id="fcount">12 · 41.8 GB</span>
+        <span id="fchips" style="display:flex;gap:6px;margin-left:6px"></span>
+        <div class="spacer"></div>
+        <div class="sel-bar" id="selbar" hidden>
+          <span class="v" id="selcount">1 selected</span>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-play"/></svg>Resume</button>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-pause"/></svg>Pause</button>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-tag"/></svg>Labels</button>
+          <button class="btn sm ghost"><svg class="i"><use href="#i-folder"/></svg>Move</button>
+          <button class="btn sm ghost danger"><svg class="i"><use href="#i-trash"/></svg>Remove</button>
+          <button class="btn sm ghost icon" title="More: verify, re-announce, queue, limits"><svg class="i"><use href="#i-more"/></svg></button>
+          <button class="x" id="selclear" title="Clear selection"><svg class="i" style="width:13px;height:13px"><use href="#i-x"/></svg></button>
+        </div>
+        <button class="btn ghost sm" id="fbtn"><svg class="i" style="width:14px;height:14px"><use href="#i-search"/></svg>Filter<span class="badge" id="fbadge" hidden>0</span></button>
+        <button class="btn ghost sm" title="Sort"><svg class="i" style="width:14px;height:14px"><use href="#i-sort"/></svg>State</button>
+        <div class="fpop" id="fpop" hidden>
+          <h4>Filter</h4>
+          <div class="frow"><span>Size</span><div class="seg" data-k="size"><button data-v="any" class="on">Any</button><button data-v="lt1">&lt; 1 GB</button><button data-v="1to10">1–10 GB</button><button data-v="gt10">&gt; 10 GB</button></div></div>
+          <div class="frow"><span>Added</span><div class="seg" data-k="age"><button data-v="any" class="on">Any</button><button data-v="1d">Today</button><button data-v="7d">&lt; 7 d</button><button data-v="30d">&lt; 30 d</button><button data-v="older">Older</button></div></div>
+          <div class="frow"><span>Ratio</span><div class="seg" data-k="ratio"><button data-v="any" class="on">Any</button><button data-v="lt1">&lt; 1</button><button data-v="gte1">≥ 1</button><button data-v="gte2">≥ 2</button></div></div>
+          <div class="frow"><span>Activity</span><div class="seg" data-k="idle"><button data-v="any" class="on">Any</button><button data-v="active">Active</button><button data-v="idle7">Idle 7 d+</button><button data-v="idle30">Idle 30 d+</button></div></div>
+          <div class="foot"><span class="hint" id="fhint">Combines with the sidebar filter</span><button class="btn sm ghost" id="fclear">Clear</button><button class="btn sm" id="fdone">Done</button></div>
+        </div>
+        <button class="btn ghost icon" id="tmenu" title="More"><svg class="i"><use href="#i-more"/></svg></button>
+      </div>
+      <div class="notice" id="notice" hidden><span class="st"></span><span><b>tracker.opentrackr.org</b> has been unreachable for 42 min · 5 torrents affected, DHT and PEX still finding peers</span><button class="btn sm ghost">Re-announce all</button><button class="btn sm ghost icon"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+      <div class="cols">
+        <span class="chk" id="selall" title="Select all"></span><span>Name</span><span class="r">Size</span><span>Progress</span><span class="r sort">Down <svg class="i" style="width:12px;height:12px"><use href="#i-chevd"/></svg></span><span class="r">Up</span><span class="r">Ratio</span><span class="r">ETA</span>
+      </div>
+      <div class="rows" id="rows"></div>
+    </section>
+<script>
+// Sample session — mixed states so every status colour appears.
+const T = [
+  {id:1, name:"debian-13.1.0-amd64-DVD-1.iso", st:"download", p:63, size:"4.71 GB", dl:"12.4 MB/s", ul:"1.21 MB/s", ratio:"0.18", eta:"3m 12s", peers:"42 · 18", swarm:"1.2k", av:"3.4", lbl:["linux"], age:0, idle:0, dir:"/data/torrents/iso"},
+  {id:2, name:"Cosmos Laundromat (2015) 2160p Blender Open Movie", st:"download", p:91, size:"3.02 GB", dl:"3.14 MB/s", ul:"612 kB/s", ratio:"0.44", eta:"1m 28s", peers:"27 · 11", swarm:"318", av:"9.1", lbl:["blender"], age:1, idle:0, dir:"/data/torrents/buffer"},
+  {id:3, name:"enwiki-20260801-pages-articles-multistream.xml.bz2", st:"download", p:34, size:"24.1 GB", dl:"88 kB/s", ul:"0", ratio:"0.02", eta:"2d 4h", peers:"3 · 1", swarm:"4", av:"0.9", lbl:["archive"], age:12, idle:0, dir:"/data/torrents/buffer"},
+  {id:4, name:"Big Buck Bunny (2008) 4K 60fps", st:"seed", p:100, size:"7.28 GB", dl:"0", ul:"840 kB/s", ratio:"3.42", eta:"∞", peers:"9 · 9", swarm:"1.4k", lbl:["blender"], age:400, idle:0, dir:"/data/torrents/radarr"},
+  {id:5, name:"Fedora-Workstation-Live-42-1.10.x86_64.iso", st:"seed", p:100, size:"2.34 GB", dl:"0", ul:"224 kB/s", ratio:"1.12", eta:"∞", peers:"14 · 6", swarm:"860", lbl:["linux"], age:90, idle:0, dir:"/data/torrents/iso"},
+  {id:6, name:"Sintel (2010) 1080p Blender Open Movie", st:"seed", p:100, size:"1.11 GB", dl:"0", ul:"0", ratio:"6.80", eta:"∞", peers:"2 · 0", swarm:"62", lbl:["blender"], age:800, idle:9, dir:"/data/torrents/radarr"},
+  {id:7, name:"Blender 4.5 LTS — all platforms", st:"seed", p:100, size:"1.94 GB", dl:"0", ul:"96 kB/s", ratio:"0.71", eta:"∞", peers:"5 · 2", swarm:"120", lbl:["blender"], age:30, idle:0, dir:"/data/torrents/buffer"},
+  {id:8, name:"Tears of Steel (2012) 4K", st:"seed-wait", p:100, size:"2.52 GB", dl:"0", ul:"0", ratio:"0.98", eta:"∞", peers:"0", lbl:["blender"], age:600, idle:41, dir:"/data/torrents/radarr"},
+  {id:9, name:"archlinux-2026.08.01-x86_64.iso", st:"download-wait", p:0, size:"1.23 GB", dl:"0", ul:"0", ratio:"0.00", eta:"—", peers:"0", lbl:["linux"], age:0, idle:0, dir:"/data/torrents/iso"},
+  {id:10, name:"ubuntu-26.04.1-desktop-amd64.iso", st:"check", p:41, size:"6.02 GB", dl:"0", ul:"0", ratio:"0.00", eta:"—", peers:"0", lbl:["linux"], age:2, idle:0, dir:"/data/torrents/iso"},
+  {id:11, name:"Pride and Prejudice — LibriVox (Karen Savage)", st:"stopped", p:100, size:"318 MB", dl:"0", ul:"0", ratio:"2.05", eta:"—", peers:"0", lbl:["audiobook"], age:200, idle:120, dir:"/data/torrents/audiobooks"},
+  {id:12, name:"Apollo 11 Flight Journal — Internet Archive", st:"error", p:57, av:"0.0", size:"912 MB", dl:"0", ul:"0", ratio:"0.30", eta:"—", peers:"0", lbl:["archive"], err:"Tracker gave HTTP response code 404 (Not Found)", age:45, idle:45, dir:"/data/torrents/sonarr/docs"},
+];
+const STATUS = {
+  "download":      {cls:"dl",   bar:"",       label:"Downloading"},
+  "seed":          {cls:"seed", bar:"seed",   label:"Seeding"},
+  "seed-wait":     {cls:"wait", bar:"wait striped", label:"Queued to seed"},
+  "download-wait": {cls:"wait", bar:"wait striped", label:"Queued"},
+  "check":         {cls:"wait", bar:"wait striped", label:"Verifying"},
+  "check-wait":    {cls:"wait", bar:"wait striped", label:"Queued to verify"},
+  "stopped":       {cls:"stop", bar:"stop",   label:"Stopped"},
+  "error":         {cls:"err",  bar:"err",    label:"Error"},
+};
+const LBL = {linux:"#3f8cd6", blender:"#e8712f", archive:"#9b6bd6", audiobook:"#3aa87c"};
+const spd = (v, dir) => v === "0"
+  ? `<span class="spd zero num">—</span>`
+  : `<span class="spd ${dir} num"><svg class="i arrow"><use href="#i-${dir==='dl'?'down':'up'}"/></svg>${v}</span>`;
+function row(t, sel){
+  const s = STATUS[t.st];
+  const [conn, act] = t.peers.split(' · ');
+  const sub = t.err ? `<span style="color:var(--err)">${t.err}</span>`
+    : s.label === "Verifying" ? `Verifying local data`
+    : conn === "0" ? `No peers` : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
+  return `<div class="row${sel?' sel':''}" data-id="${t.id}">
+    <span class="chk"></span>
+    <div class="name">
+      <div class="t"><span>${t.name}</span>${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
+        <span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span></div>
+      <div class="m"><span class="chip ${s.cls}"><span class="dot"></span>${s.label}</span><span class="sep"></span><span>${sub}</span><span class="sep"></span><span>${rel(t.dir)}/</span></div>
+    </div>
+    <span class="num r muted">${t.size}</span>
+    <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num"><span>${t.p}%</span>${t.swarm?`<span class="av" title="Seeds in swarm">${t.swarm} seeds</span>`:''}</span></div>
+    ${spd(t.dl,'dl')}
+    ${spd(t.ul,'ul')}
+    <span class="num r ${+t.ratio>=1?'':'muted'}">${t.ratio}</span>
+    <span class="num r muted">${t.eta}</span>
+  </div>`;
+}
+const FILTERS = {
+  all:        {label:"All torrents",  f:t=>true},
+  download:   {label:"Downloading",   f:t=>t.st==="download"},
+  seed:       {label:"Seeding",       f:t=>t.st==="seed"},
+  active:     {label:"Active",        f:t=>t.dl!=="0"||t.ul!=="0"},
+  inactive:   {label:"Inactive",      f:t=>t.dl==="0"&&t.ul==="0"&&t.st!=="check"&&!t.st.endsWith("wait")},
+  finished:   {label:"Finished",      f:t=>t.p===100},
+  queued:     {label:"Queued / Checking", f:t=>t.st==="check"||t.st.endsWith("wait")},
+  stopped:    {label:"Stopped",       f:t=>t.st==="stopped"},
+  error:      {label:"Error",         f:t=>t.st==="error"},
+  trackererr: {label:"Tracker error", f:t=>t.id===12||t.id===1},
+};
+// default sort: problems first, then by how much attention a torrent needs
+const RANK = t => t.st==="error" ? 0 : (t.trk ? 1 : t.st==="check"||t.st==="check-wait" ? 2 : t.st==="download-wait" ? 3 : t.st==="download" ? 4 : t.st==="seed-wait" ? 5 : t.st==="seed" ? 6 : 7);
+const ADV = {
+  size:  {lt1:t=>gb(t.size)<1, "1to10":t=>gb(t.size)>=1&&gb(t.size)<=10, gt10:t=>gb(t.size)>10},
+  age:   {"1d":t=>t.age<1, "7d":t=>t.age<7, "30d":t=>t.age<30, older:t=>t.age>=30},
+  ratio: {lt1:t=>+t.ratio<1, gte1:t=>+t.ratio>=1, gte2:t=>+t.ratio>=2},
+  idle:  {active:t=>t.dl!=="0"||t.ul!=="0", idle7:t=>t.idle>7, idle30:t=>t.idle>30},
+};
+const ADV_LABEL = {size:{lt1:"< 1 GB","1to10":"1–10 GB",gt10:"> 10 GB"}, age:{"1d":"added today","7d":"added < 7 d","30d":"added < 30 d",older:"added > 30 d"}, ratio:{lt1:"ratio < 1",gte1:"ratio ≥ 1",gte2:"ratio ≥ 2"}, idle:{active:"active now",idle7:"idle > 7 d",idle30:"idle > 30 d"}};
+let adv = {};
+const BASE = "/data/torrents";
+const rel = d => d.startsWith(BASE + "/") ? d.slice(BASE.length + 1) : d;
+const gb = s => s.endsWith("MB") ? parseFloat(s)/1024 : parseFloat(s);
+function renderRows(selId, filter){
+  const F = filter && filter.startsWith('dir:') ? {label: rel(filter.slice(4)), f: t => t.dir === filter.slice(4) || t.dir.startsWith(filter.slice(4) + '/')} : FILTERS[filter || 'all'];
+  T.forEach(t => { t.trk = t.id===1 || t.id===12; });
+  const list = T.filter(F.f).filter(t => Object.entries(adv).every(([k,v]) => !v || v==='any' || ADV[k][v](t))).sort((a,b) => RANK(a)-RANK(b) || a.idle-b.idle);
+  const fc2 = document.getElementById('fchips'); if (fc2) { const on = Object.entries(adv).filter(([k,v])=>v&&v!=='any');
+    fc2.innerHTML = on.map(([k,v])=>`<span class="fchip"><b>${ADV_LABEL[k][v]}</b><button data-k="${k}" title="Remove"><svg class="i" style="width:11px;height:11px"><use href="#i-x"/></svg></button></span>`).join('');
+    fc2.querySelectorAll('button').forEach(b=>b.onclick=()=>{ delete adv[b.dataset.k]; syncAdv(); renderRows(null, filter); });
+    const bd = document.getElementById('fbadge'); if (bd) { bd.hidden = !on.length; bd.textContent = on.length; } }
+  const fl = document.getElementById('folders');
+  if (fl) { const dirsAll = [...new Set(T.map(t=>t.dir))].sort();
+    const seen = new Set(); const out = [];
+    dirsAll.forEach(d => { const parts = rel(d).split('/'); for (let i=1;i<=parts.length;i++){ const p = BASE + '/' + parts.slice(0,i).join('/'); if (seen.has(p)) continue; seen.add(p);
+      const n = T.filter(t=>t.dir===p||t.dir.startsWith(p+'/')).length;
+      out.push(`<button class="side-item${filter==='dir:'+p?' on':''}" data-d="${p}" style="padding-left:${8+(i-1)*14}px"><svg class="i" style="width:14px;height:14px"><use href="#i-folder"/></svg><span class="lbl">${parts[i-1]}</span><span class="cnt">${n}</span></button>`); } });
+    fl.innerHTML = out.join(''); fl.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>renderRows(null,'dir:'+b.dataset.d)); }
+  document.getElementById('rows').innerHTML = list.length ? list.map(t=>row(t, t.id===selId)).join('')
+    : `<div class="empty"><div class="t">Nothing matches</div>${Object.values(adv).some(v=>v&&v!=='any') ? 'Try loosening a filter · <a href="#" id="eclear" style="color:var(--accent)">clear all</a>' : 'No torrents in this view'}</div>`;
+  const ec = document.getElementById('eclear'); if (ec) ec.onclick = e => { e.preventDefault(); adv = {}; syncAdv(); renderRows(null, filter); };
+  const sb = document.getElementById('selbar'); if (sb) sb.hidden = !selId;
+  const ft = document.getElementById('ftitle'), fc = document.getElementById('fcount');
+  if (ft) ft.textContent = F.label;
+  if (fc) fc.textContent = (list.length===T.length ? `${T.length}` : `${list.length} of ${T.length}`) + ` · ${list.reduce((a,t)=>a+gb(t.size),0).toFixed(1)} GB`;
+  document.querySelectorAll('.sidebar [data-f]').forEach(b=>{ b.classList.toggle('on', b.dataset.f===(filter||'all')); b.querySelector('.cnt').textContent = T.filter(FILTERS[b.dataset.f].f).length; });
+  const all = document.querySelector('.sidebar .side-item:not([data-f])'); if (all) all.classList.toggle('on', !filter || filter==='all');
+}
+function syncAdv(){ document.querySelectorAll('#fpop .seg').forEach(g => g.querySelectorAll('button').forEach(b => b.classList.toggle('on', (adv[g.dataset.k]||'any')===b.dataset.v))); }
+function contextMenu(rowEl){
+  const r = rowEl.getBoundingClientRect(); rowEl.classList.add('menu-open');
+  const m = document.createElement('div'); m.className = 'cmenu';
+  m.style.left = (r.right - 262) + 'px'; m.style.top = (r.top + 34) + 'px';
+  const it = (icon, label, k='', cls='') => `<div class="it ${cls}"><svg class="i"><use href="#i-${icon}"/></svg>${label}${k?`<span class="k">${k}</span>`:''}</div>`;
+  m.innerHTML = it('pause','Pause','␣') + it('globe','Re-announce') + it('check','Verify local data') + `<div class="sep"></div>` +
+    `<div class="it qpos hl"><svg class="i"><use href="#i-sort"/></svg>Queue position<svg class="i chev"><use href="#i-chev"/></svg>
+       <div class="cmenu sub">${it('up','Move to top')}${it('up','Move up')}${it('down','Move down')}${it('down','Move to bottom')}</div></div>` +
+    it('tag','Labels…') + it('folder','Set location…') + it('file','Rename…') + it('gear','Limits & priority…') + `<div class="sep"></div>` +
+    it('magnet','Copy magnet link','⌘C') + it('link','Open folder') + `<div class="sep"></div>` +
+    it('x','Remove from list','⌫','danger') + it('trash','Remove and delete data…','⌘⌫','danger');
+  document.body.appendChild(m);
+}
+function syncSel(){
+  const rows = [...document.querySelectorAll('.row')], sel = rows.filter(r=>r.classList.contains('sel'));
+  const sb = document.getElementById('selbar'); if (!sb) return; sb.hidden = !sel.length;
+  document.getElementById('selcount').textContent = sel.length + ' selected';
+  const a = document.getElementById('selall'); a.classList.toggle('on', sel.length && sel.length===rows.length); a.classList.toggle('some', sel.length && sel.length<rows.length);
+}
+function selectAll(){ const rows = document.querySelectorAll('.row'), all = [...rows].every(r=>r.classList.contains('sel'));
+  rows.forEach(r=>r.classList.toggle('sel', !all)); syncSel(); }
+function selectIds(ids){ document.querySelectorAll('.row').forEach(r=>r.classList.toggle('sel', ids.includes(+r.dataset.id))); syncSel(); }
+function toolbarMenu(anchor){
+  const r = anchor.getBoundingClientRect(); const m = document.createElement('div'); m.className='cmenu'; m.style.left=(r.right-250)+'px'; m.style.top=(r.bottom+6)+'px';
+  const it = (icon,label,k='') => `<div class="it"><svg class="i"><use href="#i-${icon}"/></svg>${label}${k?`<span class="k">${k}</span>`:''}</div>`;
+  m.innerHTML = `<div class="it" style="color:var(--ink-3);font-size:11px;letter-spacing:.06em;text-transform:uppercase;height:24px">Everything in this view · 12</div>` +
+    it('play','Resume all') + it('pause','Pause all') + it('globe','Re-announce all') + it('check','Verify all') + `<div class="sep"></div>` +
+    it('check','Select all','⌘A') + `<div class="sep"></div>` + it('sort','Columns…') + it('gear','View options…');
+  document.body.appendChild(m);
+}
+</script>
+    <aside class="inspector">
+      <div class="insp-head">
+        <div class="t">debian-13.1.0-amd64-DVD-1.iso</div>
+        <div class="m"><span class="chip dl"><span class="dot"></span>Downloading</span><span class="chip lbl">linux</span><span>·</span><span>Priority <b class="muted">Normal</b></span></div>
+      </div>
+      <div class="tabs" id="tabs">
+        <button class="on" data-tab="overview">Overview</button>
+        <button data-tab="files">Files <span class="faint">3</span></button>
+        <button data-tab="peers">Peers <span class="faint">18</span></button>
+        <button data-tab="trackers">Trackers <span class="faint">2</span></button>
+      </div>
+
+      <div class="insp-body" data-pane="overview">
+        <div class="stat-row">
+          <div class="stat"><div class="l">Download</div><div class="v" style="color:var(--accent)">12.4 <small>MB/s</small></div></div>
+          <div class="stat"><div class="l">Upload</div><div class="v">1.21 <small>MB/s</small></div></div>
+          <div class="stat"><div class="l">ETA</div><div class="v">3m 12s</div></div>
+        </div>
+        <div class="sec">Progress · 63.2%</div>
+        <div class="bar" style="--p:63.2%;height:7px"><i></i></div>
+        <div class="pieces" id="pieces" aria-label="Pieces"></div>
+        <div class="avail"><span>Availability</span><div class="bar" style="--p:100%"><i></i></div><span class="num">3.4× · 100%</span></div>
+        <div class="hint">2.98 GB of 4.71 GB · 1,208 of 1,920 pieces (2.5 MB each)</div>
+
+        <div class="sec">Transfer</div>
+        <dl class="kv">
+          <dt>Downloaded</dt><dd class="num">2.98 GB <span class="faint">· wasted 12.4 MB</span></dd>
+          <dt>Uploaded</dt><dd class="num">548 MB · ratio 0.18</dd>
+          <dt>Peers</dt><dd class="num">42 connected · 18 sending · 7 getting<br><span class="faint">from tracker 23 · DHT 12 · PEX 7 · LPD 0 · incoming 4</span></dd>
+          <dt>Swarm</dt><dd class="num">1,204 seeds · 311 leechers</dd>
+          <dt>Next announce</dt><dd class="num">in 4m 22s <span class="faint">· bttracker.debian.org</span></dd>
+          <dt>Running time</dt><dd class="num">14m 38s</dd>
+          <dt>Last activity</dt><dd class="num">2 s ago</dd>
+          <dt>Seed limit</dt><dd>Stop at ratio <span class="num">2.00</span> <span class="faint">(global)</span></dd>
+        </dl>
+
+        <div class="sec">Details</div>
+        <dl class="kv">
+          <dt>Location</dt><dd>/data/torrents/iso</dd>
+          <dt>Hash</dt><dd class="num" style="font-size:11px">6b7a2c1f2e9d8a4b3c0e5f7a1d9c8b2e4f6a0c3d</dd>
+          <dt>Added</dt><dd class="num">Today, 09:07</dd>
+          <dt>Created</dt><dd>2026-08-16 by mktorrent 1.1</dd>
+          <dt>Privacy</dt><dd>Public torrent</dd>
+          <dt>Comment</dt><dd>"Debian CD from cdimage.debian.org"</dd>
+          <dt>Origin</dt><dd class="num" style="font-size:11px">https://cdimage.debian.org/…/debian-13.1.0-amd64-DVD-1.iso.torrent</dd>
+        </dl>
+
+        <div class="sec">Options</div>
+        <div class="opt"><div class="txt"><div class="l">Honor global limits</div></div><div class="ctl"><span class="toggle on"></span></div></div>
+        <div class="opt"><div class="txt"><div class="l">Limit download</div></div><div class="ctl"><div class="input mono" style="width:110px;height:28px"><input value="5000"><span class="unit">kB/s</span></div><span class="toggle"></span></div></div>
+        <div class="opt"><div class="txt"><div class="l">Limit upload</div></div><div class="ctl"><div class="input mono" style="width:110px;height:28px"><input value="500"><span class="unit">kB/s</span></div><span class="toggle"></span></div></div>
+        <div class="opt"><div class="txt"><div class="l">Bandwidth priority</div></div><div class="ctl"><div class="seg"><button>Low</button><button class="on">Normal</button><button>High</button></div></div></div>
+        <div class="opt"><div class="txt"><div class="l">Peer limit</div></div><div class="ctl"><div class="input mono" style="width:80px;height:28px"><input value="50"></div></div></div>
+      </div>
+
+      <div class="insp-body tree" data-pane="files" hidden>
+        <div class="f" style="color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;height:24px"><span></span><span></span><span>Name</span><span class="r">Size</span><span class="r">Done</span><span class="r">Priority</span></div>
+        <div class="f"><span class="chk mixed"></span><svg class="i" style="width:14px;height:14px"><use href="#i-chevd"/></svg><span class="n dir">debian-13.1.0-amd64-DVD-1</span><span class="num r">4.71 GB</span><span class="num r">63%</span><span class="r"><span class="pri norm">Normal</span></span></div>
+        <div class="f d1"><span class="chk on"></span><svg class="i" style="width:14px;height:14px;color:var(--ink-3)"><use href="#i-file"/></svg><span class="n">debian-13.1.0-amd64-DVD-1.iso</span><span class="num r">4.70 GB</span><span class="num r">63%</span><span class="r"><span class="pri high">High</span></span></div>
+        <div class="f d1"><span class="chk on"></span><svg class="i" style="width:14px;height:14px;color:var(--ink-3)"><use href="#i-file"/></svg><span class="n">SHA512SUMS</span><span class="num r">1.2 kB</span><span class="num r">100%</span><span class="r"><span class="pri norm">Normal</span></span></div>
+        <div class="f d1"><span class="chk"></span><svg class="i" style="width:14px;height:14px;color:var(--ink-3)"><use href="#i-file"/></svg><span class="n faint">SHA512SUMS.sign</span><span class="num r faint">833 B</span><span class="num r faint">—</span><span class="r"><span class="pri low">Skip</span></span></div>
+        <div class="hint" style="margin-top:14px">Unchecked files are not downloaded. Priority affects which pieces are requested first.</div>
+      </div>
+
+      <div class="insp-body" data-pane="peers" hidden>
+        <table class="tbl">
+          <colgroup><col style="width:118px"><col><col style="width:40px"><col style="width:62px"><col style="width:58px"><col style="width:40px"></colgroup>
+          <thead><tr><th>Address</th><th>Client</th><th class="r">%</th><th class="r">Down</th><th class="r">Up</th><th>Flags</th></tr></thead>
+          <tbody>
+            <tr><td><span class="flag">DE</span><span class="num">2a01:4f8:…:1</span></td><td>qBittorrent 5.1</td><td class="r"><div class="mini" style="--p:100%"><i></i></div></td><td class="r num" style="color:var(--accent)">3.2 M/s</td><td class="r num">—</td><td class="flags">DEH</td></tr>
+            <tr><td><span class="flag">NL</span><span class="num">185.21.100.42</span></td><td>Transmission 4.1</td><td class="r"><div class="mini" style="--p:100%"><i></i></div></td><td class="r num" style="color:var(--accent)">2.7 M/s</td><td class="r num">—</td><td class="flags">DE</td></tr>
+            <tr><td><span class="flag">CH</span><span class="num">212.51.140.9</span></td><td>libtorrent 2.0</td><td class="r"><div class="mini" style="--p:88%"><i></i></div></td><td class="r num" style="color:var(--accent)">1.9 M/s</td><td class="r num">210 k/s</td><td class="flags">DUEX</td></tr>
+            <tr><td><span class="flag">FR</span><span class="num">51.159.22.7</span></td><td>Deluge 2.2</td><td class="r"><div class="mini" style="--p:100%"><i></i></div></td><td class="r num" style="color:var(--accent)">1.4 M/s</td><td class="r num">—</td><td class="flags">DH</td></tr>
+            <tr><td><span class="flag">US</span><span class="num">72.14.201.88</span></td><td>aria2 1.37</td><td class="r"><div class="mini" style="--p:41%"><i></i></div></td><td class="r num">—</td><td class="r num">412 k/s</td><td class="flags">UI</td></tr>
+            <tr><td><span class="flag">SE</span><span class="num">2001:9b1:…:a3</span></td><td>Transmission 4.0</td><td class="r"><div class="mini" style="--p:100%"><i></i></div></td><td class="r num" style="color:var(--accent)">960 k/s</td><td class="r num">—</td><td class="flags">DE</td></tr>
+            <tr><td><span class="flag">PL</span><span class="num">89.64.12.140</span></td><td>BiglyBT 3.6</td><td class="r"><div class="mini" style="--p:22%"><i></i></div></td><td class="r num">—</td><td class="r num">318 k/s</td><td class="flags">UEX</td></tr>
+            <tr><td><span class="flag">JP</span><span class="num">133.242.8.11</span></td><td>qBittorrent 5.0</td><td class="r"><div class="mini" style="--p:100%"><i></i></div></td><td class="r num" style="color:var(--accent)">740 k/s</td><td class="r num">—</td><td class="flags">DEH</td></tr>
+            <tr><td><span class="flag">CA</span><span class="num">142.112.60.3</span></td><td>Transmission 3.0</td><td class="r"><div class="mini" style="--p:63%"><i></i></div></td><td class="r num">—</td><td class="r num">—</td><td class="flags">?</td></tr>
+          </tbody>
+        </table>
+        <div class="hint" style="margin-top:12px">D downloading · U uploading · E encrypted · H via DHT · X via PEX · I incoming · ? choked</div>
+      </div>
+
+      <div class="insp-body" data-pane="trackers" hidden>
+        <div class="tracker">
+          <div class="h"><span class="tier">Tier 1</span><span>bttracker.debian.org:6969</span><span class="spacer"></span><span class="chip seed"><svg class="i" style="width:12px;height:12px"><use href="#i-check"/></svg>Working</span></div>
+          <dl class="kv"><dt>Last announce</dt><dd class="num">38 s ago · <span class="ok">got 50 peers</span></dd><dt>Next announce</dt><dd class="num">in 4m 22s</dd><dt>Last scrape</dt><dd class="num">2m ago · 1,204 seeders · 311 leechers · 8,932 downloads</dd></dl>
+        </div>
+        <div class="tracker">
+          <div class="h"><span class="tier">Tier 2</span><span>udp://tracker.opentrackr.org:1337</span><span class="spacer"></span><span class="chip wait"><span class="dot"></span>Timed out</span></div>
+          <dl class="kv"><dt>Last announce</dt><dd class="num">3m ago · <span class="warn">connection timed out</span></dd><dt>Next announce</dt><dd class="num">in 11m 40s</dd><dt>Last scrape</dt><dd class="num">— </dd></dl>
+        </div>
+        <div class="sec">Other sources</div>
+        <dl class="kv"><dt>DHT</dt><dd><span class="ok">12 peers</span></dd><dt>PEX</dt><dd><span class="ok">7 peers</span></dd><dt>LPD</dt><dd class="faint">none</dd></dl>
+        <div style="margin-top:16px;display:flex;gap:8px"><button class="btn sm">Add tracker</button><button class="btn sm ghost">Re-announce</button></div>
+      </div>
+    </aside>
+  </div>
+</div>
+<script>
+renderRows(1); document.querySelector('.main').classList.add('has-insp'); document.querySelector('.speeds').onclick = () => { const p = document.getElementById('pop'); p.hidden = !p.hidden; };
+(function(){
+  // pieces map
+  const p = document.getElementById('pieces'); let h = '';
+  for (let i=0;i<192;i++){ const r=Math.sin(i*12.9898)*43758.5453, f=r-Math.floor(r);
+    const cls = i<108 ? (f>.06?'d':'p') : (f<.35?'d':(f<.5?'p':'')); h += `<i class="${cls}"></i>`; }
+  p.innerHTML = h;
+  // tabs
+  document.getElementById('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return;
+    document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on', x===b));
+    document.querySelectorAll('[data-pane]').forEach(x=>x.hidden = x.dataset.pane !== b.dataset.tab); });
+  document.getElementById('rows').addEventListener('click', e => { const r = e.target.closest('.row'); if(!r) return;
+    document.querySelectorAll('.row.sel').forEach(x=>x.classList.remove('sel')); r.classList.add('sel'); });
+  // deep link: ?tab=files|peers|trackers
+  const t = new URLSearchParams(location.search).get('tab'), b = t && document.querySelector(`#tabs [data-tab="${t}"]`); if (b) b.click();
+})();
+</script>

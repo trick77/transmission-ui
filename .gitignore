@@ -1,0 +1,13 @@
+node_modules/
+ui/dist/
+ui/test-results/
+ui/playwright-report/
+.env.local
+docs/plans/
+.playwright-mcp/
+hack/state/
+hack/downloads/
+hack/watch/
+.DS_Store
+coverage/
+.env

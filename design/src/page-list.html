@@ -1,0 +1,38 @@
+  </div>
+</div>
+<script>
+const Q = new URLSearchParams(location.search);
+['size','age','ratio','idle'].forEach(k => { if (Q.get(k)) adv[k] = Q.get(k); });
+let curFilter = Q.get('filter');
+renderRows(null, curFilter); syncAdv();
+document.querySelectorAll('#fpop .seg').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => { adv[g.dataset.k] = b.dataset.v; syncAdv(); renderRows(null, curFilter); }));
+document.getElementById('fbtn').onclick = () => { const p = document.getElementById('fpop'); p.hidden = !p.hidden; };
+document.getElementById('fdone').onclick = () => document.getElementById('fpop').hidden = true;
+document.getElementById('fclear').onclick = () => { adv = {}; syncAdv(); renderRows(null, curFilter); };
+if (Q.has('adv')) document.getElementById('fpop').hidden = false;
+document.querySelectorAll('.sidebar [data-f]').forEach(b=>b.onclick=()=>{ curFilter = b.dataset.f; renderRows(null, curFilter); });
+document.querySelector('.sidebar .side-item:not([data-f])').onclick=()=>{ curFilter='all'; renderRows(null,'all'); };
+document.getElementById('speedsPill') || (document.querySelector('.speeds').onclick = e => { if (e.target.closest('#turtle')) return; document.getElementById('pop').hidden = !document.getElementById('pop').hidden; });
+document.getElementById('turtle').onclick = () => { const t = document.getElementById('turtle'); t.classList.toggle('on'); document.getElementById('lim').hidden = !t.classList.contains('on'); };
+document.getElementById('selall').onclick = selectAll;
+if (Q.has('trk')) document.getElementById('notice').hidden = false;
+if (Q.has('stats')) document.getElementById('pop').hidden = false;
+if (Q.has('turtle')) document.getElementById('turtle').click();
+if (Q.has('menu')) contextMenu(document.querySelector('.row[data-id="2"]'));
+if (Q.has('selall')) selectAll();
+document.getElementById('rows').addEventListener('click', e => { const mb = e.target.closest('.more'); if (mb) { document.querySelectorAll('.cmenu').forEach(x=>x.remove()); contextMenu(mb.closest('.row')); e.stopPropagation(); return; } });
+document.addEventListener('click', e => { if (!e.target.closest('.cmenu') && !e.target.closest('.more') && !e.target.closest('#tmenu')) { document.querySelectorAll('.cmenu').forEach(x=>x.remove()); document.querySelectorAll('.menu-open').forEach(x=>x.classList.remove('menu-open')); } });
+
+document.getElementById('rows').addEventListener('click', e => { const r = e.target.closest('.row'); if (!r || e.target.closest('.acts')) return;
+  if (e.target.closest('.chk') || e.metaKey || e.ctrlKey) { r.classList.toggle('sel'); }            // checkbox / ⌘-click: add to selection
+  else if (e.shiftKey && document.querySelector('.row.sel')) {                                       // shift-click: range
+    const rows = [...document.querySelectorAll('.row')], a = rows.indexOf(document.querySelector('.row.sel')), b = rows.indexOf(r);
+    rows.slice(Math.min(a,b), Math.max(a,b)+1).forEach(x=>x.classList.add('sel')); }
+  else { const was = r.classList.contains('sel') && document.querySelectorAll('.row.sel').length===1;
+    document.querySelectorAll('.row.sel').forEach(x=>x.classList.remove('sel')); if (!was) r.classList.add('sel'); }
+  syncSel(); });
+document.getElementById('selclear').onclick = () => { document.querySelectorAll('.row.sel').forEach(x=>x.classList.remove('sel')); syncSel(); };
+document.getElementById('tmenu').onclick = e => { document.querySelectorAll('.cmenu').forEach(x=>x.remove()); toolbarMenu(e.currentTarget); e.stopPropagation(); };
+if (Q.get('sel')) selectIds(Q.get('sel').split(',').map(Number));
+if (Q.has('tmenu')) toolbarMenu(document.getElementById('tmenu'));
+</script>

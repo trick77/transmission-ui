@@ -1,0 +1,93 @@
+name: CI
+
+# Tests run on pull requests (feature branches). Master does not run tests, it
+# builds and pushes the image (see release.yaml).
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    name: UI (typecheck + build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      # fetch-depth: 0 — hack/patch-coverage.sh diffs the branch against the PR
+      # base, which needs real history.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install diff-cover==10.3.0
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test -- --run --coverage
+      # The floor gate runs first: when a PR drops the project below the floor
+      # the absolute number is the more actionable failure.
+      - run: ./hack/coverage-gate.sh ui
+        working-directory: .
+      - name: UI patch coverage
+        run: ./hack/patch-coverage.sh "origin/${{ github.base_ref || 'master' }}"
+        working-directory: .
+
+  # Browser-level tests against a real transmission-daemon 4.0.5 (the version
+  # the server runs), seeded with every torrent state the UI shows. Separate
+  # job: it needs Docker and a Chromium download that the unit tests don't.
+  e2e:
+    name: UI (browser, live daemon)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+        working-directory: ui
+      - run: npx playwright install chromium --with-deps
+        working-directory: ui
+      # served.spec.ts needs the built bundle mounted into the daemon at /web.
+      - run: npm run build
+        working-directory: ui
+      - name: Start daemon
+        run: |
+          mkdir -p hack/state hack/downloads hack/watch
+          docker compose -f compose.dev.yaml up -d
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -u dev:devpass http://localhost:9091/transmission/rpc || true)
+            [ "$code" = "409" ] && break
+            sleep 2
+          done
+          [ "$code" = "409" ] || { docker compose -f compose.dev.yaml logs; exit 1; }
+      - run: ./hack/fixtures.sh
+      - name: Start dev server
+        run: |
+          printf 'TM_RPC_TARGET=http://localhost:9091\nTM_RPC_AUTH=dev:devpass\n' > ui/.env.local
+          (cd ui && nohup npx vite --port 5173 --strictPort > /tmp/vite.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf http://localhost:5173/ >/dev/null && break; sleep 1; done
+      - run: npx playwright test
+        working-directory: ui
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: ui/test-results/
+          if-no-files-found: ignore
+      - if: always()
+        run: docker compose -f compose.dev.yaml down -v
