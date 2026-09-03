@@ -122,7 +122,7 @@ test('dead fixture tracker: issues on a fresh daemon, down + notice once the out
   await expect(item.locator('.sub')).toHaveText(/down · |of \d+ failing/)
   await page.evaluate(() => localStorage.setItem('tm.trkfail', JSON.stringify([['127.0.0.1', Math.floor(Date.now() / 1000) - 700]])))
   await page.reload()
-  await expect(page.locator('.notice')).toContainText('127.0.0.1', { timeout: 15000 })
+  await expect(page.locator('.list .notice', { hasText: 'unreachable' })).toContainText('127.0.0.1', { timeout: 15000 })
   await expect(item.locator('.sub.down')).toHaveText(/^down · /)
 })
 
