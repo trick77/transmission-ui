@@ -6,6 +6,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - `design/` locked mockups = the spec. `design/build.sh` assembles them from `design/src/`.
 - `ui/` Vite + React 19 + TS, plain CSS. `ui/src/styles/app.css` is ported from `design/src/head.html`: edit the mock first, then copy the `<style>` block over (fonts → `../assets/fonts/`).
 - `hack/` local daemon state, `fixtures.sh` (seeds every torrent state), `coverage-gate.sh` + `coverage-floors`.
+- `ui/sim/` standalone fake daemon (`node ui/sim/server.ts`, `:9092`). Node runs it with built-in type stripping, so keep it erasable: no enum, no parameter properties, `.ts` on every relative import, `import type { … }` in statement form only.
 - `compose.yaml` = production stack (Containerfile image, `.env` from `.env.example`). `compose.dev.yaml` = throwaway local daemon.
 
 ## Daemon
@@ -15,6 +16,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 
 ## Dev / test / ship
 - `make dev` or `cd ui && npm run dev` → `:5173`, proxies `/transmission/rpc`. Target/auth from `ui/.env.local` (gitignored; see `ui/.env.example`); default = local daemon.
+- `make sim` → dev server against `ui/sim/`, no container, no fixtures. Needs Node ≥ 23.6. ~29 torrents that actually move; knobs `TM_SIM_SEED`, `TM_SIM_COUNT`, `TM_SIM_SPEED` (0 freezes, 30 races), `TM_SIM_PORT`. Dataset names stay copyright-safe: distros, Blender open movies, documented PD/CC0, NASA, open data dumps.
 - Gates: `npm run typecheck`, `npm run build`, `make fe-coverage` (Vitest v8 → `coverage/ui`, floor in `hack/coverage-floors`, currently 75 % lines). No eslint/prettier unless asked.
 - Unit + component tests: `ui/src/**/*.test.{ts,tsx}`, jsdom + @testing-library. Components run against `ui/src/test/fakeDaemon.ts` (in-memory RPC behind `fetch`); assert on the RPC calls it records, not on internals. New source file → a test that imports it, coverage `include` counts untested files.
 - e2e: `make fe-e2e` (Playwright, needs dev server + seeded local daemon; `e2e/served.spec.ts` needs `npm run build`). Screenshots in `ui/test-results/`.
