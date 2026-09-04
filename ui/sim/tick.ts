@@ -16,7 +16,9 @@ export function tick(state: SimState, nowMs: number): void {
   const raw = (nowMs - state.lastTickMs) / 1000
   const dt = Math.min(Math.max(raw, 0), MAX_DT) * state.speed
   state.lastTickMs = nowMs
-  if (dt <= 0) return
+  // `!(dt > 0)` rather than `dt <= 0`: a NaN speed would slip through the latter and poison every
+  // accumulator, and the whole session would report null bytes with no error anywhere.
+  if (!(dt > 0)) return
   const now = Math.floor(nowMs / 1000)
 
   trimRemoved(state, now)
@@ -108,6 +110,13 @@ function advance(state: SimState, t: TorrentDetail, f: SimFields, want: { down: 
   let changed = false
 
   if (t.metadataPercentComplete < 1) {
+    // A paused or queued magnet is not talking to anyone, so its metadata does not arrive either.
+    if (t.status !== ST.Download) {
+      t.rateDownload = 0
+      t.rateUpload = 0
+      t.eta = -1
+      return false
+    }
     t.metadataPercentComplete = Math.min(1, t.metadataPercentComplete + dt / 25)
     t.rateDownload = Math.round(want.down)
     t.rateUpload = 0

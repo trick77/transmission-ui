@@ -7,7 +7,7 @@
 
 import type { FileStat, Peer, Session, TorrentDetail, TorrentFile, TrackerStat } from '../src/rpc/types.ts'
 import { makeRand, hashOf, seedOf, type Rand } from './rand.ts'
-import { ST, distributeBytes, magnetOf, refreshPieceMap, renumberQueue } from './derive.ts'
+import { ST, distributeBytes, magnetOf, reconcile, refreshPieceMap, renumberQueue, wantedSize } from './derive.ts'
 
 export const BASE = '/data/torrents'
 const D = {
@@ -457,6 +457,15 @@ function buildOne(spec: Spec, id: number, now: number, seed: number): TorrentDet
     webseedsSendingToUs: 0,
   }
   countPeersFrom(t)
+  // fileList may mark a file unwanted, and splitting a size across files loses a few bytes to
+  // rounding. Take the totals from the file table so the boot state already agrees with the Files
+  // tab, instead of shifting the moment the first torrent-set arrives.
+  if (!isMagnet) {
+    t.sizeWhenDone = wantedSize(t)
+    t.haveValid = Math.min(t.haveValid, t.sizeWhenDone)
+    distributeBytes(t.files, t.fileStats, t.haveValid)
+    reconcile(t)
+  }
   refreshPieceMap(t, spec.swarm ?? 3)
   return t
 }

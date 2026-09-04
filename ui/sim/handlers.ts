@@ -2,8 +2,9 @@
 // the UI's next poll shows the consequence.
 
 import type { Session, TorrentDetail, TrackerStat } from '../src/rpc/types.ts'
+import { createHash } from 'node:crypto'
 import { decode } from '../src/lib/bencode.ts'
-import { ST, distributeBytes, hostOf, magnetOf, refreshPieceMap, reconcile, renumberQueue, wantedSize } from './derive.ts'
+import { ST, hostOf, isChecking, magnetOf, refreshPieceMap, reconcile, renumberQueue, wantedHave, wantedSize } from './derive.ts'
 import { newTorrent, TRACKERS, BASE } from './data.ts'
 import { byId, mountOf, simFieldsFor, type SimState } from './state.ts'
 import { promoteQueue, seedGoal, etaOf } from './tick.ts'
@@ -14,8 +15,27 @@ type Args = Record<string, unknown>
 
 const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
 
+/**
+ * The RPC spec lets `ids` be an array, a single id, a hash string, or "recently-active"; the bundled
+ * UI only ever sends arrays, but `make sim-server` invites curl, where a bare `{"ids": 5}` falling
+ * through to "all torrents" would turn one remove into a wipe. Undefined still means all, as it must.
+ */
+export function normalizeIds(state: SimState, raw: unknown): number[] | 'recently-active' | undefined {
+  if (raw == null) return undefined
+  if (raw === 'recently-active') return 'recently-active'
+  const one = (v: unknown): number[] => {
+    if (typeof v === 'number') return Number.isFinite(v) ? [v] : []
+    if (typeof v === 'string') {
+      const byHash = state.torrents.find(t => t.hashString === v.toLowerCase())
+      return byHash ? [byHash.id] : []
+    }
+    return []
+  }
+  return Array.isArray(raw) ? raw.flatMap(one) : one(raw)
+}
+
 export function handle(state: SimState, method: string, args: Args, now: number): unknown {
-  const ids = args.ids as number[] | 'recently-active' | undefined
+  const ids = normalizeIds(state, args.ids)
   const selected = (): TorrentDetail[] =>
     Array.isArray(ids) ? state.torrents.filter(t => ids.includes(t.id)) : state.torrents
   const touch = (ts: TorrentDetail[]) => { for (const t of ts) t.activityDate = now }
@@ -86,7 +106,10 @@ export function handle(state: SimState, method: string, args: Args, now: number)
     // ── writes ───────────────────────────────────────────────────────────────
     case 'torrent-start':
     case 'torrent-start-now': {
-      const ts = selected()
+      // A verify in flight owns the torrent's bytes: haveValid is parked in haveUnchecked until it
+      // finishes. Starting here would read the stale percentDone and strand them, so the daemon
+      // makes start a no-op on a checking torrent and so do we.
+      const ts = selected().filter(t => !isChecking(t.status))
       for (const t of ts) {
         t.error = 0
         t.errorString = ''
@@ -108,6 +131,13 @@ export function handle(state: SimState, method: string, args: Args, now: number)
     case 'torrent-stop': {
       const ts = selected()
       for (const t of ts) {
+        // Stopping cancels a verify. Fold the unchecked bytes back so progress survives it.
+        if (isChecking(t.status)) {
+          t.haveValid += t.haveUnchecked
+          t.haveUnchecked = 0
+          t.recheckProgress = 0
+          reconcile(t)
+        }
         t.status = ST.Stopped as TorrentDetail['status']
         t.rateDownload = 0
         t.rateUpload = 0
@@ -172,11 +202,12 @@ export function handle(state: SimState, method: string, args: Args, now: number)
         for (const k of ['files-wanted', 'files-unwanted', 'priority-high', 'priority-normal', 'priority-low', 'trackerList']) delete clean[k]
         Object.assign(t, clean)
         if (typeof rest.trackerList === 'string') setTrackers(t, rest.trackerList)
-        // Deselecting files shrinks the torrent, exactly as the daemon reports it.
+        // Deselecting files shrinks the torrent, exactly as the daemon reports it. Recompute the
+        // totals from the file table rather than clamping haveValid: clamping would discard the
+        // bytes of a deselected file for good, so re-selecting it could never bring them back.
         t.sizeWhenDone = wantedSize(t)
-        t.haveValid = Math.min(t.haveValid, t.sizeWhenDone)
+        t.haveValid = wantedHave(t)
         reconcile(t)
-        distributeBytes(t.files, t.fileStats, t.haveValid)
         t.eta = etaOf(t, seedGoal(state, t))
       }
       touch(ts)
@@ -316,6 +347,9 @@ function addTorrent(state: SimState, args: Args, now: number): unknown {
     name = parsed.name
     size = parsed.size
     fileCount = parsed.fileCount
+    // Derive the hash from the file itself, so re-adding the same .torrent reports a duplicate
+    // instead of quietly making a second copy.
+    hash = createHash('sha1').update(args.metainfo).digest('hex')
   } else if (filename) {
     name = filename.replace(/^.*\//, '').replace(/\.torrent$/, '')
   }
@@ -334,7 +368,20 @@ function addTorrent(state: SimState, args: Args, now: number): unknown {
     priority: (args.bandwidthPriority as -1 | 0 | 1 | undefined) ?? 0,
     paused: args.paused === true || state.session['start-added-torrents'] === false,
   })
-  if (meta === 0) { t.name = hash; t.metadataPercentComplete = 0 }
+  if (meta === 0) {
+    // While metadata is still coming in there is no file list and no size; the daemon shows the
+    // magnet's own display name if it carried one, and falls back to the hash if it did not.
+    t.metadataPercentComplete = 0
+    t.files = []
+    t.fileStats = []
+    t.sizeWhenDone = 0
+    t.totalSize = 0
+    t.leftUntilDone = 0
+    t.haveValid = 0
+    t.pieceCount = 0
+    t.pieces = ''
+    t.availability = []
+  }
 
   for (const i of (args['files-unwanted'] as number[] | undefined) ?? []) if (t.fileStats[i]) t.fileStats[i].wanted = false
   for (const i of (args['priority-high'] as number[] | undefined) ?? []) if (t.fileStats[i]) t.fileStats[i].priority = 1

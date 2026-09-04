@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createState, type SimState } from './state.ts'
 import { MAX_DT, tick } from './tick.ts'
 import { handle } from './handlers.ts'
-import { ST } from './derive.ts'
+import { ST, wantedSize } from './derive.ts'
 
 const T0 = 1_760_000_000_000
 
@@ -151,6 +151,25 @@ describe('the tick', () => {
     run(s, 2000, 5)
     // 10 000 simulated seconds is several full outage cycles.
     expect(s.trackerDown.size + s.trackerNext.size).toBeGreaterThan(0)
+  })
+
+  it('refuses to advance on a NaN speed instead of poisoning every counter', () => {
+    const s = fresh({ speed: Number('fast') })
+    const before = { had: s.torrents[0].haveValid, cum: s.cum.downloadedBytes }
+    run(s, 20)
+    expect(s.torrents[0].haveValid).toBe(before.had)
+    expect(s.cum.downloadedBytes).toBe(before.cum)
+    expect(Number.isFinite(s.torrents[0].uploadRatio)).toBe(true)
+  })
+
+  it('boots with sizeWhenDone already agreeing with the file table', () => {
+    const s = fresh()
+    for (const t of s.torrents) {
+      if (t.metadataPercentComplete < 1) continue
+      expect(t.sizeWhenDone).toBe(wantedSize(t))
+      const sum = t.files.reduce((n, f, i) => n + (t.fileStats[i]?.wanted !== false ? f.bytesCompleted : 0), 0)
+      expect(Math.abs(sum - t.haveValid)).toBeLessThan(2)
+    }
   })
 
   it('grows the cumulative counters', () => {

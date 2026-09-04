@@ -11,10 +11,22 @@ import { createState } from './state.ts'
 import { handle, RpcFailure } from './handlers.ts'
 import { tick } from './tick.ts'
 
-const PORT = Number(process.env.TM_SIM_PORT ?? 9092)
-const SEED = Number(process.env.TM_SIM_SEED ?? 1)
-const COUNT = Number(process.env.TM_SIM_COUNT ?? 1)
-const SPEED = Number(process.env.TM_SIM_SPEED ?? 1)
+/** A typo in a knob must not silently poison the world: fall back rather than carry NaN into the tick. */
+function knob(name: string, fallback: number, min = 0): number {
+  const raw = process.env[name]
+  if (raw == null || raw === '') return fallback
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < min) {
+    console.warn(`[sim] ${name}=${raw} is not a number >= ${min}; using ${fallback}`)
+    return fallback
+  }
+  return n
+}
+
+const PORT = knob('TM_SIM_PORT', 9092, 1)
+const SEED = knob('TM_SIM_SEED', 1)
+const COUNT = knob('TM_SIM_COUNT', 1, 1)
+const SPEED = knob('TM_SIM_SPEED', 1)
 
 const state = createState({ seed: SEED, count: COUNT, speed: SPEED })
 // The daemon hands out one session id and rejects requests without it, which is what makes

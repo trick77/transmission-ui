@@ -87,21 +87,31 @@ export function availabilityOf(order: Uint32Array, pct: number, swarm: number, s
   return out
 }
 
-/** Spread haveValid over the wanted files in order, so Σ files[].bytesCompleted === haveValid. */
+/**
+ * Spread haveValid over the wanted files in order, so Σ wanted files[].bytesCompleted === haveValid.
+ *
+ * Bytes already on disk for an unwanted file are left exactly where they are. Zeroing them would
+ * throw away real data: unticking a file in the Files tab and ticking it again has to come back to
+ * where it was, and the daemon does keep those bytes.
+ */
 export function distributeBytes(files: TorrentFile[], stats: FileStat[], haveValid: number): void {
   let left = haveValid
   for (let i = 0; i < files.length; i++) {
-    const want = stats[i]?.wanted !== false
-    const take = want ? Math.max(0, Math.min(files[i].length, left)) : 0
+    if (stats[i]?.wanted === false) continue
+    const take = Math.max(0, Math.min(files[i].length, left))
     files[i].bytesCompleted = Math.round(take)
     if (stats[i]) stats[i].bytesCompleted = Math.round(take)
-    if (want) left -= take
+    left -= take
   }
 }
 
 /** sizeWhenDone counts only the files the user wants. */
 export const wantedSize = (t: TorrentDetail) =>
   t.files.reduce((n, f, i) => n + (t.fileStats[i]?.wanted !== false ? f.length : 0), 0)
+
+/** Bytes already on disk for the files the user wants. The file table is the source of truth here. */
+export const wantedHave = (t: TorrentDetail) =>
+  t.files.reduce((n, f, i) => n + (t.fileStats[i]?.wanted !== false ? Math.min(f.bytesCompleted, f.length) : 0), 0)
 
 /** haveValid + haveUnchecked + leftUntilDone === sizeWhenDone, always. */
 export function reconcile(t: TorrentDetail): void {

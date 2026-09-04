@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createState, type SimState } from './state.ts'
 import { handle, RpcFailure } from './handlers.ts'
 import { tick } from './tick.ts'
-import { ST } from './derive.ts'
+import { ST, isChecking } from './derive.ts'
 
 const T0 = 1_760_000_000_000
 const NOW = Math.floor(T0 / 1000)
@@ -80,6 +80,31 @@ describe('start, stop and verify', () => {
     expect(last.status === ST.Download || last.status === ST.Seed).toBe(true)
   })
 
+  it('ignores start while a verify is in flight, rather than stranding the bytes', () => {
+    const s = fresh()
+    const t = s.torrents.find(x => x.status === ST.Seed)!
+    const had = t.haveValid
+    call(s, 'torrent-verify', { ids: [t.id] })
+    call(s, 'torrent-start-now', { ids: [t.id] })
+    expect(isChecking(t.status)).toBe(true)
+    expect(t.haveUnchecked).toBe(had)
+    for (let i = 1; i < 400; i++) tick(s, T0 + i * 2000)
+    expect(t.haveValid).toBe(had)
+    expect(t.percentDone).toBe(1)
+  })
+
+  it('stop cancels a verify and keeps the progress', () => {
+    const s = fresh()
+    const t = s.torrents.find(x => x.status === ST.Seed)!
+    const had = t.haveValid
+    call(s, 'torrent-verify', { ids: [t.id] })
+    call(s, 'torrent-stop', { ids: [t.id] })
+    expect(t.status).toBe(ST.Stopped)
+    expect(t.haveValid).toBe(had)
+    expect(t.haveUnchecked).toBe(0)
+    expect(t.percentDone).toBe(1)
+  })
+
   it('verify moves the valid bytes to unchecked and comes back to them', () => {
     const s = fresh()
     const t = s.torrents.find(x => x.status === ST.Seed)!
@@ -111,6 +136,27 @@ describe('torrent-set', () => {
     const sum = t.files.reduce((n, f) => n + f.bytesCompleted, 0)
     expect(Math.abs(sum - t.haveValid)).toBeLessThan(2)
     expect(t.fileStats[1].priority).toBe(1)
+  })
+
+  it('gives the bytes back when a deselected file is selected again', () => {
+    const s = fresh()
+    const t = s.torrents.find(x => x.files.length > 3 && x.percentDone >= 1)!
+    const size = t.sizeWhenDone
+    const had = t.haveValid
+    call(s, 'torrent-set', { ids: [t.id], 'files-unwanted': [0] })
+    expect(t.sizeWhenDone).toBeLessThan(size)
+    call(s, 'torrent-set', { ids: [t.id], 'files-wanted': [0] })
+    expect(t.sizeWhenDone).toBe(size)
+    expect(t.haveValid).toBe(had)
+    expect(t.percentDone).toBe(1)
+  })
+
+  it('keeps the byte invariant while files are deselected', () => {
+    const s = fresh()
+    const t = s.torrents.find(x => x.files.length > 3 && x.percentDone > 0 && x.percentDone < 1)!
+    call(s, 'torrent-set', { ids: [t.id], 'files-unwanted': [0, 1] })
+    expect(t.haveValid + t.haveUnchecked + t.leftUntilDone).toBe(t.sizeWhenDone)
+    expect(t.percentDone).toBeLessThanOrEqual(1)
   })
 
   it('rebuilds trackerStats from a trackerList, with tiers', () => {
@@ -185,7 +231,14 @@ describe('torrent-add', () => {
     const t = s.torrents.find(x => x.id === r['torrent-added'].id)!
     expect(t.hashString).toBe(hash)
     expect(t.metadataPercentComplete).toBe(0)
-    expect(t.name).toBe(hash)
+    expect(t.name).toBe('Some Thing')
+  })
+
+  it('falls back to the hash as the name when the magnet carries no dn', () => {
+    const s = fresh()
+    const hash = '7'.repeat(40)
+    const r = call(s, 'torrent-add', { filename: `magnet:?xt=urn:btih:${hash}` }) as { 'torrent-added': { id: number } }
+    expect(s.torrents.find(x => x.id === r['torrent-added'].id)!.name).toBe(hash)
   })
 
   it('reports a duplicate instead of adding twice', () => {
@@ -231,6 +284,33 @@ describe('torrent-add', () => {
     const t = s.torrents.find(x => x.name === 'demo.iso')!
     expect(t.sizeWhenDone).toBe(1234)
   })
+
+  it('reports a duplicate when the same .torrent is added twice', () => {
+    const s = fresh()
+    const b64 = Buffer.from('d4:infod6:lengthi99e4:name5:a.isoee', 'utf8').toString('base64')
+    const first = call(s, 'torrent-add', { metainfo: b64 }) as Record<string, { id: number }>
+    const again = call(s, 'torrent-add', { metainfo: b64 }) as Record<string, { id: number }>
+    expect(again['torrent-duplicate']?.id).toBe(first['torrent-added'].id)
+  })
+
+  it('shows the magnet display name and no file list until metadata lands', () => {
+    const s = fresh()
+    const r = call(s, 'torrent-add', { filename: magnet('9'.repeat(40), 'Pending Thing') }) as { 'torrent-added': { id: number } }
+    const t = s.torrents.find(x => x.id === r['torrent-added'].id)!
+    expect(t.name).toBe('Pending Thing')
+    expect(t.files).toEqual([])
+    expect(t.sizeWhenDone).toBe(0)
+    expect(t.pieceCount).toBe(0)
+  })
+
+  it('does not fetch metadata for a paused magnet', () => {
+    const s = fresh()
+    const r = call(s, 'torrent-add', { filename: magnet('8'.repeat(40), 'Paused'), paused: true }) as { 'torrent-added': { id: number } }
+    const t = s.torrents.find(x => x.id === r['torrent-added'].id)!
+    for (let i = 1; i < 200; i++) tick(s, T0 + i * 2000)
+    expect(t.status).toBe(ST.Stopped)
+    expect(t.metadataPercentComplete).toBe(0)
+  })
 })
 
 describe('session', () => {
@@ -264,5 +344,35 @@ describe('session', () => {
   it('rejects a method it does not implement', () => {
     const s = fresh()
     expect(() => call(s, 'torrent-teleport')).toThrow(RpcFailure)
+  })
+})
+
+describe('ids', () => {
+  it('treats a bare id as one torrent, not as every torrent', () => {
+    const s = fresh()
+    const before = s.torrents.length
+    call(s, 'torrent-remove', { ids: 3 })
+    expect(s.torrents).toHaveLength(before - 1)
+    expect(s.torrents.some(t => t.id === 3)).toBe(false)
+  })
+
+  it('resolves a hash string', () => {
+    const s = fresh()
+    const t = s.torrents[4]
+    const r = call(s, 'torrent-get', { fields: ['id'], ids: t.hashString }) as { torrents: { id: number }[] }
+    expect(r.torrents).toEqual([{ id: t.id }])
+  })
+
+  it('still means every torrent when omitted', () => {
+    const s = fresh()
+    const r = call(s, 'torrent-get', { fields: ['id'] }) as { torrents: unknown[] }
+    expect(r.torrents).toHaveLength(s.torrents.length)
+  })
+
+  it('selects nothing for an id that does not exist', () => {
+    const s = fresh()
+    const before = s.torrents.length
+    call(s, 'torrent-remove', { ids: 99999 })
+    expect(s.torrents).toHaveLength(before)
   })
 })
