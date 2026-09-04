@@ -106,7 +106,7 @@ jobs:
       # daemon container and set TRANSMISSION_WEB_HOME=/web. Attach it as a zip.
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - run: npm ci && npm run build

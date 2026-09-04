@@ -1,6 +1,6 @@
 # Optional: a daemon image with this UI baked in. The documented ship path mounts ui/dist instead
 # (see docs); this is for the case where a self-contained image is easier to deploy.
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /src
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
