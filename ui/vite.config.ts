@@ -26,7 +26,9 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test-setup.ts'],
-      include: ['src/**/*.test.{ts,tsx}'],
+      // ui/sim/ is the standalone fake daemon; its tests run here, but it stays out of the coverage
+      // include below so the project floor keeps measuring the app itself.
+      include: ['src/**/*.test.{ts,tsx}', 'sim/**/*.test.ts'],
       coverage: {
         provider: 'v8',
         // json-summary is what hack/coverage-gate.sh reads (the project floor); lcov for tooling;
