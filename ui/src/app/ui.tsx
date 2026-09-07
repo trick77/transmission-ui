@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from '../icons/Icon'
 
-export function Toggle({ on, onChange, title }: { on: boolean; onChange: (v: boolean) => void; title?: string }) {
-  return <button type="button" role="switch" aria-checked={on} title={title} className={'toggle' + (on ? ' on' : '')} onClick={() => onChange(!on)} />
+export function Toggle({ on, onChange, title, disabled }: { on: boolean; onChange: (v: boolean) => void; title?: string; disabled?: boolean }) {
+  return <button type="button" role="switch" aria-checked={on} title={title} disabled={disabled} style={disabled ? { opacity: .5, cursor: 'default' } : undefined} className={'toggle' + (on ? ' on' : '')} onClick={() => onChange(!on)} />
 }
 
 export function Seg<T extends string>({ value, options, onChange, size }: { value: T; options: { v: T; l: ReactNode }[]; onChange: (v: T) => void; size?: 'sm' }) {

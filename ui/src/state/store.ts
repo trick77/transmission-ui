@@ -104,10 +104,10 @@ async function pollOnce() {
   if (timer) { clearTimeout(timer); timer = null }
   try {
     const full = !haveFull || ticks % FULL_EVERY === 0
-    const [tr, st] = await Promise.all([api.getTorrents(full ? undefined : 'recently-active'), api.getStats()])
+    const [tr, st] = await Promise.all([api.getTorrents(full ? undefined : 'recently_active'), api.getStats()])
     mergeTorrents(tr.torrents, tr.removed, full)
     haveFull = true
-    const history = [...snap.history, { down: st.downloadSpeed, up: st.uploadSpeed }].slice(-60)
+    const history = [...snap.history, { down: st.download_speed, up: st.upload_speed }].slice(-60)
     set({ stats: st, history, connection: 'ok', lastError: '' })
     if (snap.focusId != null) {
       const d = await api.getTorrentDetail(snap.focusId).catch(() => null)
@@ -132,10 +132,10 @@ export async function refreshSession() {
 }
 
 export async function refreshFreeSpace() {
-  const dirs = new Set<string>(snap.torrents.map(t => t.downloadDir))
-  if (snap.session) dirs.add(snap.session['download-dir'])
+  const dirs = new Set<string>(snap.torrents.map(t => t.download_dir))
+  if (snap.session) dirs.add(snap.session.download_dir)
   // one query per top-level mount is enough: the daemon reports the filesystem, not the folder
-  const roots = new Set([...dirs].map(d => mountOf(d, snap.session?.['download-dir'] ?? '')))
+  const roots = new Set([...dirs].map(d => mountOf(d, snap.session?.download_dir ?? '')))
   const m = new Map(snap.freeSpace)
   await Promise.all([...roots].map(async r => { try { m.set(r, await api.freeSpace(r)) } catch { /* path may not exist */ } }))
   set({ freeSpace: m })

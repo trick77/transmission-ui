@@ -60,14 +60,15 @@ const server = createServer(async (req, res) => {
     return send(res, 409, undefined, { 'X-Transmission-Session-Id': SESSION_ID })
   }
 
-  let parsed: { method?: string; arguments?: Record<string, unknown>; tag?: number }
+  let parsed: { method?: string; params?: Record<string, unknown>; id?: number | string | null }
   try {
     parsed = JSON.parse(await readBody(req))
   } catch {
     return send(res, 400, undefined)
   }
   const method = String(parsed.method ?? '')
-  const args = parsed.arguments ?? {}
+  const args = parsed.params ?? {}
+  const id = parsed.id ?? null
 
   const nowMs = Date.now()
   tick(state, nowMs)
@@ -75,11 +76,12 @@ const server = createServer(async (req, res) => {
 
   try {
     const result = handle(state, method, args, now)
-    send(res, 200, { result: 'success', arguments: result, ...(parsed.tag != null ? { tag: parsed.tag } : {}) })
+    send(res, 200, { jsonrpc: '2.0', id, result })
   } catch (e) {
     const msg = e instanceof RpcFailure ? e.message : `sim error: ${e instanceof Error ? e.message : String(e)}`
     if (!(e instanceof RpcFailure)) console.error('[sim]', e)
-    send(res, 200, { result: msg, arguments: {}, ...(parsed.tag != null ? { tag: parsed.tag } : {}) })
+    // -32603 is the JSON-RPC "internal error" code; the daemon puts its own text in data.error_string.
+    send(res, 200, { jsonrpc: '2.0', id, error: { code: -32603, message: msg, data: { error_string: msg } } })
   }
 })
 

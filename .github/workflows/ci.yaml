@@ -45,7 +45,7 @@ jobs:
         run: ./hack/patch-coverage.sh "origin/${{ github.base_ref || 'master' }}"
         working-directory: .
 
-  # Browser-level tests against a real transmission-daemon 4.0.5 (the version
+  # Browser-level tests against a real transmission-daemon 4.1.3 (the version
   # the server runs), seeded with every torrent state the UI shows. Separate
   # job: it needs Docker and a Chromium download that the unit tests don't.
   e2e:

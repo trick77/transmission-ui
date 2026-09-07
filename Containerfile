@@ -7,6 +7,6 @@ RUN npm ci --no-audit --no-fund
 COPY ui/ ./
 RUN npm run build
 
-FROM lscr.io/linuxserver/transmission:4.0.5-r3-ls240
+FROM lscr.io/linuxserver/transmission:4.1.3-r0-ls360
 COPY --from=build /src/dist /web
 ENV TRANSMISSION_WEB_HOME=/web

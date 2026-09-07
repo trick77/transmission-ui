@@ -5,15 +5,16 @@ import type { Page } from '@playwright/test'
 const RPC = process.env.TM_RPC || 'http://localhost:9091/transmission/rpc'
 const AUTH = 'Basic ' + Buffer.from(process.env.TM_AUTH || 'dev:devpass').toString('base64')
 let sid = ''
+let callId = 0
 async function rpc<T = unknown>(method: string, args: Record<string, unknown> = {}): Promise<T> {
-  const call = () => fetch(RPC, { method: 'POST', headers: { Authorization: AUTH, 'X-Transmission-Session-Id': sid, 'Content-Type': 'application/json' }, body: JSON.stringify({ method, arguments: args }) })
+  const call = () => fetch(RPC, { method: 'POST', headers: { Authorization: AUTH, 'X-Transmission-Session-Id': sid, 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method, params: args, id: ++callId }) })
   let r = await call()
   if (r.status === 409) { sid = r.headers.get('x-transmission-session-id') || ''; r = await call() }
-  const j = await r.json() as { result: string; arguments: T }
-  if (j.result !== 'success') throw new Error(j.result)
-  return j.arguments
+  const j = await r.json() as { result?: T; error?: { message: string; data?: { error_string?: string } } }
+  if (j.error) throw new Error(j.error.data?.error_string || j.error.message)
+  return j.result as T
 }
-const torrents = () => rpc<{ torrents: { id: number; name: string; status: number; labels: string[] }[] }>('torrent-get', { fields: ['id', 'name', 'status', 'labels'] }).then(r => r.torrents)
+const torrents = () => rpc<{ torrents: { id: number; name: string; status: number; labels: string[] }[] }>('torrent_get', { fields: ['id', 'name', 'status', 'labels'] }).then(r => r.torrents)
 const shot = (page: Page, name: string) => page.screenshot({ path: `test-results/${name}.png` })
 
 test.beforeEach(async ({ page }) => {
@@ -96,7 +97,7 @@ test('context menu and labels dialog write labels', async ({ page }) => {
   await page.locator('.modal input').press('Enter')
   await page.locator('.modal').getByRole('button', { name: 'Save' }).click()
   await expect.poll(async () => (await torrents()).find(x => x.id === t.id)!.labels, { timeout: 8000 }).toContain('e2e')
-  await rpc('torrent-set', { ids: [t.id], labels: t.labels })
+  await rpc('torrent_set', { ids: [t.id], labels: t.labels })
 })
 
 test('inspector tabs show real detail data', async ({ page }) => {
@@ -143,14 +144,14 @@ test('add by magnet then remove from list', async ({ page }) => {
 })
 
 test('verify local data on the errored torrent goes through Check and lands back in error', async ({ page }) => {
-  const all = await rpc<{ torrents: { id: number; error: number; status: number }[] }>('torrent-get', { fields: ['id', 'error', 'status'] })
+  const all = await rpc<{ torrents: { id: number; error: number; status: number }[] }>('torrent_get', { fields: ['id', 'error', 'status'] })
   const bad = all.torrents.find(t => t.error !== 0)!
   const row = page.locator(`.row[data-id="${bad.id}"]`)
   await row.click({ button: 'right' })
   await page.locator('.cmenu .it', { hasText: 'Verify local data' }).click()
   // status 2 (check) is brief on a 16 MB file; accept either seeing it or the end state
   await expect.poll(async () => {
-    const t = (await rpc<{ torrents: { id: number; error: number; status: number }[] }>('torrent-get', { fields: ['id', 'error', 'status'], ids: [bad.id] })).torrents[0]
+    const t = (await rpc<{ torrents: { id: number; error: number; status: number }[] }>('torrent_get', { fields: ['id', 'error', 'status'], ids: [bad.id] })).torrents[0]
     return t.status === 2 || t.status === 1 ? 'checking' : t.error !== 0 ? 'error' : 'other'
   }, { timeout: 10000 }).not.toBe('other')
   await expect(row.locator('.chip.err')).toBeVisible({ timeout: 15000 })
@@ -160,12 +161,12 @@ test('settings round-trip through session-set', async ({ page }) => {
   await page.getByTitle('Preferences').click()
   await expect(page.locator('.modal-h .t')).toHaveText('Speed')
   await shot(page, 'settings-speed')
-  const before = await rpc<{ 'alt-speed-up': number }>('session-get', { fields: ['alt-speed-up'] })
+  const before = await rpc<{ 'alt_speed_up': number }>('session_get', { fields: ['alt_speed_up'] })
   const inp = page.locator('.opt', { hasText: 'Upload limit' }).nth(1).locator('input')
-  await inp.fill(String(before['alt-speed-up'] + 7))
+  await inp.fill(String(before.alt_speed_up + 7))
   await inp.press('Enter')
-  await expect.poll(async () => (await rpc<{ 'alt-speed-up': number }>('session-get', { fields: ['alt-speed-up'] }))['alt-speed-up'], { timeout: 8000 }).toBe(before['alt-speed-up'] + 7)
-  await rpc('session-set', { 'alt-speed-up': before['alt-speed-up'] })
+  await expect.poll(async () => (await rpc<{ 'alt_speed_up': number }>('session_get', { fields: ['alt_speed_up'] })).alt_speed_up, { timeout: 8000 }).toBe(before.alt_speed_up + 7)
+  await rpc('session_set', { 'alt_speed_up': before.alt_speed_up })
   await page.locator('.side-item', { hasText: 'Network' }).click()
   await shot(page, 'settings-network')
 })
@@ -175,10 +176,10 @@ test('stats popover and turtle toggle', async ({ page }) => {
   await expect(page.locator('.pop')).toContainText('All time')
   await shot(page, 'stats')
   await page.keyboard.press('Escape')
-  const before = await rpc<{ 'alt-speed-enabled': boolean }>('session-get', { fields: ['alt-speed-enabled'] })
+  const before = await rpc<{ 'alt_speed_enabled': boolean }>('session_get', { fields: ['alt_speed_enabled'] })
   await page.locator('#turtle').click()
-  await expect.poll(async () => (await rpc<{ 'alt-speed-enabled': boolean }>('session-get', { fields: ['alt-speed-enabled'] }))['alt-speed-enabled'], { timeout: 8000 }).toBe(!before['alt-speed-enabled'])
-  await expect(page.locator('.speeds .lim')).toHaveCount(before['alt-speed-enabled'] ? 0 : 1)
+  await expect.poll(async () => (await rpc<{ 'alt_speed_enabled': boolean }>('session_get', { fields: ['alt_speed_enabled'] })).alt_speed_enabled, { timeout: 8000 }).toBe(!before.alt_speed_enabled)
+  await expect(page.locator('.speeds .lim')).toHaveCount(before.alt_speed_enabled ? 0 : 1)
   await page.locator('#turtle').click()
-  await expect.poll(async () => (await rpc<{ 'alt-speed-enabled': boolean }>('session-get', { fields: ['alt-speed-enabled'] }))['alt-speed-enabled'], { timeout: 8000 }).toBe(before['alt-speed-enabled'])
+  await expect.poll(async () => (await rpc<{ 'alt_speed_enabled': boolean }>('session_get', { fields: ['alt_speed_enabled'] })).alt_speed_enabled, { timeout: 8000 }).toBe(before.alt_speed_enabled)
 })

@@ -12,7 +12,7 @@
       <button class="side-item" data-s="peers"><span class="lbl">Peers</span></button>
       <button class="side-item" data-s="privacy"><span class="lbl">Privacy</span></button>
       <div class="side-h" style="margin-top:22px">Session</div>
-      <div class="hint" style="padding:0 8px;line-height:1.6">transmission-daemon 4.1.0<br>Uptime 6d 14h<br><span class="num">↓ 218 GB · ↑ 391 GB</span><br>Ratio <span class="num">1.79</span></div>
+      <div class="hint" style="padding:0 8px;line-height:1.6">transmission-daemon 4.1.3<br>rpc 6.0.1<br>Uptime 6d 14h<br><span class="num">↓ 218 GB · ↑ 391 GB</span><br>Ratio <span class="num">1.79</span></div>
     </nav>
     <div style="display:flex;flex-direction:column;min-width:0;flex:1">
       <div class="modal-h"><span class="t" id="stitle">Speed</span><div class="spacer"></div><button class="btn ghost icon"><svg class="i"><use href="#i-x"/></svg></button></div>
@@ -40,10 +40,11 @@
           <div class="opt"><div class="txt"><div class="l">Watch folder for .torrent files</div></div><div class="ctl"><div class="input wide"><svg class="i" style="color:var(--ink-3)"><use href="#i-folder"/></svg><input value="~/Downloads/torrents"></div><span class="toggle on"></span></div></div>
           <div class="opt"><div class="txt"><div class="l">Start torrents when added</div></div><div class="ctl"><span class="toggle on"></span></div></div>
           <div class="opt"><div class="txt"><div class="l">Delete .torrent file after adding</div></div><div class="ctl"><span class="toggle"></span></div></div>
+          <div class="opt"><div class="txt"><div class="l">Sequential download by default</div><div class="d">New torrents fetch their pieces in order</div></div><div class="ctl"><span class="toggle"></span></div></div>
           <div class="opt"><div class="txt"><div class="l">Run script when download completes</div></div><div class="ctl"><div class="input wide mono"><input placeholder="/path/to/script.sh"></div><span class="toggle"></span></div></div>
           <div class="sec">Storage</div>
           <div class="opt"><div class="txt"><div class="l">Preallocation</div><div class="d">Reserve disk space up front to avoid fragmentation</div></div><div class="ctl"><div class="seg"><button>Off</button><button class="on">Sparse</button><button>Full</button></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Cache size</div></div><div class="ctl"><div class="input mono"><input value="16"><span class="unit">MB</span></div></div></div>
+          <div class="opt"><div class="txt"><div class="l">Cache size</div></div><div class="ctl"><div class="input mono"><input value="16"><span class="unit">MiB</span></div></div></div>
         </div>
 
         <div data-s="seeding" hidden>
@@ -64,13 +65,15 @@
 
         <div data-s="network" hidden>
           <div class="sec">Listening port</div>
-          <div class="opt"><div class="txt"><div class="l">Peer port</div><div class="d" style="display:flex;align-items:center;gap:5px"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>Port is open</div></div><div class="ctl"><div class="input mono"><input value="51413"></div><button class="btn sm">Test</button></div></div>
+          <div class="opt"><div class="txt"><div class="l">Peer port</div><div class="d" style="display:flex;align-items:center;gap:14px"><span style="display:flex;align-items:center;gap:5px"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>IPv4 open</span><span style="display:flex;align-items:center;gap:5px"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>IPv6 open</span></div></div><div class="ctl"><div class="input mono"><input value="51413"></div><button class="btn sm">Test</button></div></div>
           <div class="opt"><div class="txt"><div class="l">Randomize port on launch</div></div><div class="ctl"><span class="toggle"></span></div></div>
           <div class="opt"><div class="txt"><div class="l">Port forwarding (UPnP / NAT-PMP)</div></div><div class="ctl"><span class="toggle on"></span></div></div>
           <div class="sec">Peer discovery</div>
           <div class="opt"><div class="txt"><div class="l">Distributed hash table (DHT)</div></div><div class="ctl"><span class="toggle on"></span></div></div>
           <div class="opt"><div class="txt"><div class="l">Peer exchange (PEX)</div></div><div class="ctl"><span class="toggle on"></span></div></div>
           <div class="opt"><div class="txt"><div class="l">Local peer discovery (LPD)</div></div><div class="ctl"><span class="toggle"></span></div></div>
+          <div class="sec">Transports</div>
+          <div class="opt"><div class="txt"><div class="l">TCP</div><div class="d">Plain TCP peer connections</div></div><div class="ctl"><span class="toggle on"></span></div></div>
           <div class="opt"><div class="txt"><div class="l">µTP</div><div class="d">Congestion-aware transport, reduces impact on other traffic</div></div><div class="ctl"><span class="toggle on"></span></div></div>
           <div class="sec">Remote access</div>
           <div class="opt"><div class="txt"><div class="l">RPC port</div></div><div class="ctl"><div class="input mono"><input value="9091"></div></div></div>

@@ -53,49 +53,49 @@ describe('availability', () => {
 })
 
 describe('file bytes', () => {
-  it('distributes haveValid across wanted files exactly', () => {
+  it('distributes have_valid across wanted files exactly', () => {
     const files = [
-      { name: 'a', length: 100, bytesCompleted: 0 },
-      { name: 'b', length: 200, bytesCompleted: 0 },
-      { name: 'c', length: 300, bytesCompleted: 0 },
+      { name: 'a', length: 100, bytes_completed: 0 },
+      { name: 'b', length: 200, bytes_completed: 0 },
+      { name: 'c', length: 300, bytes_completed: 0 },
     ]
-    const stats = files.map(() => ({ wanted: true, priority: 0 as const, bytesCompleted: 0 }))
+    const stats = files.map(() => ({ wanted: true, priority: 0 as const, bytes_completed: 0 }))
     distributeBytes(files, stats, 250)
-    expect(files.map(f => f.bytesCompleted)).toEqual([100, 150, 0])
-    expect(stats.map(s => s.bytesCompleted)).toEqual([100, 150, 0])
+    expect(files.map(f => f.bytes_completed)).toEqual([100, 150, 0])
+    expect(stats.map(s => s.bytes_completed)).toEqual([100, 150, 0])
   })
 
   it('skips files the user does not want', () => {
     const files = [
-      { name: 'a', length: 100, bytesCompleted: 0 },
-      { name: 'b', length: 100, bytesCompleted: 0 },
+      { name: 'a', length: 100, bytes_completed: 0 },
+      { name: 'b', length: 100, bytes_completed: 0 },
     ]
     const stats = [
-      { wanted: false, priority: 0 as const, bytesCompleted: 0 },
-      { wanted: true, priority: 0 as const, bytesCompleted: 0 },
+      { wanted: false, priority: 0 as const, bytes_completed: 0 },
+      { wanted: true, priority: 0 as const, bytes_completed: 0 },
     ]
     distributeBytes(files, stats, 60)
-    expect(files.map(f => f.bytesCompleted)).toEqual([0, 60])
+    expect(files.map(f => f.bytes_completed)).toEqual([0, 60])
   })
 })
 
 describe('reconcile', () => {
-  it('keeps haveValid + haveUnchecked + leftUntilDone equal to sizeWhenDone', () => {
+  it('keeps have_valid + have_unchecked + left_until_done equal to size_when_done', () => {
     const t = buildTorrents({ now: NOW })[0]
-    t.haveValid = t.sizeWhenDone * 2
+    t.have_valid = t.size_when_done * 2
     reconcile(t)
-    expect(t.haveValid + t.haveUnchecked + t.leftUntilDone).toBe(t.sizeWhenDone)
-    expect(t.percentDone).toBe(1)
+    expect(t.have_valid + t.have_unchecked + t.left_until_done).toBe(t.size_when_done)
+    expect(t.percent_done).toBe(1)
   })
 })
 
 describe('queue positions', () => {
   it('renumbers to a contiguous permutation', () => {
     const ts = buildTorrents({ now: NOW })
-    ts[0].queuePosition = 999
-    ts[5].queuePosition = -4
+    ts[0].queue_position = 999
+    ts[5].queue_position = -4
     renumberQueue(ts)
-    expect([...ts].map(t => t.queuePosition).sort((a, b) => a - b)).toEqual(ts.map((_, i) => i))
+    expect([...ts].map(t => t.queue_position).sort((a, b) => a - b)).toEqual(ts.map((_, i) => i))
   })
 })
 
@@ -108,7 +108,7 @@ describe('hashes and magnets', () => {
 
   it('gives every torrent in the dataset a unique hash', () => {
     const ts = buildTorrents({ now: NOW, count: 4 })
-    expect(new Set(ts.map(t => t.hashString)).size).toBe(ts.length)
+    expect(new Set(ts.map(t => t.hash_string)).size).toBe(ts.length)
   })
 
   it('builds a magnet with a display name and every tracker', () => {

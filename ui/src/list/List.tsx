@@ -25,7 +25,7 @@ export function List() {
   const session = useStore(s => s.session)
   const dismissed = useStore(s => s.dismissed)
   const connection = useStore(s => s.connection)
-  const base = session?.['download-dir'] ?? ''
+  const base = session?.download_dir ?? ''
 
   const F = useMemo(() => filterFn(filter, base), [filter, base])
   const list = useMemo(() => {
@@ -33,7 +33,7 @@ export function List() {
     return torrents.filter(F.f).filter(advFn(adv)).filter(t => !q || t.name.toLowerCase().includes(q)).sort(sortFn(sort, sortDir))
   }, [torrents, F, adv, search, sort, sortDir])
   const ids = useMemo(() => list.map(t => t.id), [list])
-  const total = list.reduce((a, t) => a + t.sizeWhenDone, 0)
+  const total = list.reduce((a, t) => a + t.size_when_done, 0)
   const on = advActive(adv)
 
   const [menu, setMenu] = useState<{ x: number; y: number; kind: 'row' | 'view' | 'sel'; ids: number[] } | null>(null)
@@ -71,7 +71,7 @@ export function List() {
 
   // tracker-down notices
   const health = useMemo(() => trackerHealth(torrents).filter(h => (h.state === 'down' || h.state === 'rejected') && !dismissed.has(`${h.host}@${Math.floor(h.since)}`)), [torrents, dismissed])
-  const affected = (host: string) => torrents.filter(t => t.trackerStats.some(ts => hostOf(ts.announce) === host)).map(t => t.id)
+  const affected = (host: string) => torrents.filter(t => t.tracker_stats.some(ts => hostOf(ts.announce) === host)).map(t => t.id)
 
   const allSel = ids.length > 0 && ids.every(id => selected.has(id))
   const someSel = !allSel && ids.some(id => selected.has(id))
@@ -131,7 +131,7 @@ export function List() {
         <div key={h.host} className="notice">
           <span className="st" />
           <span>
-            <b>{h.host}</b> {h.state === 'rejected' ? <>rejects this client ({h.result}) · {h.count} torrents affected</> : <>has been unreachable for {duration(Date.now() / 1000 - h.since)} · {h.count} torrents affected{session?.['dht-enabled'] ? ', DHT and PEX still finding peers' : ''}</>}
+            <b>{h.host}</b> {h.state === 'rejected' ? <>rejects this client ({h.result}) · {h.count} torrents affected</> : <>has been unreachable for {duration(Date.now() / 1000 - h.since)} · {h.count} torrents affected{session?.dht_enabled ? ', DHT and PEX still finding peers' : ''}</>}
           </span>
           <button className="btn sm ghost" onClick={() => void run('Re-announce', () => api.reannounce(affected(h.host)))}>Re-announce all</button>
           <button className="btn sm ghost icon" title="Dismiss" onClick={() => dismissNotice(`${h.host}@${Math.floor(h.since)}`)}><Icon name="x" size={14} /></button>

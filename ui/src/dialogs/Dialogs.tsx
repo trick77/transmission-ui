@@ -41,7 +41,7 @@ function names(ids: number[]) { const s = get(); return ids.map(id => s.byId.get
 function ConfirmRemove({ ids, deleteData, onClose }: { ids: number[]; deleteData: boolean; onClose: () => void }) {
   const [del, setDel] = useState(deleteData)
   const n = names(ids)
-  const dirs = [...new Set(ids.map(id => get().byId.get(id)?.downloadDir).filter(Boolean))]
+  const dirs = [...new Set(ids.map(id => get().byId.get(id)?.download_dir).filter(Boolean))]
   return (
     <Modal title={del ? 'Remove and delete data' : 'Remove from list'} width={520} onClose={onClose}
       footer={<><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
@@ -96,11 +96,11 @@ function Labels({ ids, onClose }: { ids: number[]; onClose: () => void }) {
 function Location({ ids, onClose }: { ids: number[]; onClose: () => void }) {
   const session = useStore(s => s.session)
   const torrents = useStore(s => s.torrents)
-  const base = session?.['download-dir'] ?? ''
-  const [path, setPath] = useState(get().byId.get(ids[0])?.downloadDir ?? base)
+  const base = session?.download_dir ?? ''
+  const [path, setPath] = useState(get().byId.get(ids[0])?.download_dir ?? base)
   const [move, setMove] = useState(true)
   const [free, setFree] = useState<number | null>(null)
-  useEffect(() => { let live = true; api.freeSpace(path).then(r => { if (live) setFree(r['size-bytes']) }).catch(() => setFree(null)); return () => { live = false } }, [path])
+  useEffect(() => { let live = true; api.freeSpace(path).then(r => { if (live) setFree(r.size_bytes) }).catch(() => setFree(null)); return () => { live = false } }, [path])
   const folders = folderTree(torrents, base)
   return (
     <Modal title="Set location" width={560} onClose={onClose}
@@ -139,13 +139,13 @@ function Limits({ ids, onClose }: { ids: number[]; onClose: () => void }) {
   return (
     <Modal title="Limits & priority" width={520} onClose={onClose} footer={<><span className="hint">{ids.length > 1 ? `Applies to ${ids.length} torrents · values shown are from the first` : names(ids)[0]}</span><div className="spacer" /><button className="btn primary" onClick={onClose}>Done</button></>}>
       {!d ? <div className="hint">Loading…</div> : <>
-        <Opt label="Honor global limits"><Toggle on={d.honorsSessionLimits} onChange={v => setT('Limits', { honorsSessionLimits: v })} /></Opt>
-        <Opt label="Limit download"><NumInput value={d.downloadLimit} unit="kB/s" onCommit={v => setT('Limit', { downloadLimit: v })} disabled={!d.downloadLimited} /><Toggle on={d.downloadLimited} onChange={v => setT('Limit', { downloadLimited: v })} /></Opt>
-        <Opt label="Limit upload"><NumInput value={d.uploadLimit} unit="kB/s" onCommit={v => setT('Limit', { uploadLimit: v })} disabled={!d.uploadLimited} /><Toggle on={d.uploadLimited} onChange={v => setT('Limit', { uploadLimited: v })} /></Opt>
-        <Opt label="Bandwidth priority"><Seg value={String(d.bandwidthPriority)} options={[{ v: '-1', l: 'Low' }, { v: '0', l: 'Normal' }, { v: '1', l: 'High' }]} onChange={v => setT('Priority', { bandwidthPriority: Number(v) as -1 | 0 | 1 })} /></Opt>
-        <Opt label="Seed ratio"><Seg value={String(d.seedRatioMode)} options={[{ v: '0', l: 'Global' }, { v: '1', l: 'Custom' }, { v: '2', l: 'Unlimited' }]} onChange={v => setT('Seed ratio', { seedRatioMode: Number(v) as 0 | 1 | 2 })} />{d.seedRatioMode === 1 ? <NumInput value={d.seedRatioLimit} width={70} onCommit={v => setT('Seed ratio', { seedRatioLimit: v })} /> : null}</Opt>
-        <Opt label="Idle seeding"><Seg value={String(d.seedIdleMode)} options={[{ v: '0', l: 'Global' }, { v: '1', l: 'Custom' }, { v: '2', l: 'Unlimited' }]} onChange={v => setT('Idle', { seedIdleMode: Number(v) as 0 | 1 | 2 })} />{d.seedIdleMode === 1 ? <NumInput value={d.seedIdleLimit} unit="min" width={90} onCommit={v => setT('Idle', { seedIdleLimit: v })} /> : null}</Opt>
-        <Opt label="Peer limit"><NumInput value={d['peer-limit']} width={80} onCommit={v => setT('Peer limit', { 'peer-limit': v })} /></Opt>
+        <Opt label="Honor global limits"><Toggle on={d.honors_session_limits} onChange={v => setT('Limits', { honors_session_limits: v })} /></Opt>
+        <Opt label="Limit download"><NumInput value={d.download_limit} unit="kB/s" onCommit={v => setT('Limit', { download_limit: v })} disabled={!d.download_limited} /><Toggle on={d.download_limited} onChange={v => setT('Limit', { download_limited: v })} /></Opt>
+        <Opt label="Limit upload"><NumInput value={d.upload_limit} unit="kB/s" onCommit={v => setT('Limit', { upload_limit: v })} disabled={!d.upload_limited} /><Toggle on={d.upload_limited} onChange={v => setT('Limit', { upload_limited: v })} /></Opt>
+        <Opt label="Bandwidth priority"><Seg value={String(d.bandwidth_priority)} options={[{ v: '-1', l: 'Low' }, { v: '0', l: 'Normal' }, { v: '1', l: 'High' }]} onChange={v => setT('Priority', { bandwidth_priority: Number(v) as -1 | 0 | 1 })} /></Opt>
+        <Opt label="Seed ratio"><Seg value={String(d.seed_ratio_mode)} options={[{ v: '0', l: 'Global' }, { v: '1', l: 'Custom' }, { v: '2', l: 'Unlimited' }]} onChange={v => setT('Seed ratio', { seed_ratio_mode: Number(v) as 0 | 1 | 2 })} />{d.seed_ratio_mode === 1 ? <NumInput value={d.seed_ratio_limit} width={70} onCommit={v => setT('Seed ratio', { seed_ratio_limit: v })} /> : null}</Opt>
+        <Opt label="Idle seeding"><Seg value={String(d.seed_idle_mode)} options={[{ v: '0', l: 'Global' }, { v: '1', l: 'Custom' }, { v: '2', l: 'Unlimited' }]} onChange={v => setT('Idle', { seed_idle_mode: Number(v) as 0 | 1 | 2 })} />{d.seed_idle_mode === 1 ? <NumInput value={d.seed_idle_limit} unit="min" width={90} onCommit={v => setT('Idle', { seed_idle_limit: v })} /> : null}</Opt>
+        <Opt label="Peer limit"><NumInput value={d.peer_limit} width={80} onCommit={v => setT('Peer limit', { 'peer_limit': v })} /></Opt>
       </>}
     </Modal>
   )
@@ -155,11 +155,11 @@ function TrackersEdit({ id, onClose }: { id: number; onClose: () => void }) {
   const [text, setText] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   // On a failed load text stays null so Save stays disabled: saving an empty list would strip every tracker.
-  useEffect(() => { api.getTorrentDetail(id).then(d => { if (d) setText(d.trackerList); else setFailed(true) }).catch(() => setFailed(true)) }, [id])
+  useEffect(() => { api.getTorrentDetail(id).then(d => { if (d) setText(d.tracker_list); else setFailed(true) }).catch(() => setFailed(true)) }, [id])
   return (
     <Modal title="Trackers" width={560} onClose={onClose}
       footer={<><span className="hint">{failed ? <span style={{ color: 'var(--err)' }}>Could not load the tracker list; nothing will be saved.</span> : 'One announce URL per line; a blank line starts a new tier.'}</span><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
-        <button className="btn primary" disabled={text == null} onClick={() => { onClose(); void run('Trackers', () => api.setTorrent([id], { trackerList: text ?? '' }).then(refreshNow)) }}>Save</button></>}>
+        <button className="btn primary" disabled={text == null} onClick={() => { onClose(); void run('Trackers', () => api.setTorrent([id], { tracker_list: text ?? '' }).then(refreshNow)) }}>Save</button></>}>
       <textarea value={text ?? ''} onChange={e => setText(e.target.value)} spellCheck={false}
         style={{ width: '100%', minHeight: 220, resize: 'vertical', background: 'var(--surface-2)', color: 'var(--ink)', border: '1px solid transparent', borderRadius: 'var(--r)', padding: 10, font: '12px var(--mono)', outline: 'none' }} />
     </Modal>

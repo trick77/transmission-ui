@@ -88,45 +88,45 @@ export function availabilityOf(order: Uint32Array, pct: number, swarm: number, s
 }
 
 /**
- * Spread haveValid over the wanted files in order, so Σ wanted files[].bytesCompleted === haveValid.
+ * Spread have_valid over the wanted files in order, so Σ wanted files[].bytes_completed === have_valid.
  *
  * Bytes already on disk for an unwanted file are left exactly where they are. Zeroing them would
  * throw away real data: unticking a file in the Files tab and ticking it again has to come back to
  * where it was, and the daemon does keep those bytes.
  */
-export function distributeBytes(files: TorrentFile[], stats: FileStat[], haveValid: number): void {
-  let left = haveValid
+export function distributeBytes(files: TorrentFile[], stats: FileStat[], have_valid: number): void {
+  let left = have_valid
   for (let i = 0; i < files.length; i++) {
     if (stats[i]?.wanted === false) continue
     const take = Math.max(0, Math.min(files[i].length, left))
-    files[i].bytesCompleted = Math.round(take)
-    if (stats[i]) stats[i].bytesCompleted = Math.round(take)
+    files[i].bytes_completed = Math.round(take)
+    if (stats[i]) stats[i].bytes_completed = Math.round(take)
     left -= take
   }
 }
 
-/** sizeWhenDone counts only the files the user wants. */
+/** size_when_done counts only the files the user wants. */
 export const wantedSize = (t: TorrentDetail) =>
-  t.files.reduce((n, f, i) => n + (t.fileStats[i]?.wanted !== false ? f.length : 0), 0)
+  t.files.reduce((n, f, i) => n + (t.file_stats[i]?.wanted !== false ? f.length : 0), 0)
 
 /** Bytes already on disk for the files the user wants. The file table is the source of truth here. */
 export const wantedHave = (t: TorrentDetail) =>
-  t.files.reduce((n, f, i) => n + (t.fileStats[i]?.wanted !== false ? Math.min(f.bytesCompleted, f.length) : 0), 0)
+  t.files.reduce((n, f, i) => n + (t.file_stats[i]?.wanted !== false ? Math.min(f.bytes_completed, f.length) : 0), 0)
 
-/** haveValid + haveUnchecked + leftUntilDone === sizeWhenDone, always. */
+/** have_valid + have_unchecked + left_until_done === size_when_done, always. */
 export function reconcile(t: TorrentDetail): void {
-  if (t.metadataPercentComplete < 1) return
-  t.haveValid = Math.max(0, Math.min(t.sizeWhenDone, t.haveValid))
-  t.haveUnchecked = Math.max(0, Math.min(t.sizeWhenDone - t.haveValid, t.haveUnchecked))
-  t.leftUntilDone = Math.max(0, t.sizeWhenDone - t.haveValid - t.haveUnchecked)
-  t.percentDone = t.sizeWhenDone > 0 ? t.haveValid / t.sizeWhenDone : 0
-  if (t.percentDone > 1) t.percentDone = 1
+  if (t.metadata_percent_complete < 1) return
+  t.have_valid = Math.max(0, Math.min(t.size_when_done, t.have_valid))
+  t.have_unchecked = Math.max(0, Math.min(t.size_when_done - t.have_valid, t.have_unchecked))
+  t.left_until_done = Math.max(0, t.size_when_done - t.have_valid - t.have_unchecked)
+  t.percent_done = t.size_when_done > 0 ? t.have_valid / t.size_when_done : 0
+  if (t.percent_done > 1) t.percent_done = 1
 }
 
 /** Contiguous 0..n-1 queue positions in the current order. */
 export function renumberQueue(torrents: TorrentDetail[]): void {
-  const order = [...torrents].sort((a, b) => a.queuePosition - b.queuePosition || a.id - b.id)
-  order.forEach((t, i) => { t.queuePosition = i })
+  const order = [...torrents].sort((a, b) => a.queue_position - b.queue_position || a.id - b.id)
+  order.forEach((t, i) => { t.queue_position = i })
 }
 
 export function magnetOf(hash: string, name: string, trackers: TrackerStat[]): string {
@@ -140,9 +140,9 @@ export function hostOf(announce: string): string {
 
 /** Refresh pieces/availability from progress. Called whenever a detail view is served. */
 export function refreshPieceMap(t: TorrentDetail, swarm: number): void {
-  if (!t.pieceCount) { t.pieces = ''; t.availability = []; return }
-  const seed = seedOf(t.hashString)
-  const order = pieceOrder(t.pieceCount, seed)
-  t.pieces = piecesB64(order, t.percentDone)
-  t.availability = availabilityOf(order, t.percentDone, swarm, seed ^ 0x5bf03635)
+  if (!t.piece_count) { t.pieces = ''; t.availability = []; return }
+  const seed = seedOf(t.hash_string)
+  const order = pieceOrder(t.piece_count, seed)
+  t.pieces = piecesB64(order, t.percent_done)
+  t.availability = availabilityOf(order, t.percent_done, swarm, seed ^ 0x5bf03635)
 }
