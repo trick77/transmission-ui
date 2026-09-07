@@ -11,7 +11,7 @@ export interface StatusView { kind: ChipKind; bar: string; label: string }
 export function statusView(t: TorrentSummary): StatusView {
   if (t.error !== 0) return { kind: 'err', bar: 'err', label: 'Error' }
   switch (t.status) {
-    case Status.Download: return t.metadataPercentComplete < 1 ? { kind: 'dl', bar: 'striped', label: 'Fetching metadata' } : { kind: 'dl', bar: '', label: 'Downloading' }
+    case Status.Download: return t.metadata_percent_complete < 1 ? { kind: 'dl', bar: 'striped', label: 'Fetching metadata' } : { kind: 'dl', bar: '', label: 'Downloading' }
     case Status.Seed: return { kind: 'seed', bar: 'seed', label: 'Seeding' }
     case Status.SeedWait: return { kind: 'wait', bar: 'wait striped', label: 'Queued to seed' }
     case Status.DownloadWait: return { kind: 'wait', bar: 'wait striped', label: 'Queued' }
@@ -21,7 +21,7 @@ export function statusView(t: TorrentSummary): StatusView {
   }
 }
 
-export const isActive = (t: TorrentSummary) => t.rateDownload > 0 || t.rateUpload > 0
+export const isActive = (t: TorrentSummary) => t.rate_download > 0 || t.rate_upload > 0
 const isQueuedOrChecking = (t: TorrentSummary) => t.status === Status.Check || t.status === Status.CheckWait || t.status === Status.DownloadWait || t.status === Status.SeedWait
 
 // ─── tracker health ───
@@ -29,27 +29,27 @@ export type TrackerFailure = 'ok' | 'tracker' | 'torrent' | 'rejected'
 
 /** Classify a failed announce: tracker-level (host problem), client rejected (whitelist/ban), or torrent-level (unregistered). */
 export function classifyAnnounce(ts: TrackerStat): TrackerFailure {
-  if (!ts.hasAnnounced || ts.lastAnnounceSucceeded) return 'ok'
-  const r = ts.lastAnnounceResult.toLowerCase()
+  if (!ts.has_announced || ts.last_announce_succeeded) return 'ok'
+  const r = ts.last_announce_result.toLowerCase()
   if (/whitelist|banned|client.*(reject|not allowed|unsupported)|user.?agent/.test(r)) return 'rejected'
   if (/unregistered|not registered|not found|not exist|unknown torrent|torrent not/.test(r)) return 'torrent'
   return 'tracker'
 }
 
-export const hasTrackerProblem = (t: TorrentSummary) => t.trackerStats.some(ts => classifyAnnounce(ts) !== 'ok')
+export const hasTrackerProblem = (t: TorrentSummary) => t.tracker_stats.some(ts => classifyAnnounce(ts) !== 'ok')
 
 export interface TrackerHealth {
   host: string
   count: number
   failing: number
   state: 'ok' | 'issues' | 'down' | 'rejected'
-  since: number       // oldest failing lastAnnounceTime
+  since: number       // oldest failing last_announce_time
   result: string      // representative error text
 }
 
 const DOWN_AFTER_S = 10 * 60
 
-// When we first saw a host failing, so a re-announce (which refreshes lastAnnounceTime) doesn't reset the clock.
+// When we first saw a host failing, so a re-announce (which refreshes last_announce_time) doesn't reset the clock.
 const firstFailing = new Map<string, number>(readFirstFailing())
 function readFirstFailing(): [string, number][] { try { return JSON.parse(localStorage.getItem('tm.trkfail') || '[]') } catch { return [] } }
 function rememberFailing(host: string, since: number) {
@@ -67,23 +67,23 @@ export function trackerHealth(torrents: TorrentSummary[]): TrackerHealth[] {
   const byHost = new Map<string, { count: number; announced: number; failing: number; rejected: number; torrentLevel: number; since: number; result: string }>()
   for (const t of torrents) {
     const seen = new Set<string>()
-    for (const ts of t.trackerStats) {
+    for (const ts of t.tracker_stats) {
       const host = hostOf(ts.announce)
       if (seen.has(host)) continue
       seen.add(host)
       const h = byHost.get(host) ?? { count: 0, announced: 0, failing: 0, rejected: 0, torrentLevel: 0, since: Infinity, result: '' }
       h.count++
       // stopped torrents never announce; they say nothing about the tracker
-      if (ts.hasAnnounced) h.announced++
+      if (ts.has_announced) h.announced++
       const c = classifyAnnounce(ts)
       if (c === 'tracker' || c === 'rejected') {
         h.failing++
         if (c === 'rejected') h.rejected++
-        h.since = Math.min(h.since, ts.lastAnnounceTime || Date.now() / 1000)
+        h.since = Math.min(h.since, ts.last_announce_time || Date.now() / 1000)
         // a failed scrape is older evidence of the same outage
-        if (ts.hasScraped && !ts.lastScrapeSucceeded && ts.lastScrapeTime) h.since = Math.min(h.since, ts.lastScrapeTime)
-        h.result = h.result || ts.lastAnnounceResult
-      } else if (c === 'torrent') { h.torrentLevel++; h.result = h.result || ts.lastAnnounceResult }
+        if (ts.has_scraped && !ts.last_scrape_succeeded && ts.last_scrape_time) h.since = Math.min(h.since, ts.last_scrape_time)
+        h.result = h.result || ts.last_announce_result
+      } else if (c === 'torrent') { h.torrentLevel++; h.result = h.result || ts.last_announce_result }
       byHost.set(host, h)
     }
   }
@@ -123,7 +123,7 @@ export const FILTERS: Record<FilterKey, { label: string; f: (t: TorrentSummary) 
   seed: { label: 'Seeding', f: t => t.status === Status.Seed },
   active: { label: 'Active', f: isActive },
   inactive: { label: 'Inactive', f: t => !isActive(t) && !isQueuedOrChecking(t) },
-  finished: { label: 'Finished', f: t => t.isFinished || (t.percentDone >= 1 && t.metadataPercentComplete >= 1) },
+  finished: { label: 'Finished', f: t => t.is_finished || (t.percent_done >= 1 && t.metadata_percent_complete >= 1) },
   queued: { label: 'Queued / Checking', f: isQueuedOrChecking },
   stopped: { label: 'Stopped', f: t => t.status === Status.Stopped && t.error === 0 },
   error: { label: 'Error', f: t => t.error !== 0 },
@@ -134,8 +134,8 @@ export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'seed', 'active', '
 /** A filter string is a FilterKey, `label:<name>`, `dir:<path>` (prefix) or `tracker:<host>`. */
 export function filterFn(filter: string, base: string): { label: string; f: (t: TorrentSummary) => boolean } {
   if (filter.startsWith('label:')) { const l = filter.slice(6); return { label: l, f: t => t.labels.includes(l) } }
-  if (filter.startsWith('dir:')) { const d = filter.slice(4); return { label: relDir(d, base) || d, f: t => t.downloadDir === d || t.downloadDir.startsWith(d + '/') } }
-  if (filter.startsWith('tracker:')) { const h = filter.slice(8); return { label: h, f: t => t.trackerStats.some(ts => hostOf(ts.announce) === h) } }
+  if (filter.startsWith('dir:')) { const d = filter.slice(4); return { label: relDir(d, base) || d, f: t => t.download_dir === d || t.download_dir.startsWith(d + '/') } }
+  if (filter.startsWith('tracker:')) { const h = filter.slice(8); return { label: h, f: t => t.tracker_stats.some(ts => hostOf(ts.announce) === h) } }
   return FILTERS[Object.hasOwn(FILTERS, filter) ? (filter as FilterKey) : 'all']
 }
 
@@ -144,10 +144,10 @@ export type AdvKey = 'size' | 'age' | 'ratio' | 'idle'
 export type Adv = Partial<Record<AdvKey, string>>
 
 export const ADV: Record<AdvKey, Record<string, (t: TorrentSummary) => boolean>> = {
-  size: { lt1: t => gb(t.sizeWhenDone) < 1, '1to10': t => gb(t.sizeWhenDone) >= 1 && gb(t.sizeWhenDone) <= 10, gt10: t => gb(t.sizeWhenDone) > 10 },
-  age: { '1d': t => daysSince(t.addedDate) < 1, '7d': t => daysSince(t.addedDate) < 7, '30d': t => daysSince(t.addedDate) < 30, older: t => daysSince(t.addedDate) >= 30 },
-  ratio: { lt1: t => ratioValue(t.uploadRatio) < 1, gte1: t => ratioValue(t.uploadRatio) >= 1, gte2: t => ratioValue(t.uploadRatio) >= 2 },
-  idle: { active: isActive, idle7: t => !isActive(t) && daysSince(t.activityDate) > 7, idle30: t => !isActive(t) && daysSince(t.activityDate) > 30 },
+  size: { lt1: t => gb(t.size_when_done) < 1, '1to10': t => gb(t.size_when_done) >= 1 && gb(t.size_when_done) <= 10, gt10: t => gb(t.size_when_done) > 10 },
+  age: { '1d': t => daysSince(t.added_date) < 1, '7d': t => daysSince(t.added_date) < 7, '30d': t => daysSince(t.added_date) < 30, older: t => daysSince(t.added_date) >= 30 },
+  ratio: { lt1: t => ratioValue(t.upload_ratio) < 1, gte1: t => ratioValue(t.upload_ratio) >= 1, gte2: t => ratioValue(t.upload_ratio) >= 2 },
+  idle: { active: isActive, idle7: t => !isActive(t) && daysSince(t.activity_date) > 7, idle30: t => !isActive(t) && daysSince(t.activity_date) > 30 },
 }
 export const ADV_OPTIONS: Record<AdvKey, { v: string; l: string }[]> = {
   size: [{ v: 'any', l: 'Any' }, { v: 'lt1', l: '< 1 GB' }, { v: '1to10', l: '1–10 GB' }, { v: 'gt10', l: '> 10 GB' }],
@@ -186,15 +186,15 @@ export function sortFn(key: SortKey, dir: 1 | -1): (a: TorrentSummary, b: Torren
   const num = (f: (t: TorrentSummary) => number) => (a: TorrentSummary, b: TorrentSummary) => (f(a) - f(b)) * dir || a.name.localeCompare(b.name)
   switch (key) {
     case 'name': return (a, b) => a.name.localeCompare(b.name) * dir
-    case 'size': return num(t => t.sizeWhenDone)
-    case 'progress': return num(t => t.percentDone)
-    case 'down': return num(t => t.rateDownload)
-    case 'up': return num(t => t.rateUpload)
-    case 'ratio': return num(t => ratioValue(t.uploadRatio))
+    case 'size': return num(t => t.size_when_done)
+    case 'progress': return num(t => t.percent_done)
+    case 'down': return num(t => t.rate_download)
+    case 'up': return num(t => t.rate_upload)
+    case 'ratio': return num(t => ratioValue(t.upload_ratio))
     case 'eta': return num(t => (t.eta < 0 ? Number.MAX_SAFE_INTEGER : t.eta))
-    case 'added': return num(t => t.addedDate)
-    case 'activity': return num(t => t.activityDate)
-    default: return (a, b) => (rank(a) - rank(b)) * dir || b.activityDate - a.activityDate || a.name.localeCompare(b.name)
+    case 'added': return num(t => t.added_date)
+    case 'activity': return num(t => t.activity_date)
+    default: return (a, b) => (rank(a) - rank(b)) * dir || b.activity_date - a.activity_date || a.name.localeCompare(b.name)
   }
 }
 
@@ -209,7 +209,7 @@ export interface FolderNode { path: string; name: string; depth: number; count: 
 
 /** Flattened folder tree of every download dir relative to the session download-dir. */
 export function folderTree(torrents: TorrentSummary[], base: string): FolderNode[] {
-  const dirs = [...new Set(torrents.map(t => t.downloadDir))].sort()
+  const dirs = [...new Set(torrents.map(t => t.download_dir))].sort()
   const seen = new Set<string>()
   const out: FolderNode[] = []
   for (const d of dirs) {
@@ -219,7 +219,7 @@ export function folderTree(torrents: TorrentSummary[], base: string): FolderNode
       const p = (inBase ? base + '/' : '/') + parts.slice(0, i).join('/')
       if (seen.has(p)) continue
       seen.add(p)
-      out.push({ path: p, name: parts[i - 1], depth: i - 1, count: torrents.filter(t => t.downloadDir === p || t.downloadDir.startsWith(p + '/')).length })
+      out.push({ path: p, name: parts[i - 1], depth: i - 1, count: torrents.filter(t => t.download_dir === p || t.download_dir.startsWith(p + '/')).length })
     }
   }
   return out
@@ -234,6 +234,6 @@ export function labelCounts(torrents: TorrentSummary[]): { label: string; count:
 /** Peers/swarm text under the name. */
 export function swarmOf(t: TorrentSummary): { seeds: number; leechers: number } {
   let seeds = 0, leechers = 0
-  for (const ts of t.trackerStats) { seeds = Math.max(seeds, ts.seederCount); leechers = Math.max(leechers, ts.leecherCount) }
+  for (const ts of t.tracker_stats) { seeds = Math.max(seeds, ts.seeder_count); leechers = Math.max(leechers, ts.leecher_count) }
   return { seeds, leechers }
 }

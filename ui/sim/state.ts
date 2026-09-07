@@ -15,7 +15,7 @@ export interface SimFields {
   checkSecs: number
   /** Status to restore when a verify finishes. */
   prevStatus: number
-  /** Rates from the previous tick, so activityDate is still bumped on the frame they hit zero. */
+  /** Rates from the previous tick, so activity_date is still bumped on the frame they hit zero. */
   prevDown: number
   prevUp: number
   /** Simulated stall: rate parked at zero until this timestamp. */
@@ -26,11 +26,11 @@ export interface SimFields {
 }
 
 export interface StatsBlockState {
-  uploadedBytes: number
-  downloadedBytes: number
-  filesAdded: number
-  sessionCount: number
-  secondsActive: number
+  uploaded_bytes: number
+  downloaded_bytes: number
+  files_added: number
+  session_count: number
+  seconds_active: number
 }
 
 export interface SimState {
@@ -65,19 +65,19 @@ export interface SimOptions {
 }
 
 export function simFieldsFor(t: TorrentDetail): SimFields {
-  const rand = makeRand(seedOf(t.hashString) ^ 0x1b873593)
+  const rand = makeRand(seedOf(t.hash_string) ^ 0x1b873593)
   const owned = t.availability.filter(v => v >= 0)
   const swarm = owned.length ? owned.reduce((a, v) => a + v, 0) / owned.length : 3
   return {
-    baseDown: t.rateDownload,
-    baseUp: t.rateUpload,
+    baseDown: t.rate_download,
+    baseUp: t.rate_upload,
     phase: rand.range(0, Math.PI * 2),
     // A verify runs at roughly 60 MB/s, and never finishes instantly even for a tiny torrent, so
     // the "Verifying" row stays on screen long enough to look at.
-    checkSecs: Math.max(20, t.sizeWhenDone / 60e6),
-    prevStatus: t.percentDone >= 1 ? ST.Seed : ST.Download,
-    prevDown: t.rateDownload,
-    prevUp: t.rateUpload,
+    checkSecs: Math.max(20, t.size_when_done / 60e6),
+    prevStatus: t.percent_done >= 1 ? ST.Seed : ST.Download,
+    prevDown: t.rate_download,
+    prevUp: t.rate_upload,
     stallUntil: 0,
     swarm,
     rand,
@@ -107,9 +107,9 @@ export function createState(opts: SimOptions = {}): SimState {
     trackerDown: new Map(),
     trackerNext,
     space: buildSpace(),
-    cur: { uploadedBytes: 1.31e9, downloadedBytes: 5.14e9, filesAdded: 3, sessionCount: 1, secondsActive: 570_000 },
-    cum: { uploadedBytes: 391e9, downloadedBytes: 218e9, filesAdded: 412, sessionCount: 37, secondsActive: 12_300_000 },
-    portOpen: session['port-forwarding-enabled'],
+    cur: { uploaded_bytes: 1.31e9, downloaded_bytes: 5.14e9, files_added: 3, session_count: 1, seconds_active: 570_000 },
+    cum: { uploaded_bytes: 391e9, downloaded_bytes: 218e9, files_added: 412, session_count: 37, seconds_active: 12_300_000 },
+    portOpen: session.port_forwarding_enabled,
     nextId: torrents.length + 1,
     seed,
     speed: opts.speed ?? 1,

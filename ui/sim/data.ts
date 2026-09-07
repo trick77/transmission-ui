@@ -64,21 +64,22 @@ function trackerStat(key: string, tier: number, id: number, now: number, r: Rand
     announce: def.announce,
     host: new URL(def.announce).hostname,
     tier,
-    announceState: announced ? 1 : 0,
-    hasAnnounced: announced,
-    lastAnnounceSucceeded: announced && ok,
-    lastAnnounceResult: announced ? MOOD_RESULT[def.mood] : '',
+    announce_state: announced ? 1 : 0,
+    has_announced: announced,
+    last_announce_succeeded: announced && ok,
+    last_announce_result: announced ? MOOD_RESULT[def.mood] : '',
     // A failing host needs a failure older than DOWN_AFTER_S (10 min) before model.ts calls it down.
-    lastAnnounceTime: announced ? now - (ok ? r.int(20, 280) : r.int(700, 2400)) : 0,
-    lastAnnouncePeerCount: announced && ok ? r.int(20, 60) : 0,
-    nextAnnounceTime: announced ? now + r.int(30, 300) : 0,
-    hasScraped: announced,
-    lastScrapeSucceeded: announced && ok,
-    lastScrapeTime: announced ? now - r.int(60, 900) : 0,
-    seederCount: ok ? seeders : 0,
-    leecherCount: ok ? Math.round(seeders * r.range(0.05, 0.6)) : 0,
-    downloadCount: ok ? seeders * r.int(3, 40) : 0,
-    isBackup: false,
+    last_announce_time: announced ? now - (ok ? r.int(20, 280) : r.int(700, 2400)) : 0,
+    last_announce_peer_count: announced && ok ? r.int(20, 60) : 0,
+    next_announce_time: announced ? now + r.int(30, 300) : 0,
+    has_scraped: announced,
+    last_scrape_succeeded: announced && ok,
+    last_scrape_time: announced ? now - r.int(60, 900) : 0,
+    seeder_count: ok ? seeders : 0,
+    leecher_count: ok ? Math.round(seeders * r.range(0.05, 0.6)) : 0,
+    download_count: ok ? seeders * r.int(3, 40) : 0,
+    downloader_count: ok ? r.int(0, 400) : 0,
+    is_backup: false,
   }
 }
 
@@ -102,13 +103,13 @@ export function peerAddress(r: Rand): string {
 /** Transmission's peer flag letters, composed from what the peer is actually doing. */
 export function flagsOf(p: Peer): string {
   let s = ''
-  if (p.isDownloadingFrom) s += 'D'
-  else if (p.rateToClient > 0) s += 'd'
-  if (p.isUploadingTo) s += 'U'
-  else if (p.rateToPeer > 0) s += 'u'
-  if (p.isEncrypted) s += 'E'
-  if (p.isUTP) s += 'T'
-  if (p.isIncoming) s += 'I'
+  if (p.is_downloading_from) s += 'D'
+  else if (p.rate_to_client > 0) s += 'd'
+  if (p.is_uploading_to) s += 'U'
+  else if (p.rate_to_peer > 0) s += 'u'
+  if (p.is_encrypted) s += 'E'
+  if (p.is_utp) s += 'T'
+  if (p.is_incoming) s += 'I'
   else s += 'H'
   return s || 'K'
 }
@@ -117,21 +118,21 @@ export function makePeer(r: Rand, downloading: boolean): Peer {
   const progress = downloading ? r.range(0.15, 1) : r.range(0.02, 0.98)
   const p: Peer = {
     address: peerAddress(r),
-    clientName: r.pick(CLIENTS),
+    client_name: r.pick(CLIENTS),
     progress,
-    rateToClient: downloading && r.chance(0.55) ? r.int(40, 3400) * KB : 0,
-    rateToPeer: !downloading && r.chance(0.5) ? r.int(10, 900) * KB : 0,
-    flagStr: '',
-    isEncrypted: r.chance(0.8),
-    isIncoming: r.chance(0.35),
-    isDownloadingFrom: false,
-    isUploadingTo: false,
-    isUTP: r.chance(0.45),
+    rate_to_client: downloading && r.chance(0.55) ? r.int(40, 3400) * KB : 0,
+    rate_to_peer: !downloading && r.chance(0.5) ? r.int(10, 900) * KB : 0,
+    flag_str: '',
+    is_encrypted: r.chance(0.8),
+    is_incoming: r.chance(0.35),
+    is_downloading_from: false,
+    is_uploading_to: false,
+    is_utp: r.chance(0.45),
     port: r.int(1024, 65535),
   }
-  p.isDownloadingFrom = p.rateToClient > 0
-  p.isUploadingTo = p.rateToPeer > 0
-  p.flagStr = flagsOf(p)
+  p.is_downloading_from = p.rate_to_client > 0
+  p.is_uploading_to = p.rate_to_peer > 0
+  p.flag_str = flagsOf(p)
   return p
 }
 
@@ -157,9 +158,9 @@ interface Spec {
   files?: number
   comment?: string
   creator?: string
-  isPrivate?: boolean
+  is_private?: boolean
   error?: number
-  errorString?: string
+  error_string?: string
   meta?: number
   recheck?: number
   /** Average swarm copies per piece, for the availability bar. 0 = nobody has the rest. */
@@ -191,7 +192,7 @@ const SPECS: Spec[] = [
   },
   {
     name: 'tails-6.22-amd64.img', dir: D.iso, labels: ['linux'], status: ST.Seed,
-    size: 1.5 * GB, ratio: 3.08, up: 520 * KB, added: 64, trackers: ['gatekeeper'], isPrivate: true,
+    size: 1.5 * GB, ratio: 3.08, up: 520 * KB, added: 64, trackers: ['gatekeeper'], is_private: true,
     comment: 'Private tracker. Mind the ratio.', swarm: 3,
   },
   {
@@ -256,7 +257,7 @@ const SPECS: Spec[] = [
   {
     name: 'apollo-11-16mm-onboard-film-4k', dir: D.sonarr, labels: ['space', 'archive'], status: ST.Stopped,
     size: 9.12 * GB, pct: 0.57, ratio: 0.3, added: 34, idle: 9, error: 3,
-    errorString: 'No data found! Ensure your drives are connected or use "Set Location". To re-download, remove the torrent and re-add it.',
+    error_string: 'No data found! Ensure your drives are connected or use "Set Location". To re-download, remove the torrent and re-add it.',
     trackers: ['archiveorg'], files: 6, swarm: 1,
   },
   {
@@ -334,7 +335,7 @@ const SPECS: Spec[] = [
 function fileList(name: string, size: number, count: number, r: Rand): { files: TorrentFile[]; stats: FileStat[] } {
   const files: TorrentFile[] = []
   if (count <= 1) {
-    files.push({ name, length: size, bytesCompleted: 0 })
+    files.push({ name, length: size, bytes_completed: 0 })
   } else {
     // A handful of small companions plus the payload split evenly, so the Files tab has both.
     const extras = [
@@ -346,11 +347,11 @@ function fileList(name: string, size: number, count: number, r: Rand): { files: 
     const each = Math.floor((size - extras.reduce((a, e) => a + e.len, 0)) / bulk)
     for (let i = 0; i < bulk; i++) {
       const sub = bulk > 20 ? `part-${String(Math.floor(i / 10) + 1).padStart(2, '0')}/` : ''
-      files.push({ name: `${name}/${sub}${String(i + 1).padStart(3, '0')}.bin`, length: each, bytesCompleted: 0 })
+      files.push({ name: `${name}/${sub}${String(i + 1).padStart(3, '0')}.bin`, length: each, bytes_completed: 0 })
     }
-    for (const e of extras) files.push({ name: `${name}/${e.n}`, length: e.len, bytesCompleted: 0 })
+    for (const e of extras) files.push({ name: `${name}/${e.n}`, length: e.len, bytes_completed: 0 })
   }
-  const stats: FileStat[] = files.map(() => ({ wanted: true, priority: 0, bytesCompleted: 0 }))
+  const stats: FileStat[] = files.map(() => ({ wanted: true, priority: 0, bytes_completed: 0 }))
   if (files.length > 6 && r.chance(0.5)) { stats[files.length - 1].wanted = false; stats[0].priority = 1 }
   return { files, stats }
 }
@@ -365,16 +366,16 @@ function buildOne(spec: Spec, id: number, now: number, seed: number): TorrentDet
   const pct = isMagnet ? 0 : (spec.pct ?? 1)
   const size = isMagnet ? 0 : spec.size
   const haveValid = Math.round(size * pct)
-  const downloadedEver = Math.round(haveValid * r.range(1.0, 1.02))
+  const downloaded_ever = Math.round(haveValid * r.range(1.0, 1.02))
   const ratio = spec.ratio ?? 0
-  const uploadedEver = ratio < 0 ? 0 : Math.round(downloadedEver * ratio)
+  const uploaded_ever = ratio < 0 ? 0 : Math.round(downloaded_ever * ratio)
 
   const trackerKeys = spec.trackers ?? ['opentrackr']
   const announced = spec.status !== ST.Stopped
   const trackerStats = trackerKeys.map((k, i) => trackerStat(k, i, i, now, r, announced))
 
   const pieceSize = size > 40 * GB ? 16 * 1024 * 1024 : size > 4 * GB ? 4 * 1024 * 1024 : 2 * 1024 * 1024
-  const pieceCount = isMagnet ? 0 : Math.max(1, Math.ceil(size / pieceSize))
+  const piece_count = isMagnet ? 0 : Math.max(1, Math.ceil(size / pieceSize))
 
   const { files, stats } = fileList(name, size, spec.files ?? 1, r)
   distributeBytes(files, stats, haveValid)
@@ -393,98 +394,100 @@ function buildOne(spec: Spec, id: number, now: number, seed: number): TorrentDet
     name,
     status: spec.status as TorrentDetail['status'],
     error: spec.error ?? 0,
-    errorString: spec.errorString ?? '',
-    percentDone: pct,
-    sizeWhenDone: size,
-    totalSize: size,
-    leftUntilDone: size - haveValid,
+    error_string: spec.error_string ?? '',
+    sequential_download: false,
+    sequential_download_from_piece: 0,
+    percent_done: pct,
+    size_when_done: size,
+    total_size: size,
+    left_until_done: size - haveValid,
     // Seed the rates from the spec: state.ts reads these back as each torrent's base rate, and the
     // very first render already shows a moving list.
-    rateDownload: spec.status === ST.Download ? Math.round(spec.down ?? 0) : 0,
-    rateUpload: spec.status === ST.Download || spec.status === ST.Seed ? Math.round(spec.up ?? 0) : 0,
-    uploadRatio: ratio < 0 ? -1 : ratio,
+    rate_download: spec.status === ST.Download ? Math.round(spec.down ?? 0) : 0,
+    rate_upload: spec.status === ST.Download || spec.status === ST.Seed ? Math.round(spec.up ?? 0) : 0,
+    upload_ratio: ratio < 0 ? -1 : ratio,
     eta: -1,
-    peersConnected: peerCount,
-    peersSendingToUs: downloading ? Math.round(peerCount * r.range(0.3, 0.55)) : 0,
-    peersGettingFromUs: spec.status === ST.Seed ? Math.round(peerCount * r.range(0.4, 0.8)) : Math.round(peerCount * r.range(0, 0.2)),
+    peers_connected: peerCount,
+    peers_sending_to_us: downloading ? Math.round(peerCount * r.range(0.3, 0.55)) : 0,
+    peers_getting_from_us: spec.status === ST.Seed ? Math.round(peerCount * r.range(0.4, 0.8)) : Math.round(peerCount * r.range(0, 0.2)),
     labels: spec.labels,
-    downloadDir: spec.dir,
-    isFinished: false,
-    queuePosition: id,
-    addedDate: now - Math.round(spec.added * DAY),
-    activityDate: activity,
-    doneDate: pct >= 1 ? now - Math.round((spec.added * DAY) / 2) : 0,
-    recheckProgress: spec.recheck ?? 0,
-    metadataPercentComplete: spec.meta ?? 1,
-    trackerStats,
-    bandwidthPriority: 0,
-    hashString: hash,
-    magnetLink: magnetOf(hash, name, trackerStats),
+    download_dir: spec.dir,
+    is_finished: false,
+    queue_position: id,
+    added_date: now - Math.round(spec.added * DAY),
+    activity_date: activity,
+    done_date: pct >= 1 ? now - Math.round((spec.added * DAY) / 2) : 0,
+    recheck_progress: spec.recheck ?? 0,
+    metadata_percent_complete: spec.meta ?? 1,
+    tracker_stats: trackerStats,
+    bandwidth_priority: 0,
+    hash_string: hash,
+    magnet_link: magnetOf(hash, name, trackerStats),
 
-    torrentFile: `/config/torrents/${hash}.torrent`,
+    torrent_file: `/config/torrents/${hash}.torrent`,
     comment: spec.comment ?? '',
     creator: spec.creator ?? 'mktorrent 1.1',
-    dateCreated: now - Math.round((spec.added + r.int(1, 40)) * DAY),
-    isPrivate: spec.isPrivate ?? false,
-    pieceCount,
-    pieceSize,
+    date_created: now - Math.round((spec.added + r.int(1, 40)) * DAY),
+    is_private: spec.is_private ?? false,
+    piece_count,
+    piece_size: pieceSize,
     pieces: '',
     availability: [],
-    haveValid,
-    haveUnchecked: 0,
-    corruptEver: r.chance(0.3) ? r.int(1, 40) * MB : 0,
-    downloadedEver,
-    uploadedEver,
-    secondsDownloading: Math.round(spec.added * DAY * r.range(0.02, 0.3)),
-    secondsSeeding: pct >= 1 ? Math.round(spec.added * DAY * r.range(0.4, 0.95)) : 0,
-    peersFrom: { fromCache: 0, fromDht: 0, fromIncoming: 0, fromLpd: 0, fromLtep: 0, fromPex: 0, fromTracker: 0 },
+    have_valid: haveValid,
+    have_unchecked: 0,
+    corrupt_ever: r.chance(0.3) ? r.int(1, 40) * MB : 0,
+    downloaded_ever,
+    uploaded_ever,
+    seconds_downloading: Math.round(spec.added * DAY * r.range(0.02, 0.3)),
+    seconds_seeding: pct >= 1 ? Math.round(spec.added * DAY * r.range(0.4, 0.95)) : 0,
+    peers_from: { from_cache: 0, from_dht: 0, from_incoming: 0, from_lpd: 0, from_ltep: 0, from_pex: 0, from_tracker: 0 },
     // Anything already past the session ratio goal must be marked unlimited, or the seed-goal rule
     // in the tick stops it on the very first request.
-    seedRatioLimit: 2,
-    seedRatioMode: ratio >= 2 ? 2 : 0,
-    seedIdleLimit: 30,
-    seedIdleMode: 0,
-    honorsSessionLimits: true,
-    downloadLimit: 5000,
-    downloadLimited: false,
-    uploadLimit: 500,
-    uploadLimited: false,
-    'peer-limit': 50,
+    seed_ratio_limit: 2,
+    seed_ratio_mode: ratio >= 2 ? 2 : 0,
+    seed_idle_limit: 30,
+    seed_idle_mode: 0,
+    honors_session_limits: true,
+    download_limit: 5000,
+    download_limited: false,
+    upload_limit: 500,
+    upload_limited: false,
+    'peer_limit': 50,
     files,
-    fileStats: stats,
+    file_stats: stats,
     peers,
-    trackerList: trackerStats.map(ts => ts.announce).join('\n'),
-    webseedsSendingToUs: 0,
+    tracker_list: trackerStats.map(ts => ts.announce).join('\n'),
+    webseeds_sending_to_us: 0,
   }
   countPeersFrom(t)
   // fileList may mark a file unwanted, and splitting a size across files loses a few bytes to
   // rounding. Take the totals from the file table so the boot state already agrees with the Files
   // tab, instead of shifting the moment the first torrent-set arrives.
   if (!isMagnet) {
-    t.sizeWhenDone = wantedSize(t)
-    t.haveValid = Math.min(t.haveValid, t.sizeWhenDone)
-    distributeBytes(t.files, t.fileStats, t.haveValid)
+    t.size_when_done = wantedSize(t)
+    t.have_valid = Math.min(t.have_valid, t.size_when_done)
+    distributeBytes(t.files, t.file_stats, t.have_valid)
     reconcile(t)
   }
   refreshPieceMap(t, spec.swarm ?? 3)
   return t
 }
 
-/** peersFrom has to add up to peersConnected or the inspector's swarm breakdown looks broken. */
+/** peers_from has to add up to peers_connected or the inspector's swarm breakdown looks broken. */
 export function countPeersFrom(t: TorrentDetail): void {
-  const r = makeRand(seedOf(t.hashString) ^ 0x2545f491)
-  const n = t.peersConnected
+  const r = makeRand(seedOf(t.hash_string) ^ 0x2545f491)
+  const n = t.peers_connected
   const shares = [0.42, 0.24, 0.14, 0.1, 0.06, 0.04]
-  const keys: (keyof TorrentDetail['peersFrom'])[] = ['fromTracker', 'fromDht', 'fromPex', 'fromIncoming', 'fromLtep', 'fromCache']
+  const keys: (keyof TorrentDetail['peers_from'])[] = ['from_tracker', 'from_dht', 'from_pex', 'from_incoming', 'from_ltep', 'from_cache']
   let left = n
-  const from = { fromCache: 0, fromDht: 0, fromIncoming: 0, fromLpd: 0, fromLtep: 0, fromPex: 0, fromTracker: 0 }
+  const from = { from_cache: 0, from_dht: 0, from_incoming: 0, from_lpd: 0, from_ltep: 0, from_pex: 0, from_tracker: 0 }
   keys.forEach((k, i) => {
     const take = i === keys.length - 1 ? left : Math.min(left, Math.round(n * shares[i] * r.range(0.7, 1.3)))
     from[k] = Math.max(0, take)
     left -= from[k]
   })
-  if (left > 0) from.fromTracker += left
-  t.peersFrom = from
+  if (left > 0) from.from_tracker += left
+  t.peers_from = from
 }
 
 export interface DatasetOptions { seed?: number; count?: number; now?: number }
@@ -512,53 +515,54 @@ export function buildSession(torrents: TorrentDetail[]): Session {
   const downloading = torrents.filter(t => t.status === ST.Download).length
   const seeding = torrents.filter(t => t.status === ST.Seed).length
   return {
-    version: '4.0.5 (a6fe2a64aa)',
-    'rpc-version': 17,
-    'download-dir': BASE,
-    'alt-speed-enabled': false,
-    'alt-speed-down': 2000,
-    'alt-speed-up': 250,
-    'alt-speed-time-enabled': true,
-    'alt-speed-time-begin': 480,
-    'alt-speed-time-end': 1380,
-    'alt-speed-time-day': 62,
-    'speed-limit-down': 30000,
-    'speed-limit-down-enabled': true,
-    'speed-limit-up': 2500,
-    'speed-limit-up-enabled': true,
-    'incomplete-dir': `${BASE}/.incomplete`,
-    'incomplete-dir-enabled': true,
-    'rename-partial-files': true,
-    'start-added-torrents': true,
-    'trash-original-torrent-files': false,
-    'script-torrent-done-enabled': false,
-    'script-torrent-done-filename': '',
-    'script-torrent-done-seeding-enabled': false,
-    'script-torrent-done-seeding-filename': '',
-    'cache-size-mb': 16,
-    seedRatioLimit: 2,
-    seedRatioLimited: true,
-    'idle-seeding-limit': 30,
-    'idle-seeding-limit-enabled': false,
-    'download-queue-size': Math.max(1, downloading),
-    'download-queue-enabled': true,
-    'seed-queue-size': Math.max(1, seeding),
-    'seed-queue-enabled': true,
-    'queue-stalled-minutes': 30,
-    'queue-stalled-enabled': true,
-    'peer-port': 51413,
-    'peer-port-random-on-start': false,
-    'port-forwarding-enabled': true,
-    'dht-enabled': true,
-    'pex-enabled': true,
-    'lpd-enabled': false,
-    'utp-enabled': true,
-    'peer-limit-per-torrent': 50,
-    'peer-limit-global': 240,
+    version: '4.1.3 (a6fe2a64aa)',
+    rpc_version_semver: '6.0.1',
+    download_dir: BASE,
+    'alt_speed_enabled': false,
+    'alt_speed_down': 2000,
+    'alt_speed_up': 250,
+    'alt_speed_time_enabled': true,
+    'alt_speed_time_begin': 480,
+    'alt_speed_time_end': 1380,
+    'alt_speed_time_day': 62,
+    'speed_limit_down': 30000,
+    'speed_limit_down_enabled': true,
+    'speed_limit_up': 2500,
+    'speed_limit_up_enabled': true,
+    'incomplete_dir': `${BASE}/.incomplete`,
+    'incomplete_dir_enabled': true,
+    'rename_partial_files': true,
+    'start_added_torrents': true,
+    'trash_original_torrent_files': false,
+    'script_torrent_done_enabled': false,
+    'script_torrent_done_filename': '',
+    'script_torrent_done_seeding_enabled': false,
+    'script_torrent_done_seeding_filename': '',
+    'cache_size_mib': 16,
+    seed_ratio_limit: 2,
+    seed_ratio_limited: true,
+    'idle_seeding_limit': 30,
+    'idle_seeding_limit_enabled': false,
+    'download_queue_size': Math.max(1, downloading),
+    'download_queue_enabled': true,
+    'seed_queue_size': Math.max(1, seeding),
+    'seed_queue_enabled': true,
+    'queue_stalled_minutes': 30,
+    'queue_stalled_enabled': true,
+    'peer_port': 51413,
+    'peer_port_random_on_start': false,
+    'port_forwarding_enabled': true,
+    'dht_enabled': true,
+    'pex_enabled': true,
+    'lpd_enabled': false,
+    preferred_transports: ['tcp', 'utp'],
+    sequential_download: false,
+    'peer_limit_per_torrent': 50,
+    'peer_limit_global': 240,
     encryption: 'preferred',
-    'blocklist-enabled': true,
-    'blocklist-url': 'https://example.org/level1.gz',
-    'blocklist-size': 312904,
+    'blocklist_enabled': true,
+    'blocklist_url': 'https://example.org/level1.gz',
+    'blocklist_size': 312904,
   }
 }
 
@@ -567,9 +571,9 @@ export function buildSession(torrents: TorrentDetail[]): Session {
  * frozen world (TM_SIM_SPEED=0) or a multiplied dataset would otherwise open above the limit.
  */
 export function clampSeededRates(torrents: TorrentDetail[], session: Session): void {
-  const caps: [number, 'rateDownload' | 'rateUpload'][] = [
-    [session['speed-limit-down-enabled'] ? session['speed-limit-down'] * 1000 : Infinity, 'rateDownload'],
-    [session['speed-limit-up-enabled'] ? session['speed-limit-up'] * 1000 : Infinity, 'rateUpload'],
+  const caps: [number, 'rate_download' | 'rate_upload'][] = [
+    [session.speed_limit_down_enabled ? session.speed_limit_down * 1000 : Infinity, 'rate_download'],
+    [session.speed_limit_up_enabled ? session.speed_limit_up * 1000 : Infinity, 'rate_upload'],
   ]
   for (const [cap, key] of caps) {
     if (!Number.isFinite(cap)) continue
@@ -596,24 +600,24 @@ export const MAGNET_REVEALS: { name: string; size: number; files: number; commen
 
 /** Fill in everything a torrent only learns once its metadata has arrived. */
 export function materializeMetadata(t: TorrentDetail, name: string, size: number, fileCount: number, comment: string, swarm: number): void {
-  const r = makeRand(seedOf(t.hashString) ^ 0x9e3779b9)
+  const r = makeRand(seedOf(t.hash_string) ^ 0x9e3779b9)
   t.name = name
   t.comment = comment
-  t.sizeWhenDone = size
-  t.totalSize = size
-  t.pieceSize = size > 40 * GB ? 16 * 1024 * 1024 : size > 4 * GB ? 4 * 1024 * 1024 : 2 * 1024 * 1024
-  t.pieceCount = Math.max(1, Math.ceil(size / t.pieceSize))
+  t.size_when_done = size
+  t.total_size = size
+  t.piece_size = size > 40 * GB ? 16 * 1024 * 1024 : size > 4 * GB ? 4 * 1024 * 1024 : 2 * 1024 * 1024
+  t.piece_count = Math.max(1, Math.ceil(size / t.piece_size))
   const built = fileList(name, size, fileCount, r)
   t.files = built.files
-  t.fileStats = built.stats
-  t.haveValid = 0
-  t.haveUnchecked = 0
-  t.leftUntilDone = size
-  t.percentDone = 0
-  t.metadataPercentComplete = 1
-  t.magnetLink = magnetOf(t.hashString, name, t.trackerStats)
-  t.trackerList = t.trackerStats.map(ts => ts.announce).join('\n')
-  distributeBytes(t.files, t.fileStats, 0)
+  t.file_stats = built.stats
+  t.have_valid = 0
+  t.have_unchecked = 0
+  t.left_until_done = size
+  t.percent_done = 0
+  t.metadata_percent_complete = 1
+  t.magnet_link = magnetOf(t.hash_string, name, t.tracker_stats)
+  t.tracker_list = t.tracker_stats.map(ts => ts.announce).join('\n')
+  distributeBytes(t.files, t.file_stats, 0)
   refreshPieceMap(t, swarm)
 }
 
@@ -647,12 +651,12 @@ export function newTorrent(id: number, name: string, hash: string, dir: string, 
   }
   const t = buildOne(spec, id, now, 1)
   // buildOne derives a hash from the name; an added torrent keeps the hash it arrived with.
-  t.hashString = hash
-  t.magnetLink = magnetOf(hash, t.name, t.trackerStats)
-  t.torrentFile = `/config/torrents/${hash}.torrent`
-  t.addedDate = now
-  t.activityDate = now
-  t.bandwidthPriority = opts.priority ?? 0
+  t.hash_string = hash
+  t.magnet_link = magnetOf(hash, t.name, t.tracker_stats)
+  t.torrent_file = `/config/torrents/${hash}.torrent`
+  t.added_date = now
+  t.activity_date = now
+  t.bandwidth_priority = opts.priority ?? 0
   return t
 }
 

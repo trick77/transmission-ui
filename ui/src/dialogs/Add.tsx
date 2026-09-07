@@ -23,13 +23,12 @@ function magnetName(url: string): string {
 export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => void; initialMagnet?: string; initialFiles?: File[] }) {
   const session = useStore(s => s.session)
   const torrents = useStore(s => s.torrents)
-  const base = session?.['download-dir'] ?? ''
-  const rpcVersion = session?.['rpc-version'] ?? 17
+  const base = session?.download_dir ?? ''
   const [sources, setSources] = useState<Src[]>([])
   const [text, setText] = useState(initialMagnet ?? '')
   const [dir, setDir] = useState(base)
   const [labels, setLabels] = useState<string[]>([])
-  const [start, setStart] = useState(session?.['start-added-torrents'] ?? true)
+  const [start, setStart] = useState(session?.start_added_torrents ?? true)
   const [prio, setPrio] = useState<'-1' | '0' | '1'>('0')
   const [seq, setSeq] = useState(false)
   const [unwanted, setUnwanted] = useState<Set<number>>(new Set())
@@ -38,7 +37,7 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
   const [drag, setDrag] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (!dir && base) setDir(base) }, [base, dir])
-  useEffect(() => { let live = true; if (!dir) return; api.freeSpace(dir).then(r => { if (live) setFree(r['size-bytes']) }).catch(() => setFree(null)); return () => { live = false } }, [dir])
+  useEffect(() => { let live = true; if (!dir) return; api.freeSpace(dir).then(r => { if (live) setFree(r.size_bytes) }).catch(() => setFree(null)); return () => { live = false } }, [dir])
   useEffect(() => { if (initialFiles?.length) void addFiles(initialFiles) }, [initialFiles])
 
   async function addFiles(files: File[] | FileList) {
@@ -71,10 +70,10 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
     setBusy(true)
     let added = 0, dup = 0
     for (const s of srcs) {
-      const args: api.AddArgs = { 'download-dir': dir, paused: !start, labels, bandwidthPriority: Number(prio) as -1 | 0 | 1 }
-      if (s.kind === 'file') { args.metainfo = s.b64; if (srcs.length === 1 && unwanted.size) args['files-unwanted'] = [...unwanted] } else args.filename = s.url
-      if (seq && rpcVersion >= 18) args.sequential_download = true
-      try { const r = await api.addTorrent(args); if (r['torrent-duplicate']) dup++; else added++ } catch (e) { toast(`Add failed: ${e instanceof Error ? e.message : e}`) }
+      const args: api.AddArgs = { download_dir: dir, paused: !start, labels, bandwidth_priority: Number(prio) as -1 | 0 | 1 }
+      if (s.kind === 'file') { args.metainfo = s.b64; if (srcs.length === 1 && unwanted.size) args.files_unwanted = [...unwanted] } else args.filename = s.url
+      if (seq) args.sequential_download = true
+      try { const r = await api.addTorrent(args); if (r.torrent_duplicate) dup++; else added++ } catch (e) { toast(`Add failed: ${e instanceof Error ? e.message : e}`) }
     }
     setBusy(false)
     refreshNow()
@@ -82,11 +81,11 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
     if (added || dup) onClose()
   }
 
-  const q = get().session?.['download-dir']
+  const q = get().session?.download_dir
   return (
     <Modal title="Add torrent" width={680} onClose={onClose}
       footer={<>
-        <span className="hint">{sources.length ? `${sources.length} to add` : 'Drop files, paste a magnet link, or browse'}{session?.['download-queue-enabled'] ? ' · added to the download queue' : ''}</span>
+        <span className="hint">{sources.length ? `${sources.length} to add` : 'Drop files, paste a magnet link, or browse'}{session?.download_queue_enabled ? ' · added to the download queue' : ''}</span>
         <div className="spacer" />
         <button className="btn ghost" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={busy || (!sources.length && !pendingText)} onClick={() => void submit()}><Icon name="plus" />{busy ? 'Adding…' : sources.length > 1 ? `Add ${sources.length} torrents` : 'Add torrent'}</button>
@@ -150,7 +149,7 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
         <div className="opt"><div className="txt"><div className="l">Start when added</div></div><div className="ctl"><Toggle on={start} onChange={setStart} /></div></div>
         <div className="opt"><div className="txt"><div className="l">Bandwidth priority</div></div><div className="ctl"><Seg value={prio} options={[{ v: '-1', l: 'Low' }, { v: '0', l: 'Normal' }, { v: '1', l: 'High' }]} onChange={setPrio} /></div></div>
-        {rpcVersion >= 18 ? <div className="opt"><div className="txt"><div className="l">Sequential download</div><div className="d">Pieces in order, for previewing</div></div><div className="ctl"><Toggle on={seq} onChange={setSeq} /></div></div> : null}
+        <div className="opt"><div className="txt"><div className="l">Sequential download</div><div className="d">Pieces in order, for previewing</div></div><div className="ctl"><Toggle on={seq} onChange={setSeq} /></div></div>
       </div>
     </Modal>
   )

@@ -25,10 +25,10 @@ export function Header() {
   const close = useCallback(() => setPop(false), [])
   const popRef = useDismiss(close, pop)
 
-  const [dn, du] = rateParts(stats?.downloadSpeed ?? 0)
-  const [un, uu] = rateParts(stats?.uploadSpeed ?? 0)
-  const cur = stats?.['current-stats'], all = stats?.['cumulative-stats']
-  const alt = session?.['alt-speed-enabled'] ?? false
+  const [dn, du] = rateParts(stats?.download_speed ?? 0)
+  const [un, uu] = rateParts(stats?.upload_speed ?? 0)
+  const cur = stats?.current_stats, all = stats?.cumulative_stats
+  const alt = session?.alt_speed_enabled ?? false
 
   return (
     <header className="header">
@@ -41,11 +41,11 @@ export function Header() {
       <div className="spacer" />
       <div className="speeds" title="Session totals · click for statistics" onClick={e => { if (!(e.target as HTMLElement).closest('#turtle, .pop')) setPop(p => !p) }}>
         <Sparkline history={history} />
-        <span className="s dl"><span className="top"><Icon name="down" className="arrow" /><span className="num">{dn}</span><span className="faint" style={{ fontSize: 11 }}>{du}</span></span><span className="tot">{cur ? bytes(cur.downloadedBytes) : '—'} this session</span></span>
-        <span className="s ul"><span className="top"><Icon name="up" className="arrow" /><span className="num">{un}</span><span className="faint" style={{ fontSize: 11 }}>{uu}</span></span><span className="tot">{cur ? bytes(cur.uploadedBytes) : '—'} this session</span></span>
-        {alt && session ? <span className="lim">alt {session['alt-speed-down']}/{session['alt-speed-up']}</span> : null}
+        <span className="s dl"><span className="top"><Icon name="down" className="arrow" /><span className="num">{dn}</span><span className="faint" style={{ fontSize: 11 }}>{du}</span></span><span className="tot">{cur ? bytes(cur.downloaded_bytes) : '—'} this session</span></span>
+        <span className="s ul"><span className="top"><Icon name="up" className="arrow" /><span className="num">{un}</span><span className="faint" style={{ fontSize: 11 }}>{uu}</span></span><span className="tot">{cur ? bytes(cur.uploaded_bytes) : '—'} this session</span></span>
+        {alt && session ? <span className="lim">alt {session.alt_speed_down}/{session.alt_speed_up}</span> : null}
         <button id="turtle" className={'turtle' + (alt ? ' on' : '')} title={alt ? 'Alternative speed limits on' : 'Alternative speed limits off'}
-          onClick={() => void run('Alt speed', () => api.setSession({ 'alt-speed-enabled': !alt }).then(refreshSession))}>
+          onClick={() => void run('Alt speed', () => api.setSession({ 'alt_speed_enabled': !alt }).then(refreshSession))}>
           <Icon name="turtle" />
         </button>
         {pop ? (
@@ -54,15 +54,15 @@ export function Header() {
             <table>
               <thead><tr><th></th><th>This session</th><th>All time</th></tr></thead>
               <tbody>
-                <tr><td>Downloaded</td><td className="num">{cur ? bytes(cur.downloadedBytes) : '—'}</td><td className="num">{all ? bytes(all.downloadedBytes) : '—'}</td></tr>
-                <tr><td>Uploaded</td><td className="num">{cur ? bytes(cur.uploadedBytes) : '—'}</td><td className="num">{all ? bytes(all.uploadedBytes) : '—'}</td></tr>
-                <tr><td>Ratio</td><td className="num">{cur && cur.downloadedBytes ? (cur.uploadedBytes / cur.downloadedBytes).toFixed(2) : '—'}</td><td className="num">{all && all.downloadedBytes ? (all.uploadedBytes / all.downloadedBytes).toFixed(2) : '—'}</td></tr>
-                <tr><td>Files added</td><td className="num">{cur?.filesAdded ?? '—'}</td><td className="num">{all?.filesAdded ?? '—'}</td></tr>
-                <tr><td>Running</td><td className="num">{cur ? duration(cur.secondsActive) : '—'}</td><td className="num">{all ? duration(all.secondsActive) : '—'}</td></tr>
-                <tr><td>Sessions</td><td className="num">—</td><td className="num">{all?.sessionCount ?? '—'}</td></tr>
+                <tr><td>Downloaded</td><td className="num">{cur ? bytes(cur.downloaded_bytes) : '—'}</td><td className="num">{all ? bytes(all.downloaded_bytes) : '—'}</td></tr>
+                <tr><td>Uploaded</td><td className="num">{cur ? bytes(cur.uploaded_bytes) : '—'}</td><td className="num">{all ? bytes(all.uploaded_bytes) : '—'}</td></tr>
+                <tr><td>Ratio</td><td className="num">{cur && cur.downloaded_bytes ? (cur.uploaded_bytes / cur.downloaded_bytes).toFixed(2) : '—'}</td><td className="num">{all && all.downloaded_bytes ? (all.uploaded_bytes / all.downloaded_bytes).toFixed(2) : '—'}</td></tr>
+                <tr><td>Files added</td><td className="num">{cur?.files_added ?? '—'}</td><td className="num">{all?.files_added ?? '—'}</td></tr>
+                <tr><td>Running</td><td className="num">{cur ? duration(cur.seconds_active) : '—'}</td><td className="num">{all ? duration(all.seconds_active) : '—'}</td></tr>
+                <tr><td>Sessions</td><td className="num">—</td><td className="num">{all?.session_count ?? '—'}</td></tr>
               </tbody>
             </table>
-            <div className="foot">transmission-daemon {session?.version ?? '?'} · rpc {session?.['rpc-version'] ?? '?'} · port {session?.['peer-port'] ?? '?'}</div>
+            <div className="foot">transmission-daemon {session?.version ?? '?'} · rpc {session?.rpc_version_semver ?? '?'} · port {session?.peer_port ?? '?'}</div>
           </div>
         ) : null}
       </div>

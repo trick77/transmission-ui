@@ -383,7 +383,7 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
           <tr><td>Running</td><td class="num">6d 14h</td><td class="num">142d 3h</td></tr>
           <tr><td>Sessions</td><td class="num">—</td><td class="num">37</td></tr>
         </table>
-        <div class="foot">transmission-daemon 4.1.0 · DHT 127 nodes · port 51413 open</div>
+        <div class="foot">transmission-daemon 4.1.3 · rpc 6.0.1 · DHT 127 nodes · port 51413 open</div>
       </div>
     </div>
     <button class="btn ghost icon" title="Preferences"><svg class="i"><use href="#i-gear"/></svg></button>
@@ -644,6 +644,7 @@ function toolbarMenu(anchor){
         <div class="opt"><div class="txt"><div class="l">Limit upload</div></div><div class="ctl"><div class="input mono" style="width:110px;height:28px"><input value="500"><span class="unit">kB/s</span></div><span class="toggle"></span></div></div>
         <div class="opt"><div class="txt"><div class="l">Bandwidth priority</div></div><div class="ctl"><div class="seg"><button>Low</button><button class="on">Normal</button><button>High</button></div></div></div>
         <div class="opt"><div class="txt"><div class="l">Peer limit</div></div><div class="ctl"><div class="input mono" style="width:80px;height:28px"><input value="50"></div></div></div>
+        <div class="opt"><div class="txt"><div class="l">Sequential download</div><div class="d">Pieces in order, for previewing</div></div><div class="ctl"><span class="toggle"></span></div></div>
       </div>
 
       <div class="insp-body tree" data-pane="files" hidden>
@@ -677,7 +678,7 @@ function toolbarMenu(anchor){
       <div class="insp-body" data-pane="trackers" hidden>
         <div class="tracker">
           <div class="h"><span class="tier">Tier 1</span><span>bttracker.debian.org:6969</span><span class="spacer"></span><span class="chip seed"><svg class="i" style="width:12px;height:12px"><use href="#i-check"/></svg>Working</span></div>
-          <dl class="kv"><dt>Last announce</dt><dd class="num">38 s ago · <span class="ok">got 50 peers</span></dd><dt>Next announce</dt><dd class="num">in 4m 22s</dd><dt>Last scrape</dt><dd class="num">2m ago · 1,204 seeders · 311 leechers · 8,932 downloads</dd></dl>
+          <dl class="kv"><dt>Last announce</dt><dd class="num">38 s ago · <span class="ok">got 50 peers</span></dd><dt>Next announce</dt><dd class="num">in 4m 22s</dd><dt>Last scrape</dt><dd class="num">2m ago · 1,204 seeders · 311 leechers · 47 downloading · 8,932 downloads</dd></dl>
         </div>
         <div class="tracker">
           <div class="h"><span class="tier">Tier 2</span><span>udp://tracker.opentrackr.org:1337</span><span class="spacer"></span><span class="chip wait"><span class="dot"></span>Timed out</span></div>

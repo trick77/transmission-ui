@@ -16,11 +16,11 @@ export const Row = memo(function Row({ t, selected, focused, base, onMore }: { t
   const s = statusView(t)
   const { seeds, leechers } = swarmOf(t)
   const swarm = seeds + leechers
-  const sub = t.error !== 0 ? <span style={{ color: 'var(--err)' }}>{t.errorString || 'Error'}</span>
-    : t.status === Status.Check ? `Verifying local data · ${percent(t.recheckProgress)}`
-    : t.peersConnected === 0 ? (swarm ? `No peers · ${compact(swarm)} in swarm` : 'No peers')
-    : `${t.peersSendingToUs + t.peersGettingFromUs} of ${t.peersConnected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ''}`
-  const dir = relDir(t.downloadDir, base)
+  const sub = t.error !== 0 ? <span style={{ color: 'var(--err)' }}>{t.error_string || 'Error'}</span>
+    : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
+    : t.peers_connected === 0 ? (swarm ? `No peers · ${compact(swarm)} in swarm` : 'No peers')
+    : `${t.peers_sending_to_us + t.peers_getting_from_us} of ${t.peers_connected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ''}`
+  const dir = relDir(t.download_dir, base)
   const stopped = t.status === Status.Stopped
   return (
     <div className={'row' + (selected ? ' sel' : '') + (focused ? ' focus' : '')} data-id={t.id}>
@@ -42,14 +42,14 @@ export const Row = memo(function Row({ t, selected, focused, base, onMore }: { t
           {dir ? <><span className="sep" /><span>{dir}/</span></> : null}
         </div>
       </div>
-      <span className="num r muted">{bytes(t.sizeWhenDone)}</span>
+      <span className="num r muted">{bytes(t.size_when_done)}</span>
       <div className="prog">
-        <div className={'bar ' + s.bar} style={{ ['--p' as string]: percent(t.percentDone, 1) }}><i /></div>
-        <span className="num"><span>{percent(t.percentDone)}</span>{seeds ? <span className="av" title="Seeds in swarm">{compact(seeds)} seeds</span> : null}</span>
+        <div className={'bar ' + s.bar} style={{ ['--p' as string]: percent(t.percent_done, 1) }}><i /></div>
+        <span className="num"><span>{percent(t.percent_done)}</span>{seeds ? <span className="av" title="Seeds in swarm">{compact(seeds)} seeds</span> : null}</span>
       </div>
-      <Speed bps={t.rateDownload} dir="dl" />
-      <Speed bps={t.rateUpload} dir="ul" />
-      <span className={'num r' + (ratioValue(t.uploadRatio) >= 1 ? '' : ' muted')}>{ratio(t.uploadRatio)}</span>
+      <Speed bps={t.rate_download} dir="dl" />
+      <Speed bps={t.rate_upload} dir="ul" />
+      <span className={'num r' + (ratioValue(t.upload_ratio) >= 1 ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
       <span className="num r muted">{eta(t.eta, t.status === Status.Seed || t.status === Status.SeedWait)}</span>
     </div>
   )

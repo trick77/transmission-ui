@@ -25,8 +25,8 @@ export function torrentMenu(ids: number[]): MenuItem[] {
     { icon: 'gear', label: 'Limits & priority…', onClick: () => set({ dialog: { kind: 'limits', ids } }) },
     { sep: true, label: '' },
     ...(one ? [
-      { icon: 'magnet' as const, label: 'Copy magnet link', k: '⌘C', onClick: () => copyText(one.magnetLink, 'Magnet link copied') },
-      { icon: 'link' as const, label: 'Copy hash', onClick: () => copyText(one.hashString, 'Hash copied') },
+      { icon: 'magnet' as const, label: 'Copy magnet link', k: '⌘C', onClick: () => copyText(one.magnet_link, 'Magnet link copied') },
+      { icon: 'link' as const, label: 'Copy hash', onClick: () => copyText(one.hash_string, 'Hash copied') },
       { sep: true, label: '' },
     ] : []),
     { icon: 'x', label: ids.length > 1 ? `Remove ${ids.length} from list` : 'Remove from list', k: '⌫', danger: true, onClick: () => set({ dialog: { kind: 'confirm-remove', ids, deleteData: false } }) },

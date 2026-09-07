@@ -1,13 +1,46 @@
-node_modules/
+# Node / frontend
+# No trailing slash: also ignore a stray `node_modules` symlink/file, not just the
+# directory (a tracked self-referential symlink once broke fresh `npm` installs).
+node_modules
 ui/dist/
+*.tsbuildinfo
+
+# Coverage reports
+/coverage/
+/ui/coverage/
+
+# Test output
 ui/test-results/
 ui/playwright-report/
-.env.local
-docs/plans/
+
+# macOS
+.DS_Store
+
+# Editors / IDEs
+.vscode/
+.idea/
+.zed/
+
+# Local agent / browser tooling (machine-specific)
+.claude/
+.codex/
+.worktrees/
+.superpowers/
 .playwright-mcp/
+
+# Local deliverables
+docs/plans/
+
+# Local data & secrets
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+data/
+logs/
+
+# Throwaway dev daemon state
 hack/state/
 hack/downloads/
 hack/watch/
-.DS_Store
-coverage/
-.env

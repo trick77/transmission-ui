@@ -10,9 +10,9 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - `compose.yaml` = production stack (Containerfile image, `.env` from `.env.example`). `compose.dev.yaml` = throwaway local daemon.
 
 ## Daemon
-- Target = **4.0.5 (rpc-version 17)**. 4.0.6 / 4.1.0 / 4.1.1 got blacklisted by trackers; never suggest upgrading without the user's say-so. Features needing rpc ≥ 18 (sequential download) hide themselves.
+- Target = **4.1.3** (`rpc_version` 19, `rpc_version_semver` 6.0.1). JSON-RPC 2.0 envelope, snake_case keys, no 4.0.x compatibility. A version that trackers blacklist shows as "client rejected" in the sidebar within one announce cycle.
 - Real daemon: Docker on the user's server, RPC user/pass, direct `:9091`. Never point tests, fixtures or compose at it.
-- Local: `docker compose -f compose.dev.yaml up -d` → `lscr.io/linuxserver/transmission:4.0.5-r3-ls240` on `:9091`, creds `dev:devpass`, state in `hack/state`. Seed with `hack/fixtures.sh`.
+- Local: `docker compose -f compose.dev.yaml up -d` → `lscr.io/linuxserver/transmission:4.1.3-r0-ls360` on `:9091`, creds `dev:devpass`, state in `hack/state`. Seed with `hack/fixtures.sh`.
 
 ## Dev / test / ship
 - `make dev` or `cd ui && npm run dev` → `:5173`, proxies `/transmission/rpc`. Target/auth from `ui/.env.local` (gitignored; see `ui/.env.example`); default = local daemon.
@@ -24,9 +24,9 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - Ship: `npm run build` → rsync `ui/dist` to the server → mount at `/web`, `TRANSMISSION_WEB_HOME=/web`, restart. Rollback = unset the var. Or `docker compose up -d --build` with `compose.yaml` for the self-contained image.
 
 ## Conventions
-- All RPC calls go through `ui/src/rpc/methods.ts`; field names are the daemon's (camelCase torrent fields, kebab session keys).
+- All RPC calls go through `ui/src/rpc/methods.ts`; method and field names are the daemon's, snake_case throughout (rpc 18+). Take spellings from the upstream `docs/rpc-spec.md`, never from memory.
 - Derived views (filters, sort, folders, tracker health) live in `ui/src/lib/model.ts`, mirrored from `design/src/rows.html`.
 - Bulk actions = one RPC with an id array. Remove vs remove+delete are always two separate, differently worded actions.
 - Colour rules: accent only for active download + controls, red only for errors, everything else neutral.
 - Node ≥ 22 ships a fake `localStorage` global: `ui/src/test-setup.ts` replaces it; don't remove that.
-- `compose.yaml` / `Containerfile` naming; git default branch `master`; no remote yet.
+- `compose.yaml` / `Containerfile` naming; default branch `master`; remote `trick77/transmission-ui` — CI on PRs, image + release on master push.

@@ -10,7 +10,7 @@ export function Sidebar() {
   const filter = useStore(s => s.filter)
   const session = useStore(s => s.session)
   const freeSpace = useStore(s => s.freeSpace)
-  const base = session?.['download-dir'] ?? ''
+  const base = session?.download_dir ?? ''
   const folders = folderTree(torrents, base)
   const labels = labelCounts(torrents)
   const trackers = trackerHealth(torrents)
@@ -51,11 +51,11 @@ export function Sidebar() {
         <div className="side-h">Disk</div>
         {disks.map(d => {
           const total = d.total_size ?? 0
-          const used = total ? 1 - d['size-bytes'] / total : 0
+          const used = total ? 1 - d.size_bytes / total : 0
           return (
             <div key={d.path} className="disk" title={d.path}>
-              <div className="p"><span>{relDir(d.path, base) || d.path.split('/').filter(Boolean).pop() || d.path}</span><b>{bytes(d['size-bytes'])} free</b></div>
-              <div className={'bar' + (total && d['size-bytes'] / total < 0.1 ? ' hot' : '')} style={{ ['--p' as string]: `${Math.round(used * 100)}%` }}><i /></div>
+              <div className="p"><span>{relDir(d.path, base) || d.path.split('/').filter(Boolean).pop() || d.path}</span><b>{bytes(d.size_bytes)} free</b></div>
+              <div className={'bar' + (total && d.size_bytes / total < 0.1 ? ' hot' : '')} style={{ ['--p' as string]: `${Math.round(used * 100)}%` }}><i /></div>
             </div>
           )
         })}
