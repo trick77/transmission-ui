@@ -43,6 +43,7 @@ func (s *Server) Handler() http.Handler {
 	if s.cfg.AuthMode == config.AuthModeForm {
 		mux.HandleFunc("GET /login", s.handleLoginPage)
 		mux.HandleFunc("POST /login", s.handleLoginSubmit)
+		mux.Handle("GET /login-assets/", loginAssetHandler())
 	}
 	mux.Handle("POST /transmission/rpc", s.requireAuth(s.rpc))
 	// Without this, a GET on the RPC path falls through to the SPA handler and

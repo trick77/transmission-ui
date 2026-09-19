@@ -5,47 +5,94 @@ package httpapi
 
 import (
 	"crypto/subtle"
+	"embed"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"time"
 
 	"github.com/trick77/transmission-ui/backend/internal/auth"
 )
 
+// The page is served before any bundle loads, so it cannot use the hashed asset
+// names Vite emits. Its background and fonts are embedded here instead and
+// served from /login-assets/, which keeps the page self-contained.
+//
+//go:embed assets
+var loginAssets embed.FS
+
 // loginPage is served on GET /login and re-served with an error after a failed
-// POST. Self-contained: no bundle, no fonts, nothing to fetch, so it renders
-// even when the app's assets do not.
+// POST. Tokens are copied from ui/src/styles/app.css so the page reads as part
+// of the same app: warm editorial dark, terracotta accent, the same fonts.
 var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · transmission-ui</title>
 <style>
-  :root { color-scheme: dark; --bg:#14161a; --surface:#1b1e24; --border:#2a2f38;
-          --text:#e6e8ec; --muted:#9aa3b2; --accent:#4a9eff; --danger:#ff6b6b; }
-  * { box-sizing: border-box; }
-  body { margin:0; min-height:100vh; display:grid; place-items:center;
-         background:var(--bg); color:var(--text);
-         font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; padding:16px; }
-  form { width:100%; max-width:320px; background:var(--surface);
-         border:1px solid var(--border); border-radius:10px; padding:24px; }
-  h1 { margin:0 0 4px; font-size:16px; font-weight:600; }
-  p.sub { margin:0 0 20px; color:var(--muted); font-size:13px; }
-  label { display:block; margin-bottom:6px; font-size:12px; color:var(--muted); }
-  input { width:100%; margin-bottom:14px; padding:9px 11px; border-radius:6px;
-          border:1px solid var(--border); background:var(--bg); color:var(--text);
-          font-size:14px; }
-  input:focus { outline:none; border-color:var(--accent); }
-  button { width:100%; padding:9px; border:0; border-radius:6px;
-           background:var(--accent); color:#fff; font-size:14px; font-weight:500;
-           cursor:pointer; }
-  button:hover { filter:brightness(1.08); }
-  .err { margin:0 0 14px; padding:8px 11px; border-radius:6px; font-size:13px;
-         background:rgba(255,107,107,.12); color:var(--danger); }
+  @font-face{font-family:"Anthropic Sans";src:url("/login-assets/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
+  @font-face{font-family:"Anthropic Serif";src:url("/login-assets/SerifWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
+  :root{
+    color-scheme: dark;
+    --bg:#1f1f1e; --surface:#1b1b1a; --surface-2:#2c2c2a; --surface-3:#363632;
+    --line:#323230; --ink:#faf9f5; --ink-2:#9c9a92; --ink-3:#6f6d66;
+    --accent:#d97757; --accent-fill:#c25f34; --accent-ink:#faf9f5;
+    --err:#d9584a; --err-soft:rgba(193,70,56,.16);
+    --r:10px; --r-lg:12px;
+    --font:"Anthropic Sans",system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Anthropic Serif",Georgia,"Times New Roman",Times,serif;
+    --shadow-lg:0 24px 60px -18px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    display:grid; place-items:center; padding:24px;
+    color:var(--ink); font:13px/1.45 var(--font); -webkit-font-smoothing:antialiased;
+    /* cover: fill the viewport at any aspect, no letterbox bands. The art is
+       16:9, so a very tall window crops the sides; its centre is empty by
+       design, which is where the card sits. */
+    background:var(--bg) url("/login-assets/login-bg.webp") center/cover no-repeat fixed;
+  }
+  /* The art has an empty centre; a soft scrim keeps the card legible over it
+     without washing the circuitry out at the edges. */
+  body::before{content:"";position:fixed;inset:0;background:radial-gradient(52% 44% at 50% 50%,rgba(31,31,30,.92),rgba(31,31,30,.72) 68%,rgba(31,31,30,.52));}
+  .card{
+    position:relative; width:100%; max-width:340px;
+    background:color-mix(in srgb, var(--surface) 92%, transparent);
+    border:1px solid var(--line); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-lg); padding:26px 24px 24px;
+    backdrop-filter:blur(12px);
+  }
+  .brand{display:flex;align-items:center;gap:9px;margin-bottom:18px}
+  .logo{width:22px;height:22px;border-radius:7px;flex:none;
+        background:linear-gradient(145deg,var(--accent),var(--accent-fill));
+        display:grid;place-items:center}
+  .logo svg{width:13px;height:13px;fill:none;stroke:#faf9f5;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .name{font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em}
+  h1{margin:0 0 4px;font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.01em}
+  p.sub{margin:0 0 20px;color:var(--ink-2);font-size:12px}
+  label{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--ink-2)}
+  input{width:100%;height:34px;margin-bottom:14px;padding:0 11px;border-radius:var(--r);
+        border:1px solid var(--line);background:var(--surface-2);color:var(--ink);outline:none}
+  input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,119,87,.16)}
+  button{width:100%;height:34px;border:0;border-radius:var(--r);margin-top:4px;
+         background:var(--accent-fill);color:var(--accent-ink);font:inherit;font-weight:500;cursor:pointer;
+         box-shadow:0 0 0 1px rgba(217,119,87,.25),0 8px 20px -10px rgba(217,119,87,.5)}
+  button:hover{filter:brightness(1.08)}
+  .err{margin:0 0 14px;padding:8px 11px;border-radius:var(--r);font-size:12px;
+       background:var(--err-soft);color:var(--err)}
+  @media (prefers-reduced-motion:no-preference){.card{animation:rise .18s ease-out}}
+  @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
-<form method="post" action="/login">
-  <h1>transmission-ui</h1>
-  <p class="sub">Sign in with the daemon's RPC credentials.</p>
+<form class="card" method="post" action="/login">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+    </span>
+    <span class="name">transmission-ui</span>
+  </div>
+  <h1>Sign in</h1>
+  <p class="sub">Use the daemon's RPC username and password.</p>
   {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
   <label for="u">Username</label>
   <input id="u" name="username" autocomplete="username" autofocus required>
@@ -60,6 +107,20 @@ func (s *Server) renderLogin(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = loginPage.Execute(w, struct{ Error string }{msg})
+}
+
+// loginAssetHandler serves the page's embedded background and fonts. They are
+// immutable for the life of the binary, so they cache hard.
+func loginAssetHandler() http.Handler {
+	sub, err := fs.Sub(loginAssets, "assets")
+	if err != nil {
+		panic(err) // the embed is compile-time; a failure here is a build bug
+	}
+	files := http.FileServer(http.FS(sub))
+	return http.StripPrefix("/login-assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		files.ServeHTTP(w, r)
+	}))
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
