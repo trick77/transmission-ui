@@ -150,3 +150,55 @@ func TestStaticFallsBackToIndex(t *testing.T) {
 		t.Fatalf("spa fallback failed: %d %q", rec.Code, body)
 	}
 }
+
+// No favicon.ico ships: the app declares an SVG icon, and the clients that
+// still probe this path are RSS readers, Windows bookmark thumbnails and old
+// IE. It must 404 rather than fall back to index.html, or those clients get
+// HTML where they expect an image. isAssetRequest already covers it — anything
+// with an extension is an asset — so this is a regression guard on that rule,
+// not on a route of its own.
+func TestFaviconIcoIsNotFound(t *testing.T) {
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/favicon.ico", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("want 404 for /favicon.ico, got %d", rec.Code)
+	}
+}
+
+// The icon the app DOES ship must be served, not 404'd: it is a real file in
+// the bundle, and the tab icon is the one asset every page load fetches.
+func TestIconSvgIsServed(t *testing.T) {
+	cfg := config.Config{AuthMode: config.AuthModeOIDC, SessionTTL: time.Hour}
+	ui := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("<html>ui</html>")},
+		"icon.svg":   &fstest.MapFile{Data: []byte("<svg/>")},
+	}
+	srv := New(cfg, &fakeOIDC{},
+		auth.NewSessionCodec("test-secret", false, time.Hour, "", ""),
+		http.NotFoundHandler(), ui, slog.New(slog.DiscardHandler))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/icon.svg", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "<svg/>" {
+		t.Fatalf("icon.svg not served: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// Go's mime table has no .webmanifest entry, so without an explicit
+// Content-Type net/http sniffs the JSON and serves text/plain, which Chrome
+// refuses -- the app stops being installable and nothing else surfaces it.
+func TestWebmanifestContentType(t *testing.T) {
+	cfg := config.Config{AuthMode: config.AuthModeOIDC, SessionTTL: time.Hour}
+	ui := fstest.MapFS{
+		"index.html":       &fstest.MapFile{Data: []byte("<html>ui</html>")},
+		"site.webmanifest": &fstest.MapFile{Data: []byte(`{"name":"transmission-ui"}`)},
+	}
+	srv := New(cfg, &fakeOIDC{},
+		auth.NewSessionCodec("test-secret", false, time.Hour, "", ""),
+		http.NotFoundHandler(), ui, slog.New(slog.DiscardHandler))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/site.webmanifest", nil))
+	if got := rec.Header().Get("Content-Type"); got != "application/manifest+json" {
+		t.Fatalf("want application/manifest+json, got %q", got)
+	}
+}

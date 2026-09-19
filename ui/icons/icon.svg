@@ -1,0 +1,82 @@
+<!--
+  transmission-ui's icon: an arrow dropping into an open tray, INVERTED. The
+  chip is the ink and the mark is cut out of it in the app's own ground colour.
+  Format, construction and reasoning are ../peeq's ui/icons/icon.svg; read that
+  file for the full argument. What follows is only what differs here.
+
+  THE GLYPH IS NOT A LUCIDE PATH. lucide's "download" is the glyph the header
+  and login chip already use, and it is what this mark means, but lucide draws
+  it as three 2-unit STROKES. A 2-unit stroke is the first thing to vanish at
+  16px, so it is redrawn here as three closed filled shapes: stem, chevron,
+  tray.
+
+  THE WEIGHT IS 3.0 UNITS, AND IT WAS MEASURED, NOT CHOSEN. Drawn first at 2.4
+  and rendered at a true 16x16 through rsvg, the tray still read while the stem
+  and chevron went to mush — the mark kept its box and lost its arrow, which is
+  the wrong half to keep. At 3.0 all three elements survive and the counters
+  between them stay open. Anything below ~2.8 walks back into that failure;
+  re-render at 16 before touching these numbers, because nothing at 64px or in
+  a browser's CSS-scaled preview shows it.
+
+  THE TRAY IS OPEN AT THE TOP — two uprights and a floor, not a closed box. A
+  closed rectangle reads as a container with a speck in it at 16px; the opening
+  is what makes the arrow look like it is going somewhere.
+
+  THE MARK IS PAINTED #1f1f1e (the app's bg token), not knocked through the chip.
+  A real knockout would let whatever is behind the icon show between chip and
+  mark, which on Safari's light favourites plate means a hollow-looking mark.
+  It has to stay dark-on-orange wherever the icon lands. An XML comment cannot
+  carry the token's own two-dash prefix, hence the literal.
+
+  Sized off the chip's TRUE bbox — x[3,21] y[3,21], 18 square, centred on
+  (12,12) — not the nominal 24x24 box the paths only partly fill. Coverage here
+  is 1.0: the chip spans the canvas exactly, flush with peeq's mark in the same
+  tab bar, which is what 1.0 was chosen for.
+
+  THE TRANSFORMS ARE DERIVED, not typed:
+
+    outer: scale = 64*C/18,  translate = 32 - 12*scale
+    inner: scale = k,        translate = 12 - c*k
+
+  where C is this file's coverage (1.0 here, 0.60 in icon-tile.svg, 0.46 in
+  icon-maskable.svg), c is the glyph's own bbox centre and k is solved from a
+  target fill of the chip:
+
+    k = 18*fill / max(bbox width, bbox height)
+
+  Here the glyph's measured bbox is x[3.2,20.8] y[3.4,21.5] and fill is 0.66,
+  giving k = 0.65635 and an inner translate of (4.1238, 3.8284). peeq's inner
+  scale is the constant 1.35, which is specific to its 7x8 play wedge; this
+  glyph is 17.6x18.1, so a constant cannot carry over. The glyph is RECENTRED
+  on the chip before scaling — its bbox centre is (12, 12.45), not (12,12), so
+  scaling about the chip centre alone would walk it downward.
+
+  Change the fill, the weights or a coverage and every affected transform has
+  to be recomputed, or the mark silently stops filling the coverage its own
+  comment claims.
+
+  TRANSPARENT CANVAS, not a transparent icon: the chip itself is opaque, and
+  only the four corners outside its rx-4 radius are clear, so what lands in a
+  tab is a chip rather than a square tile. That is what hack/gen-icons.sh's
+  opaque=false assertion on icon-192/512 checks.
+
+  Mirror any shape change by hand into icon-tile.svg and icon-maskable.svg,
+  which are copies and cannot follow on their own, and into the .logo chip in
+  design/src/shell-top.html, ui/src/styles/app.css and
+  backend/internal/httpapi/login.go, which draw the same geometry. Regenerate
+  the rasters with hack/gen-icons.sh after touching this file.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <linearGradient id="og" x1="0" y1="0" x2="0.72" y2="1">
+    <stop offset="0" stop-color="#e08a68"/>
+    <stop offset="1" stop-color="#c25f34"/>
+  </linearGradient>
+  <g transform="translate(-10.6667 -10.6667) scale(3.55556)">
+    <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#og)"/>
+    <g transform="translate(4.1238 3.8284) scale(0.65635)" fill="#1f1f1e">
+      <path d="M10.5 3.4h3v9.6h-3z"/>
+      <path d="M5.5 9.9 7.6 7.8 12 12.2l4.4-4.4 2.1 2.1-6.5 6.5z"/>
+      <path d="M3.2 14.9h3v3.6h11.6v-3.6h3v6.6H3.2z"/>
+    </g>
+  </g>
+</svg>

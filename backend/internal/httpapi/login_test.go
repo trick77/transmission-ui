@@ -136,3 +136,48 @@ func TestLoginPageAbsentInOIDCMode(t *testing.T) {
 		t.Fatal("login form served in oidc mode")
 	}
 }
+
+// The login page is served before the bundle loads, so it cannot reach the
+// bundle's /icon.svg behind staticHandler. Its icon is embedded and served from
+// /login-assets/ like the fonts; if that asset stops resolving the sign-in tab
+// silently loses its icon, which no other test would catch.
+func TestLoginPageServesItsIcon(t *testing.T) {
+	srv, _ := formServer(t)
+
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
+	if !strings.Contains(rec.Body.String(), `href="/login-assets/icon.svg"`) {
+		t.Fatal("login page does not link its icon")
+	}
+
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login-assets/icon.svg", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200 for the login icon, got %d", rec.Code)
+	}
+	// The chip is the ink: if the gradient fill is ever dropped the mark
+	// becomes a dark square on a dark page.
+	if !strings.Contains(rec.Body.String(), "url(#og)") {
+		t.Fatal("login icon lost its gradient fill")
+	}
+}
+
+// Under a base path every asset the login page names must carry the prefix.
+// The icon link was absolute at first and resolved off the proxy root, so the
+// sign-in tab lost its icon on exactly the deployment the prefix exists for.
+func TestLoginIconRespectsBasePath(t *testing.T) {
+	srv, _ := formServer(t)
+	srv.cfg.BasePath = "/tm"
+
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tm/login", nil))
+	if !strings.Contains(rec.Body.String(), `href="/tm/login-assets/icon.svg"`) {
+		t.Fatal("login icon link does not carry the base path")
+	}
+
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tm/login-assets/icon.svg", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200 for the prefixed login icon, got %d", rec.Code)
+	}
+}

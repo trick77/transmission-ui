@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { BrandMark } from '../icons/BrandMark'
 import { Icon } from '../icons/Icon'
 import { bytes, duration, rateParts } from '../lib/format'
 import { refreshSession, run, set, useStore } from '../state/store'
@@ -32,7 +33,7 @@ export function Header() {
 
   return (
     <header className="header">
-      <div className="brand"><span className="logo"><Icon name="down" style={{ width: 14, height: 14, strokeWidth: 2.5 }} /></span>transmission-ui</div>
+      <div className="brand"><BrandMark />transmission-ui</div>
       <div className="search">
         <Icon name="search" />
         <input placeholder="Search torrents" value={search} onChange={e => set({ search: e.target.value })} />
