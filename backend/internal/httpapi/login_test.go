@@ -13,7 +13,7 @@ import (
 
 func formServer(t *testing.T) (*Server, *auth.SessionCodec) {
 	t.Helper()
-	srv, sessions := newTestServer(t, config.AuthModeForm, "Arr", nil)
+	srv, sessions := newTestServer(t, config.AuthModeForm, "media", nil)
 	srv.cfg.RPCUser = "daemonuser"
 	srv.cfg.RPCPass = "daemonpass"
 	return srv, sessions
@@ -60,7 +60,7 @@ func TestFormLoginAcceptsDaemonCredentials(t *testing.T) {
 		t.Fatalf("issued cookie does not verify: %v", err)
 	}
 	// The session must satisfy the same group check the RPC guard applies.
-	if !claims.HasGroup("Arr") {
+	if !claims.HasGroup("media") {
 		t.Fatal("form session would be refused by requireAuth")
 	}
 }
@@ -129,7 +129,7 @@ func TestFormModeRedirectsDeepLinkToLogin(t *testing.T) {
 
 // /login must not exist in oidc mode, where the IdP owns the credentials.
 func TestLoginPageAbsentInOIDCMode(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
 	if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), `name="password"`) {

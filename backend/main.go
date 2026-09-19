@@ -70,8 +70,6 @@ func main() {
 			os.Exit(1)
 		}
 		oidcService = svc
-	} else if cfg.AuthMode == config.AuthModeDev {
-		log.Warn("BACKEND_AUTH_MODE=dev: every visitor is signed in automatically")
 	}
 
 	// Secure cookies are set for every non-dev mode, which assumes a

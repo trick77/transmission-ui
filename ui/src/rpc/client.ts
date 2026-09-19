@@ -16,7 +16,19 @@ export class RpcError extends Error {
 /** JSON-RPC error `data`: an optional longer message plus method-defined extra keys. */
 export interface RpcErrorData { error_string?: string; result?: Record<string, unknown> }
 
-const ENDPOINT = (import.meta.env.VITE_RPC_URL as string | undefined) || '/transmission/rpc'
+// The app may be served under a path prefix (seedbox.example.com/transmission),
+// where an origin-absolute path would escape the prefix and miss the reverse
+// proxy's route. basePath() derives the prefix from where the document itself
+// was served.
+export function basePath(): string {
+  const p = location.pathname
+  // Trim a trailing file name, then any trailing slash: /transmission/ and
+  // /transmission and /transmission/index.html all yield /transmission.
+  const dir = p.endsWith('/') ? p : p.slice(0, p.lastIndexOf('/') + 1)
+  return dir.replace(/\/$/, '')
+}
+
+const ENDPOINT = (import.meta.env.VITE_RPC_URL as string | undefined) || `${basePath()}/transmission/rpc`
 let sessionId: string | null = null
 let id = 0
 

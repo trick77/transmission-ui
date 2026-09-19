@@ -1,7 +1,7 @@
 # transmission-ui
 
-A web client for transmission-daemon: a static bundle the daemon serves itself, in place of its
-built-in web UI. React 19 + TypeScript, no runtime dependencies beyond the daemon's RPC.
+A web client for transmission-daemon, with a backend that signs users in and keeps the daemon's
+credentials off the browser. React 19 + TypeScript, Go, no database.
 
 ![Torrent list](docs/screenshot-list.png)
 
@@ -15,39 +15,52 @@ per-tracker announce state.
 transmission-daemon **4.1.x**. The UI speaks JSON-RPC 2.0 with snake_case keys (`rpc_version` 18+)
 and does not talk to the 4.0.x protocol.
 
+## How it works
+
+`ghcr.io/trick77/transmission-ui` is the UI bundle embedded in a Go binary. The binary serves the
+bundle, terminates the login, and reverse-proxies `/transmission/rpc` to your daemon with the
+daemon's basic auth attached. The browser never sees those credentials, and an unauthenticated RPC
+call gets a 401 rather than a native auth dialog.
+
+The image contains **no daemon**. Point `TM_RPC_UPSTREAM` at one; it keeps its own RPC port for
+`transmission-remote` and the *arr apps, which go on using basic auth directly.
+
 ## Install
 
-Two ways in, both from the release:
-
-**Container image** — the UI plus a small Go backend:
-
 ```
-ghcr.io/trick77/transmission-ui:latest
+cp .env.example .env     # fill in TM_*, the auth block, and the session secret
+docker compose up -d
 ```
 
-The backend serves the bundle, signs users in, and proxies `/transmission/rpc` to a daemon you run
-separately, attaching the daemon's basic auth upstream so the browser never sees it. The image
-contains no daemon: point `TM_RPC_UPSTREAM` at yours, which keeps `:9091` for radarr/sonarr and
-`transmission-remote`.
+`compose.yaml` is a working stack behind an external Traefik that terminates TLS.
 
-Two ways to sign in, set by `BACKEND_AUTH_MODE`:
+### Signing in
 
-- `oidc` — an identity provider. Register a confidential client with redirect URI
-  `https://<host>/api/auth/callback`, and optionally gate access on a group with
-  `BACKEND_OIDC_ALLOWED_GROUP`.
-- `form` — a login page that accepts the daemon's own RPC credentials (`TM_USER` / `TM_PASS`).
-  Nothing extra to provision: whoever may drive `transmission-remote` may drive the web UI.
+`BACKEND_AUTH_MODE` picks one:
 
-`compose.yaml` in this repo is a working stack behind an external Traefik, which terminates TLS for
-either mode. Copy `.env.example` to `.env` first.
+- **`form`** — a login page that accepts the daemon's own RPC credentials (`TM_USER` / `TM_PASS`).
+  Nothing extra to provision, and what local development uses.
+- **`oidc`** — an identity provider. Register a confidential client with redirect URI
+  `<BACKEND_PUBLIC_URL>/api/auth/callback`, request the `groups` scope, and optionally gate access
+  on `BACKEND_OIDC_ALLOWED_GROUP`.
 
-**Bundle only** — mount it into a daemon you already run:
+Logout clears the local session; it does not end the session at the identity provider.
 
-1. Download `transmission-ui-<version>.zip` from the [releases](https://github.com/trick77/transmission-ui/releases) and unzip it somewhere the daemon can read.
-2. Mount it at `/web` and set `TRANSMISSION_WEB_HOME=/web`.
-3. Restart the daemon. Unsetting the variable puts the stock UI back.
+### Behind a path prefix
 
-This path has no OIDC: the daemon serves the bundle and its own basic auth applies.
+Set `BACKEND_PUBLIC_URL` to the full external URL, including any path:
+
+```
+BACKEND_PUBLIC_URL=https://seedbox.example.com/transmission
+```
+
+Every route then mounts under that prefix. The reverse proxy must forward it, not strip it.
+
+### Bundle only
+
+The release also ships `transmission-ui-<version>.zip`: unzip it, mount it at `/web`, set
+`TRANSMISSION_WEB_HOME=/web`, restart the daemon. Unsetting the variable puts the stock UI back.
+This path has no backend, so the daemon's own basic auth applies and there is no OIDC.
 
 ## Development
 
@@ -57,8 +70,10 @@ hack/fixtures.sh                           # seed every torrent state the UI sho
 cd ui && npm ci && npm run dev             # http://localhost:5173
 ```
 
-`make sim` runs the UI against `ui/sim/`, an in-process fake daemon, when you don't want a
-container. The screenshots above come from it, so the torrents in them are made up.
+`hack/backend.sh` builds and runs the real backend against that daemon in form mode, which is what
+`ui/e2e/backend.spec.ts` drives. `make sim` runs the UI against `ui/sim/`, an in-process fake
+daemon, when you don't want a container — the screenshots above come from it, so the torrents in
+them are made up.
 
 See `AGENTS.md` for layout, test gates and conventions.
 

@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -17,14 +19,19 @@ type AuthMode string
 const (
 	AuthModeOIDC AuthMode = "oidc"
 	// AuthModeForm is a login form checked against the daemon's own RPC
-	// credentials, for deployments with no identity provider.
+	// credentials, for deployments with no identity provider. It is also what
+	// local development uses, so there is one fewer auth path than there are
+	// environments.
 	AuthModeForm AuthMode = "form"
-	AuthModeDev  AuthMode = "dev"
 )
 
 type Config struct {
-	Addr      string
+	Addr string
+	// PublicURL is where the app is reached from outside. When it carries a
+	// path, that path is the prefix the reverse proxy forwards (it is not
+	// stripped), and every route is mounted under it.
 	PublicURL string
+	BasePath  string
 	AuthMode  AuthMode
 
 	SessionSecret string
@@ -64,9 +71,12 @@ func Load() (Config, error) {
 		RPCUser:                   os.Getenv("TM_USER"),
 		RPCPass:                   os.Getenv("TM_PASS"),
 	}
-	// Dev runs over plain http on loopback; everything else sits behind a
-	// TLS-terminating reverse proxy (see compose.yaml).
-	cfg.SecureCookies = cfg.AuthMode != AuthModeDev
+	// Deployments sit behind a TLS-terminating proxy (see compose.yaml), but
+	// local runs are plain http on loopback, where a Secure cookie is dropped
+	// by some browsers and the sign-in silently loops. Derive it from the
+	// public URL rather than the mode, and default to secure.
+	cfg.SecureCookies = !isLoopbackURL(cfg.PublicURL)
+	cfg.BasePath = basePathOf(cfg.PublicURL)
 
 	var problems []string
 	switch cfg.AuthMode {
@@ -87,29 +97,24 @@ func Load() (Config, error) {
 			}
 		}
 	case AuthModeForm:
+		// A local run needs no ceremony, so generate a per-process secret when
+		// none is set: sessions then die with the process, which is right for
+		// development and harmless for a deployment that sets one.
 		if cfg.SessionSecret == "" {
-			problems = append(problems, "BACKEND_SESSION_SECRET is required")
+			buf := make([]byte, 32)
+			if _, err := rand.Read(buf); err != nil {
+				return Config{}, fmt.Errorf("generate session secret: %w", err)
+			}
+			cfg.SessionSecret = base64.RawURLEncoding.EncodeToString(buf)
 		}
 		// The form checks the daemon's RPC credentials, so a blank password
 		// would let anyone in with just the username.
 		if cfg.RPCPass == "" {
 			problems = append(problems, "TM_PASS is required when BACKEND_AUTH_MODE=form")
 		}
-	case AuthModeDev:
-		// Dev mode auto-authenticates, so it must never be reachable in
-		// production. A missing secret gets a per-process random one: a fixed
-		// literal would be forgeable by anyone reading the source and would
-		// survive restarts.
-		if cfg.SessionSecret == "" {
-			buf := make([]byte, 32)
-			if _, err := rand.Read(buf); err != nil {
-				return Config{}, fmt.Errorf("generate dev session secret: %w", err)
-			}
-			cfg.SessionSecret = base64.RawURLEncoding.EncodeToString(buf)
-		}
 	default:
-		problems = append(problems, fmt.Sprintf("BACKEND_AUTH_MODE must be %q, %q or %q, got %q",
-			AuthModeOIDC, AuthModeForm, AuthModeDev, cfg.AuthMode))
+		problems = append(problems, fmt.Sprintf("BACKEND_AUTH_MODE must be %q or %q, got %q",
+			AuthModeOIDC, AuthModeForm, cfg.AuthMode))
 	}
 
 	if cfg.RPCUser == "" {
@@ -120,6 +125,37 @@ func Load() (Config, error) {
 		return Config{}, errors.New("config: " + strings.Join(problems, "; "))
 	}
 	return cfg, nil
+}
+
+// basePathOf extracts the path prefix from the public URL, normalised to
+// either "" or "/prefix" with no trailing slash.
+func basePathOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	p := strings.TrimRight(u.Path, "/")
+	if p == "/" {
+		return ""
+	}
+	return p
+}
+
+// isLoopbackURL reports whether the public URL points at this machine, which
+// is the one case where a Secure cookie would break sign-in.
+func isLoopbackURL(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if u.Scheme == "https" {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || net.ParseIP(host).IsLoopback()
 }
 
 func env(key, fallback string) string {

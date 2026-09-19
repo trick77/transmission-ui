@@ -36,24 +36,37 @@ func New(cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Han
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/auth/login", s.handleLogin)
-	mux.HandleFunc("GET /api/auth/callback", s.handleCallback)
-	mux.HandleFunc("GET /api/auth/logout", s.handleLogout)
-	mux.HandleFunc("GET /api/auth/me", s.handleMe)
-	if s.cfg.AuthMode == config.AuthModeForm {
-		mux.HandleFunc("GET /login", s.handleLoginPage)
-		mux.HandleFunc("POST /login", s.handleLoginSubmit)
-		mux.Handle("GET /login-assets/", loginAssetHandler())
+	// The reverse proxy forwards the prefix rather than stripping it (the other
+	// services on the shared host work the same way), so mount every route
+	// under it. Empty base path means the app owns the whole origin.
+	p := func(pattern string) string {
+		if s.cfg.BasePath == "" {
+			return pattern
+		}
+		method, rest, found := strings.Cut(pattern, " ")
+		if !found {
+			return s.cfg.BasePath + pattern
+		}
+		return method + " " + s.cfg.BasePath + rest
 	}
-	mux.Handle("POST /transmission/rpc", s.requireAuth(s.rpc))
+	mux.HandleFunc(p("GET /api/auth/login"), s.handleLogin)
+	mux.HandleFunc(p("GET /api/auth/callback"), s.handleCallback)
+	mux.HandleFunc(p("GET /api/auth/logout"), s.handleLogout)
+	mux.HandleFunc(p("GET /api/auth/me"), s.handleMe)
+	if s.cfg.AuthMode == config.AuthModeForm {
+		mux.HandleFunc(p("GET /login"), s.handleLoginPage)
+		mux.HandleFunc(p("POST /login"), s.handleLoginSubmit)
+		mux.Handle(p("GET /login-assets/"), loginAssetHandler(s.cfg.BasePath))
+	}
+	mux.Handle(p("POST /transmission/rpc"), s.requireAuth(s.rpc))
 	// Without this, a GET on the RPC path falls through to the SPA handler and
 	// answers 200 with index.html. The daemon's RPC is POST-only. A methodless
 	// pattern here would conflict with "GET /", so spell the method out.
-	mux.HandleFunc("GET /transmission/rpc", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc(p("GET /transmission/rpc"), func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Allow", "POST")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	})
-	mux.Handle("GET /", s.staticHandler())
+	mux.Handle(p("GET /"), s.staticHandler())
 	return mux
 }
 
@@ -77,17 +90,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Form mode has its own page; the UI's Sign in button lands here either way.
 	if s.cfg.AuthMode == config.AuthModeForm {
-		http.Redirect(w, r, "/login", http.StatusFound)
-		return
-	}
-	// Dev mode signs in a fixed local user so the UI can run without an IdP.
-	if s.cfg.AuthMode == config.AuthModeDev {
-		s.issueSession(w, r, auth.Claims{
-			Subject:           "dev",
-			PreferredUsername: "dev",
-			Name:              "Dev User",
-			Groups:            []string{s.cfg.OIDCAllowedGroup},
-		})
+		http.Redirect(w, r, s.cfg.BasePath+"/login", http.StatusFound)
 		return
 	}
 	s.oidc.StartLogin(w, r)
@@ -124,7 +127,7 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, claims aut
 		return
 	}
 	http.SetCookie(w, cookie)
-	http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, s.cfg.BasePath+"/", http.StatusFound)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -133,10 +136,10 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.AuthMode == config.AuthModeForm {
 		// Root would just bounce off the session check and back to the form;
 		// go there directly so the user sees they are signed out.
-		target = "/login"
+		target = s.cfg.BasePath + "/login"
 	}
 	if target == "" {
-		target = "/"
+		target = s.cfg.BasePath + "/"
 	}
 	http.Redirect(w, r, target, http.StatusFound)
 }
@@ -167,9 +170,16 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 // staticHandler serves the embedded bundle, falling back to index.html so the
 // SPA's client-side routes resolve.
 func (s *Server) staticHandler() http.Handler {
-	files := http.FileServer(http.FS(s.ui))
+	var files http.Handler = http.FileServer(http.FS(s.ui))
+	if s.cfg.BasePath != "" {
+		// FileServer resolves against the URL path, which still carries the
+		// prefix the proxy forwarded.
+		files = http.StripPrefix(s.cfg.BasePath, files)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		name := strings.TrimPrefix(r.URL.Path, "/")
+		// The proxy forwards the prefix, so take it off before looking the file
+		// up in the bundle.
+		name := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, s.cfg.BasePath), "/")
 		if name == "" {
 			name = "index.html"
 		}
@@ -187,7 +197,7 @@ func (s *Server) staticHandler() http.Handler {
 		default:
 			// A client-side route: hand back the shell.
 			r = r.Clone(r.Context())
-			r.URL.Path = "/"
+			r.URL.Path = s.cfg.BasePath + "/"
 			name = "index.html"
 		}
 		if name == "index.html" {
@@ -199,7 +209,7 @@ func (s *Server) staticHandler() http.Handler {
 			// origin entirely.
 			if s.cfg.AuthMode == config.AuthModeForm {
 				if _, err := s.sessions.Decode(r); err != nil {
-					http.Redirect(w, r, "/login", http.StatusFound)
+					http.Redirect(w, r, s.cfg.BasePath+"/login", http.StatusFound)
 					return
 				}
 			}

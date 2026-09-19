@@ -19,7 +19,7 @@ func requestWithCookie(c *http.Cookie) *http.Request {
 
 func TestSessionRoundTrip(t *testing.T) {
 	codec := NewSessionCodec("secret", false, time.Hour, "")
-	claims := Claims{Subject: "u1", PreferredUsername: "jan", Groups: []string{"Arr"}}
+	claims := Claims{Subject: "u1", PreferredUsername: "alice", Groups: []string{"media"}}
 
 	cookie, err := codec.Encode(claims)
 	if err != nil {
@@ -29,10 +29,10 @@ func TestSessionRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Subject != "u1" || got.PreferredUsername != "jan" {
+	if got.Subject != "u1" || got.PreferredUsername != "alice" {
 		t.Fatalf("claims not preserved: %+v", got)
 	}
-	if !got.HasGroup("Arr") {
+	if !got.HasGroup("media") {
 		t.Fatal("group not preserved")
 	}
 }
@@ -46,7 +46,7 @@ func TestSessionRejectsTamperedPayload(t *testing.T) {
 	}
 	payload, sig, _ := strings.Cut(cookie.Value, ".")
 	forged := NewSessionCodec("other-secret", false, time.Hour, "")
-	other, _ := forged.Encode(Claims{Subject: "attacker", Groups: []string{"Arr"}})
+	other, _ := forged.Encode(Claims{Subject: "attacker", Groups: []string{"media"}})
 	otherPayload, _, _ := strings.Cut(other.Value, ".")
 
 	// Attacker payload, original signature.
@@ -101,8 +101,8 @@ func TestSessionKeepsCheckedGroupWhenTrimming(t *testing.T) {
 	for i := range 40 {
 		many = append(many, fmt.Sprintf("group-%02d", i))
 	}
-	many = append(many, "Arr") // last, so a naive head-truncation drops it
-	codec := NewSessionCodec("secret", false, time.Hour, "Arr")
+	many = append(many, "media") // last, so a naive head-truncation drops it
+	codec := NewSessionCodec("secret", false, time.Hour, "media")
 
 	cookie, err := codec.Encode(Claims{Subject: "u1", Groups: many})
 	if err != nil {
@@ -115,7 +115,7 @@ func TestSessionKeepsCheckedGroupWhenTrimming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !got.HasGroup("Arr") {
+	if !got.HasGroup("media") {
 		t.Fatalf("checked group dropped by trimming: %v", got.Groups)
 	}
 	if len(got.Groups) > maxCookieGroups {
@@ -130,9 +130,9 @@ func TestSessionKeepsIdPGroupSpelling(t *testing.T) {
 	for i := range 30 {
 		many = append(many, fmt.Sprintf("group-%02d", i))
 	}
-	many = append(many, "Arr")
-	// Configured lower-case; the IdP emits "Arr".
-	codec := NewSessionCodec("secret", false, time.Hour, "arr")
+	many = append(many, "media")
+	// Configured lower-case; the IdP emits "media".
+	codec := NewSessionCodec("secret", false, time.Hour, "MEDIA")
 
 	cookie, err := codec.Encode(Claims{Subject: "u1", Groups: many})
 	if err != nil {
@@ -144,28 +144,28 @@ func TestSessionKeepsIdPGroupSpelling(t *testing.T) {
 	}
 	found := ""
 	for _, g := range got.Groups {
-		if strings.EqualFold(g, "arr") {
+		if strings.EqualFold(g, "MEDIA") {
 			found = g
 		}
 	}
-	if found != "Arr" {
-		t.Fatalf("group spelling rewritten: got %q, want %q", found, "Arr")
+	if found != "media" {
+		t.Fatalf("group spelling rewritten: got %q, want %q", found, "media")
 	}
 }
 
 func TestHasGroup(t *testing.T) {
-	c := Claims{Groups: []string{"Arr", "Tools"}}
-	if !c.HasGroup("arr") {
+	c := Claims{Groups: []string{"media", "Tools"}}
+	if !c.HasGroup("MEDIA") {
 		t.Fatal("group match should ignore case")
 	}
-	if c.HasGroup("Media") {
+	if c.HasGroup("other") {
 		t.Fatal("unexpected group matched")
 	}
 	// Empty required group = no check configured.
 	if !c.HasGroup("") {
 		t.Fatal("empty group should match")
 	}
-	if (Claims{}).HasGroup("Arr") {
+	if (Claims{}).HasGroup("media") {
 		t.Fatal("claims without groups should not match")
 	}
 }
