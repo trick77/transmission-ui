@@ -161,3 +161,23 @@ func TestLoginPageServesItsIcon(t *testing.T) {
 		t.Fatal("login icon lost its gradient fill")
 	}
 }
+
+// Under a base path every asset the login page names must carry the prefix.
+// The icon link was absolute at first and resolved off the proxy root, so the
+// sign-in tab lost its icon on exactly the deployment the prefix exists for.
+func TestLoginIconRespectsBasePath(t *testing.T) {
+	srv, _ := formServer(t)
+	srv.cfg.BasePath = "/tm"
+
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tm/login", nil))
+	if !strings.Contains(rec.Body.String(), `href="/tm/login-assets/icon.svg"`) {
+		t.Fatal("login icon link does not carry the base path")
+	}
+
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tm/login-assets/icon.svg", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200 for the prefixed login icon, got %d", rec.Code)
+	}
+}

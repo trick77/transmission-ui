@@ -175,7 +175,7 @@ func TestIconSvgIsServed(t *testing.T) {
 		"icon.svg":   &fstest.MapFile{Data: []byte("<svg/>")},
 	}
 	srv := New(cfg, &fakeOIDC{},
-		auth.NewSessionCodec("test-secret", false, time.Hour, ""),
+		auth.NewSessionCodec("test-secret", false, time.Hour, "", ""),
 		http.NotFoundHandler(), ui, slog.New(slog.DiscardHandler))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/icon.svg", nil))
@@ -194,7 +194,7 @@ func TestWebmanifestContentType(t *testing.T) {
 		"site.webmanifest": &fstest.MapFile{Data: []byte(`{"name":"transmission-ui"}`)},
 	}
 	srv := New(cfg, &fakeOIDC{},
-		auth.NewSessionCodec("test-secret", false, time.Hour, ""),
+		auth.NewSessionCodec("test-secret", false, time.Hour, "", ""),
 		http.NotFoundHandler(), ui, slog.New(slog.DiscardHandler))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/site.webmanifest", nil))

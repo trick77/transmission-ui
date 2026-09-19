@@ -32,7 +32,7 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
 <!-- The bundle's /icon.svg sits behind staticHandler, which this page is served
      before, so the icon is embedded here and served from /login-assets/ like
      the fonts and the background. Same file as ui/icons/icon.svg. -->
-<link rel="icon" href="/login-assets/icon.svg" type="image/svg+xml">
+<link rel="icon" href="{{.Base}}/login-assets/icon.svg" type="image/svg+xml">
 <style>
   @font-face{font-family:"Anthropic Sans";src:url("{{.Base}}/login-assets/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
   @font-face{font-family:"Anthropic Serif";src:url("{{.Base}}/login-assets/SerifWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
