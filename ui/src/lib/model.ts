@@ -166,7 +166,7 @@ export const advActive = (adv: Adv) => ADV_KEYS.filter(k => adv[k] && adv[k] !==
 export const advFn = (adv: Adv) => (t: TorrentSummary) => advActive(adv).every(k => ADV[k][adv[k]!]?.(t) ?? true)
 
 // ─── sort ───
-export type SortKey = 'state' | 'name' | 'size' | 'progress' | 'down' | 'up' | 'ratio' | 'eta' | 'added' | 'activity'
+export type SortKey = 'state' | 'name' | 'size' | 'progress' | 'down' | 'up' | 'ratio' | 'eta' | 'added' | 'activity' | 'seeds' | 'uploaded' | 'tracker' | 'path'
 
 /** Problems first, then by how much attention a torrent needs. */
 export function rank(t: TorrentSummary): number {
@@ -184,6 +184,12 @@ export function rank(t: TorrentSummary): number {
 
 export function sortFn(key: SortKey, dir: 1 | -1): (a: TorrentSummary, b: TorrentSummary) => number {
   const num = (f: (t: TorrentSummary) => number) => (a: TorrentSummary, b: TorrentSummary) => (f(a) - f(b)) * dir || a.name.localeCompare(b.name)
+  // Empty trackers and paths sort last in either direction, the way ETA parks unknowns.
+  const text = (f: (t: TorrentSummary) => string) => (a: TorrentSummary, b: TorrentSummary) => {
+    const x = f(a), y = f(b)
+    if (!x !== !y) return x ? -1 : 1
+    return x.localeCompare(y) * dir || a.name.localeCompare(b.name)
+  }
   switch (key) {
     case 'name': return (a, b) => a.name.localeCompare(b.name) * dir
     case 'size': return num(t => t.size_when_done)
@@ -194,6 +200,10 @@ export function sortFn(key: SortKey, dir: 1 | -1): (a: TorrentSummary, b: Torren
     case 'eta': return num(t => (t.eta < 0 ? Number.MAX_SAFE_INTEGER : t.eta))
     case 'added': return num(t => t.added_date)
     case 'activity': return num(t => t.activity_date)
+    case 'seeds': return num(t => swarmOf(t).seeds)
+    case 'uploaded': return num(t => t.uploaded_ever)
+    case 'tracker': return text(t => t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : '')
+    case 'path': return text(t => t.download_dir)
     default: return (a, b) => (rank(a) - rank(b)) * dir || b.activity_date - a.activity_date || a.name.localeCompare(b.name)
   }
 }

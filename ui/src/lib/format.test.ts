@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ago, bytes, compact, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioValue } from './format'
+import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioValue } from './format'
 
 describe('bytes', () => {
   it('formats SI units with sensible digits', () => {
@@ -50,5 +50,12 @@ describe('misc', () => {
     expect(dateTime(0)).toBe('—')
     expect(dateTime(Date.now() / 1000)).toMatch(/^Today, /)
     expect(dateTime(1_600_000_000)).toMatch(/2020/)
+  })
+  it('date is numeric and fixed width, so the compact row cannot wrap', () => {
+    expect(date(0)).toBe('—')
+    expect(date(1_600_000_000)).toMatch(/2020/)
+    // no localised month name, whatever the runtime locale
+    expect(date(1_600_000_000)).not.toMatch(/[A-Za-z]/)
+    expect(date(1_600_000_000).length).toBe(date(1_000_000_000).length)
   })
 })

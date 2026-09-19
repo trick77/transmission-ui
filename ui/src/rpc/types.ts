@@ -76,6 +76,7 @@ export interface TorrentSummary {
   rate_download: number
   rate_upload: number
   upload_ratio: number
+  uploaded_ever: number
   eta: number
   peers_connected: number
   peers_sending_to_us: number
@@ -112,7 +113,6 @@ export interface TorrentDetail extends TorrentSummary {
   have_unchecked: number
   corrupt_ever: number
   downloaded_ever: number
-  uploaded_ever: number
   seconds_downloading: number
   seconds_seeding: number
   peers_from: PeersFrom
@@ -137,7 +137,7 @@ export interface TorrentDetail extends TorrentSummary {
 
 export const SUMMARY_FIELDS: (keyof TorrentSummary)[] = [
   'id', 'name', 'status', 'error', 'error_string', 'percent_done', 'size_when_done', 'total_size', 'left_until_done',
-  'rate_download', 'rate_upload', 'upload_ratio', 'eta', 'peers_connected', 'peers_sending_to_us', 'peers_getting_from_us',
+  'rate_download', 'rate_upload', 'upload_ratio', 'uploaded_ever', 'eta', 'peers_connected', 'peers_sending_to_us', 'peers_getting_from_us',
   'labels', 'download_dir', 'is_finished', 'queue_position', 'added_date', 'activity_date', 'done_date',
   'recheck_progress', 'metadata_percent_complete', 'tracker_stats', 'bandwidth_priority', 'hash_string', 'magnet_link',
 ]
@@ -145,7 +145,7 @@ export const SUMMARY_FIELDS: (keyof TorrentSummary)[] = [
 export const DETAIL_FIELDS: (keyof TorrentDetail)[] = [
   ...SUMMARY_FIELDS,
   'torrent_file', 'comment', 'creator', 'date_created', 'is_private', 'piece_count', 'piece_size',
-  'pieces', 'availability', 'have_valid', 'have_unchecked', 'corrupt_ever', 'downloaded_ever', 'uploaded_ever',
+  'pieces', 'availability', 'have_valid', 'have_unchecked', 'corrupt_ever', 'downloaded_ever',
   'seconds_downloading', 'seconds_seeding', 'peers_from', 'seed_ratio_limit', 'seed_ratio_mode', 'seed_idle_limit', 'seed_idle_mode',
   'honors_session_limits', 'download_limit', 'download_limited', 'upload_limit', 'upload_limited', 'peer_limit',
   'sequential_download', 'sequential_download_from_piece',

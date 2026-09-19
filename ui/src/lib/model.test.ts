@@ -19,7 +19,7 @@ let nextId = 1
 function tor(o: Partial<TorrentSummary> = {}): TorrentSummary {
   return {
     id: nextId++, name: `t${nextId}`, status: Status.Seed, error: 0, error_string: '', percent_done: 1, size_when_done: 2e9, total_size: 2e9, left_until_done: 0,
-    rate_download: 0, rate_upload: 0, upload_ratio: 1.5, eta: -1, peers_connected: 0, peers_sending_to_us: 0, peers_getting_from_us: 0, labels: [],
+    rate_download: 0, rate_upload: 0, upload_ratio: 1.5, uploaded_ever: 3e9, eta: -1, peers_connected: 0, peers_sending_to_us: 0, peers_getting_from_us: 0, labels: [],
     download_dir: '/data/torrents/iso', is_finished: false, queue_position: 0, added_date: now - 86400 * 2, activity_date: now - 3600, done_date: now - 3600,
     recheck_progress: 0, metadata_percent_complete: 1, tracker_stats: [ts()], bandwidth_priority: 0, hash_string: 'h', magnet_link: 'magnet:?xt=urn:btih:h', ...o,
   }

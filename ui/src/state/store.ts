@@ -38,6 +38,14 @@ export interface Snapshot {
   dialog: Dialog
   dismissed: Set<string>   // tracker-down notices dismissed, "host@since"
   toast: string
+  density: Density
+}
+
+export type Density = 'compact' | 'comfortable'
+
+/** Row density drives the column set, so it is store state and not only a CSS attribute. */
+function initialDensity(): Density {
+  return readLocal<string>('tm.density', 'compact') === 'comfortable' ? 'comfortable' : 'compact'
 }
 
 const params = new URLSearchParams(location.search)
@@ -47,11 +55,12 @@ let snap: Snapshot = {
   filter: params.get('filter') || 'all',
   adv: Object.fromEntries(['size', 'age', 'ratio', 'idle'].filter(k => params.get(k)).map(k => [k, params.get(k)!])),
   search: '',
-  sort: (params.get('sort') as SortKey) || 'state', sortDir: 1,
+  sort: (params.get('sort') as SortKey) || 'name', sortDir: 1,
   selected: new Set(), focusId: params.get('sel') ? Number(params.get('sel')) : null, inspectorTab: 'overview',
   dialog: { kind: 'none' },
   dismissed: new Set(readLocal<string[]>('tm.dismissed', [])),
   toast: '',
+  density: initialDensity(),
 }
 const listeners = new Set<() => void>()
 function emit() { for (const l of listeners) l() }
@@ -76,7 +85,7 @@ export function syncUrl() {
   for (const k of ['filter', 'size', 'age', 'ratio', 'idle', 'sort', 'sel']) q.delete(k)
   if (snap.filter !== 'all') q.set('filter', snap.filter)
   for (const [k, v] of Object.entries(snap.adv)) if (v && v !== 'any') q.set(k, v)
-  if (snap.sort !== 'state') q.set('sort', snap.sort)
+  if (snap.sort !== 'name') q.set('sort', snap.sort)
   if (snap.focusId) q.set('sel', String(snap.focusId))
   history.replaceState(null, '', u.pathname + (q.toString() ? '?' + q.toString() : ''))
 }

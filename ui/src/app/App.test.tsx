@@ -1,19 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from './App'
-import { get, refreshNow, set, startPolling } from '../state/store'
+import { get, refreshNow, set, startPolling, type Density } from '../state/store'
+import type { SortKey } from '../lib/model'
 import { installFakeDaemon, type FakeDaemon } from '../test/fakeDaemon'
 
 let daemon: FakeDaemon
 
-function resetStore() {
+// The two-line row is the comfortable layout now, so the assertions that read the status
+// chip and the peer line mount in it; the compact one-liner has tests of its own below.
+function resetStore(density: Density = 'comfortable', sort: SortKey = 'state') {
   set({ torrents: [], byId: new Map(), detail: null, session: null, stats: null, history: [], freeSpace: new Map(), connection: 'connecting', lastError: '',
-    filter: 'all', adv: {}, search: '', sort: 'state', sortDir: 1, selected: new Set(), focusId: null, inspectorTab: 'overview', dialog: { kind: 'none' }, dismissed: new Set(), toast: '' })
+    filter: 'all', adv: {}, search: '', sort, sortDir: 1, selected: new Set(), focusId: null, inspectorTab: 'overview', dialog: { kind: 'none' }, dismissed: new Set(), toast: '', density })
 }
 
-async function mount(opts: Parameters<typeof installFakeDaemon>[0] = {}) {
+async function mount(opts: Parameters<typeof installFakeDaemon>[0] & { density?: Density; sort?: SortKey } = {}) {
   daemon = installFakeDaemon(opts)
-  resetStore()
+  resetStore(opts.density, opts.sort)
   const r = render(<App />)
   startPolling()
   refreshNow()
@@ -45,6 +48,49 @@ describe('shell', () => {
     expect(row('ubuntu-26.04.1-desktop-amd64.iso')).toHaveTextContent('Verifying local data · 41%')
     expect(within(row('Pride and Prejudice — LibriVox')).getByText('Stopped')).toBeInTheDocument()
     expect(row('Pride and Prejudice — LibriVox')).toHaveTextContent('No peers')
+  })
+
+  it('compact density puts every torrent on one line, sorted by name', async () => {
+    await mount({ density: 'compact', sort: 'name' })
+    expect(rows()).toHaveLength(8)
+    expect(rows().every(r => r.classList.contains('one'))).toBe(true)
+    // name ascending, not the error torrent first
+    expect(rows().map(r => r.querySelector('.name .t')!.textContent)).toEqual([
+      'Apollo 11 Flight Journal', 'archlinux-2026.08.01-x86_64.iso', 'Big Buck Bunny (2008) 4K 60fps', 'Cosmos Laundromat (2015)',
+      'debian-13.1.0-amd64-DVD-1.iso', 'Pride and Prejudice — LibriVox', 'Tears of Steel (2012) 4K', 'ubuntu-26.04.1-desktop-amd64.iso',
+    ])
+
+
+    const cols = document.querySelector('.cols') as HTMLElement
+    for (const h of ['Name', 'Size', 'Progress', 'Seeds', 'Ratio', 'Uploaded', 'Added on', 'Last active', 'Tracker', 'Path']) {
+      expect(within(cols).getByText(h)).toBeInTheDocument()
+    }
+    for (const gone of ['Down', 'Up', 'ETA']) expect(within(cols).queryByText(gone)).toBeNull()
+
+    const deb = row('debian-13.1.0-amd64-DVD-1.iso')
+    expect(deb).toHaveTextContent('5.20 GB')                // uploaded, now a summary field
+    expect(deb).toHaveTextContent('bttracker.debian.org')
+    // numeric date: a localised month name is wider and would wrap the row
+    expect(deb.textContent).toMatch(/\d{2}[./-]\d{2}[./-]\d{4}|\d{4}-\d{2}-\d{2}/)
+    expect(deb).toHaveTextContent('iso/')
+    expect(deb.querySelector('.sdot.dl')).toBeInTheDocument()
+    // the status word survives as a tooltip, since the second line is gone
+    expect(deb.querySelector('.sdot')).toHaveAttribute('title', 'Downloading')
+    expect(row('Apollo 11 Flight Journal').querySelector('.sdot.err')).toHaveAttribute('title', 'No data found! Ensure your drives are connected')
+    expect(row('Big Buck Bunny (2008) 4K 60fps').querySelector('.sdot.seed')).toBeInTheDocument()
+  })
+
+  it('compact headers sort by the columns the one-liner adds', async () => {
+    await mount({ density: 'compact', sort: 'name' })
+    const cols = document.querySelector('.cols') as HTMLElement
+    fireEvent.click(within(cols).getByText('Path'))
+    expect(rows()[0]).toHaveTextContent('Pride and Prejudice')  // audiobooks/ first, text sorts A→Z
+    fireEvent.click(within(cols).getByText('Path'))
+    expect(rows()[0]).toHaveTextContent('Apollo 11')            // sonarr/docs/ last, so first descending
+    fireEvent.click(within(cols).getByText('Ratio'))
+    expect(rows()[0]).toHaveTextContent('Big Buck Bunny')       // 3.42, the highest
+    fireEvent.click(within(cols).getByText('Seeds'))
+    expect(rows()[0].querySelector('.sdot')).toBeInTheDocument()
   })
 
   it('header shows live speeds, session totals, and the stats popover', async () => {

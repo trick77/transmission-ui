@@ -19,6 +19,7 @@
   --accent-ink:#faf9f5;
   --accent-soft: rgba(198,97,63,.14);
   --seed:      #9c9a92;   /* seeding: neutral, by decision */
+  --seed-dot:  #6f9e63;   /* except the compact row's status dot, where green is the only state cue */
   --seed-soft: rgba(250,249,245,.06);
   --seed-bar:  #454540;
   --up:        #9c9a92;
@@ -213,8 +214,8 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .spd.dl{color:var(--accent)} .spd.ul{color:var(--ink-2)} .spd.ul .arrow{color:var(--ink-3)} .spd.zero{color:var(--ink-3)}
 
 /* with inspector docked: drop Ratio + ETA, keep the list readable */
-.main.has-insp .cols,.main.has-insp .row{grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
-.main.has-insp .cols>:nth-child(n+7),.main.has-insp .row>:nth-child(n+7){display:none}
+:root[data-density="comfortable"] .main.has-insp .cols,.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
+:root[data-density="comfortable"] .main.has-insp .cols>:nth-child(n+7),.main.has-insp .row:not(.one)>:nth-child(n+7){display:none}
 
 .empty{padding:60px 20px;text-align:center;color:var(--ink-3)}
 .empty .t{font-family:var(--serif);font-size:18px;color:var(--ink-2);margin-bottom:6px}
@@ -230,6 +231,38 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .cmenu .it.danger{color:var(--err)} .cmenu .it.danger svg{color:var(--err)}
 .cmenu .sub{position:absolute;right:calc(100% + 4px);left:auto;top:-6px;width:190px}
 .cmenu .it.qpos{position:relative}
+
+/* ───────── Compact density: one line per torrent ─────────
+   Size, Seeds, Ratio, Uploaded, Added on and Last active are one right-aligned
+   numeric block; Name, Tracker and Path are the left-aligned text bookends. */
+:root[data-density="compact"] .cols,
+.row.one{grid-template-columns:24px minmax(180px,1.6fr) 84px 96px 56px 60px 80px 92px 88px minmax(96px,1fr) minmax(104px,1fr)}
+/* locale month names ("19. Sept. 2026") are wider than en-US, so no cell may wrap */
+:root[data-density="compact"] .cols>*,.row.one>*{white-space:nowrap;overflow:hidden}
+.row.one .name{display:flex;align-items:center;gap:7px;position:relative}
+.row.one .name .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:block}
+.row.one.is-err .name .t{color:var(--err)}
+.row.one .sdot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--ink-3)}
+.row.one .sdot.seed{background:var(--seed-dot)}
+.row.one .sdot.dl{background:var(--accent)}
+.row.one .sdot.wait{background:var(--wait)}
+.row.one .sdot.stop{background:var(--stop)}
+.row.one .sdot.err{background:var(--err)}
+.row.one .acts{position:absolute;right:0;top:50%;transform:translateY(-50%);margin:0;padding-left:26px;display:flex;gap:2px;opacity:0;background:linear-gradient(90deg,transparent,var(--bg) 22%)}
+.row.one:hover .acts,.row.one.menu-open .acts{opacity:1}
+.row.one:hover .acts{background:linear-gradient(90deg,transparent,var(--surface) 22%)}
+.row.one.sel .acts{background:linear-gradient(90deg,transparent,#2e2521 22%)}
+.row.one .prog{flex-direction:row;align-items:center;gap:7px}
+.row.one .prog .bar{flex:1;min-width:24px}
+.row.one .prog .pv{flex:none;font-size:11px;color:var(--ink-2);display:block}
+.row.one .num{font-variant-numeric:tabular-nums}
+.row.one .faint{color:var(--ink-3)}
+.row.one .tcell{font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* with the inspector docked the tail columns go first: Path, Tracker, Last active, Added on, Uploaded */
+:root[data-density="compact"] .main.has-insp .cols,
+.main.has-insp .row.one{grid-template-columns:24px minmax(160px,1fr) 80px 92px 52px 56px}
+:root[data-density="compact"] .main.has-insp .cols>:nth-child(n+7),
+.main.has-insp .row.one>:nth-child(n+7){display:none}
 
 /* comfortable density (Interface setting) */
 :root[data-density="comfortable"] .row{padding:14px 16px}

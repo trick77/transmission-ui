@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Icon } from '../icons/Icon'
-import { bytes, compact, eta, percent, rateParts, ratio, ratioValue } from '../lib/format'
-import { relDir, statusView, swarmOf } from '../lib/model'
+import { ago, bytes, compact, date, eta, percent, rateParts, ratio, ratioValue } from '../lib/format'
+import { hostOf, relDir, statusView, swarmOf } from '../lib/model'
 import { Status, type TorrentSummary } from '../rpc/types'
 import * as api from '../rpc/methods'
 import { run } from '../state/store'
@@ -12,7 +12,7 @@ function Speed({ bps, dir }: { bps: number; dir: 'dl' | 'ul' }) {
   return <span className={'spd num ' + dir}><Icon name={dir === 'dl' ? 'down' : 'up'} className="arrow" />{n} {u}</span>
 }
 
-export const Row = memo(function Row({ t, selected, focused, base, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; onMore: (e: React.MouseEvent) => void }) {
+export const Row = memo(function Row({ t, selected, focused, base, compactRow, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; onMore: (e: React.MouseEvent) => void }) {
   const s = statusView(t)
   const { seeds, leechers } = swarmOf(t)
   const swarm = seeds + leechers
@@ -22,6 +22,45 @@ export const Row = memo(function Row({ t, selected, focused, base, onMore }: { t
     : `${t.peers_sending_to_us + t.peers_getting_from_us} of ${t.peers_connected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ''}`
   const dir = relDir(t.download_dir, base)
   const stopped = t.status === Status.Stopped
+  const acts = (
+    <span className="acts">
+      <button title={stopped ? 'Resume' : 'Pause'} onClick={e => { e.stopPropagation(); void run(stopped ? 'Resume' : 'Pause', () => stopped ? api.start([t.id]) : api.stop([t.id])) }}>
+        <Icon name={stopped ? 'play' : 'pause'} size={13} />
+      </button>
+      <button className="more" title="More" onClick={e => { e.stopPropagation(); onMore(e) }}><Icon name="more" size={13} /></button>
+    </span>
+  )
+
+  if (compactRow) {
+    const host = t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : ''
+    // The status word and the peer counts lose their line here, so they move into tooltips.
+    const why = t.error !== 0 ? (t.error_string || 'Error')
+      : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
+      : s.label
+    return (
+      <div className={'row one' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + (t.error !== 0 ? ' is-err' : '')} data-id={t.id}>
+        <span className="chk" role="checkbox" aria-checked={selected} />
+        <div className="name">
+          <span className={'sdot ' + s.kind} title={why} />
+          <span className="t" title={t.error !== 0 ? why : t.name}>{t.name}</span>
+          {acts}
+        </div>
+        <span className="num r muted">{bytes(t.size_when_done)}</span>
+        <div className="prog">
+          <div className={'bar ' + s.bar} style={{ ['--p' as string]: percent(t.percent_done, 1) }}><i /></div>
+          <span className="num pv">{percent(t.percent_done)}</span>
+        </div>
+        <span className={'num r' + (seeds ? '' : ' faint')}>{seeds ? compact(seeds) : '—'}</span>
+        <span className={'num r' + (ratioValue(t.upload_ratio) >= 1 ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
+        <span className="num r muted">{bytes(t.uploaded_ever)}</span>
+        <span className="num r muted">{date(t.added_date)}</span>
+        <span className="num r muted">{ago(t.activity_date)}</span>
+        <span className={'tcell' + (host ? '' : ' faint')} title={host}>{host || '—'}</span>
+        <span className={'tcell' + (dir ? '' : ' faint')} title={dir}>{dir ? dir + '/' : '—'}</span>
+      </div>
+    )
+  }
+
   return (
     <div className={'row' + (selected ? ' sel' : '') + (focused ? ' focus' : '')} data-id={t.id}>
       <span className="chk" role="checkbox" aria-checked={selected} />
@@ -29,12 +68,7 @@ export const Row = memo(function Row({ t, selected, focused, base, onMore }: { t
         <div className="t">
           <span>{t.name}</span>
           {t.labels.map(l => <span key={l} className="chip lbl">{l}</span>)}
-          <span className="acts">
-            <button title={stopped ? 'Resume' : 'Pause'} onClick={e => { e.stopPropagation(); void run(stopped ? 'Resume' : 'Pause', () => stopped ? api.start([t.id]) : api.stop([t.id])) }}>
-              <Icon name={stopped ? 'play' : 'pause'} size={13} />
-            </button>
-            <button className="more" title="More" onClick={e => { e.stopPropagation(); onMore(e) }}><Icon name="more" size={13} /></button>
-          </span>
+          {acts}
         </div>
         <div className="m">
           <span className={'chip ' + s.kind}><span className="dot" />{s.label}</span>

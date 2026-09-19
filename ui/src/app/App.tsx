@@ -35,7 +35,7 @@ export function App() {
 
   // drop .torrent files anywhere → Add dialog; saved density
   useEffect(() => {
-    try { const d = localStorage.getItem('tm.density'); if (d) document.documentElement.dataset.density = d } catch { /* ignore */ }
+    document.documentElement.dataset.density = get().density
     const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault() }
     const drop = (e: DragEvent) => {
       if (!e.dataTransfer?.files.length || get().dialog.kind === 'add') return
