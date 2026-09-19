@@ -121,8 +121,17 @@ jobs:
           printf 'TM_RPC_TARGET=http://localhost:9091\nTM_RPC_AUTH=dev:devpass\n' > ui/.env.local
           (cd ui && nohup npx vite --port 5173 --strictPort > /tmp/vite.log 2>&1 &)
           for i in $(seq 1 30); do curl -sf http://localhost:5173/ >/dev/null && break; sleep 1; done
+      # backend.spec.ts drives the shipped path: the Go binary serving the
+      # bundle and proxying RPC, in form mode so no identity provider is needed.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+      - name: Start backend
+        run: ./hack/backend.sh
       - run: npx playwright test
         working-directory: ui
+      - if: always()
+        run: ./hack/backend.sh stop
       - uses: actions/upload-artifact@v7
         if: always()
         with:

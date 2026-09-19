@@ -43,6 +43,9 @@ data/
 logs/
 
 # Throwaway dev daemon state
+hack/backend.pid
+hack/backend.log
+hack/transmission-ui
 hack/state/
 hack/downloads/
 hack/watch/
