@@ -69,17 +69,19 @@ type OIDCServiceConfig struct {
 	RedirectURL  string
 	Backend      OIDCBackend
 	SecureCookie bool
+	BasePath     string
 }
 
 // OIDCService handles OIDC redirects and callback validation.
 type OIDCService struct {
 	backend OIDCBackend
 	secure  bool
+	path    string
 }
 
 // NewOIDCService creates a service from a pre-built backend (a fake, in tests).
 func NewOIDCService(cfg OIDCServiceConfig) *OIDCService {
-	return &OIDCService{backend: cfg.Backend, secure: cfg.SecureCookie}
+	return &OIDCService{backend: cfg.Backend, secure: cfg.SecureCookie, path: cookiePath(cfg.BasePath)}
 }
 
 // NewOIDCServiceFromDiscovery discovers the configured provider.
@@ -103,6 +105,7 @@ func NewOIDCServiceFromDiscovery(ctx context.Context, cfg OIDCServiceConfig) (*O
 			verifier:    provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		},
 		secure: cfg.SecureCookie,
+		path:   cookiePath(cfg.BasePath),
 	}, nil
 }
 
@@ -143,7 +146,7 @@ func (s *OIDCService) transientCookie(name, value string) *http.Cookie {
 	return &http.Cookie{
 		Name:     name,
 		Value:    value,
-		Path:     "/",
+		Path:     s.path,
 		Expires:  time.Now().Add(10 * time.Minute),
 		HttpOnly: true,
 		Secure:   s.secure,
@@ -161,7 +164,7 @@ func (s *OIDCService) expiredCookie(name string) *http.Cookie {
 	return &http.Cookie{
 		Name:     name,
 		Value:    "",
-		Path:     "/",
+		Path:     s.path,
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,

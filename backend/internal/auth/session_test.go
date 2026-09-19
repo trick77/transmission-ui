@@ -18,7 +18,7 @@ func requestWithCookie(c *http.Cookie) *http.Request {
 }
 
 func TestSessionRoundTrip(t *testing.T) {
-	codec := NewSessionCodec("secret", false, time.Hour, "")
+	codec := NewSessionCodec("secret", false, time.Hour, "", "")
 	claims := Claims{Subject: "u1", PreferredUsername: "alice", Groups: []string{"media"}}
 
 	cookie, err := codec.Encode(claims)
@@ -39,13 +39,13 @@ func TestSessionRoundTrip(t *testing.T) {
 
 // A tampered payload must not verify: this is the whole point of the signature.
 func TestSessionRejectsTamperedPayload(t *testing.T) {
-	codec := NewSessionCodec("secret", false, time.Hour, "")
+	codec := NewSessionCodec("secret", false, time.Hour, "", "")
 	cookie, err := codec.Encode(Claims{Subject: "u1", Groups: []string{"nobody"}})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
 	payload, sig, _ := strings.Cut(cookie.Value, ".")
-	forged := NewSessionCodec("other-secret", false, time.Hour, "")
+	forged := NewSessionCodec("other-secret", false, time.Hour, "", "")
 	other, _ := forged.Encode(Claims{Subject: "attacker", Groups: []string{"media"}})
 	otherPayload, _, _ := strings.Cut(other.Value, ".")
 
@@ -64,17 +64,17 @@ func TestSessionRejectsTamperedPayload(t *testing.T) {
 // A cookie signed with a different secret must not verify, so rotating
 // BACKEND_SESSION_SECRET really does invalidate outstanding sessions.
 func TestSessionRejectsForeignSecret(t *testing.T) {
-	cookie, err := NewSessionCodec("secret-a", false, time.Hour, "").Encode(Claims{Subject: "u1"})
+	cookie, err := NewSessionCodec("secret-a", false, time.Hour, "", "").Encode(Claims{Subject: "u1"})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if _, err := NewSessionCodec("secret-b", false, time.Hour, "").Decode(requestWithCookie(cookie)); err == nil {
+	if _, err := NewSessionCodec("secret-b", false, time.Hour, "", "").Decode(requestWithCookie(cookie)); err == nil {
 		t.Fatal("cookie from another secret accepted")
 	}
 }
 
 func TestSessionRejectsExpired(t *testing.T) {
-	codec := NewSessionCodec("secret", false, -time.Minute, "")
+	codec := NewSessionCodec("secret", false, -time.Minute, "", "")
 	cookie, err := codec.Encode(Claims{Subject: "u1"})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
@@ -85,7 +85,7 @@ func TestSessionRejectsExpired(t *testing.T) {
 }
 
 func TestSessionRejectsMissingOrMalformed(t *testing.T) {
-	codec := NewSessionCodec("secret", false, time.Hour, "")
+	codec := NewSessionCodec("secret", false, time.Hour, "", "")
 	if _, err := codec.Decode(requestWithCookie(nil)); err == nil {
 		t.Fatal("missing cookie accepted")
 	}
@@ -102,7 +102,7 @@ func TestSessionKeepsCheckedGroupWhenTrimming(t *testing.T) {
 		many = append(many, fmt.Sprintf("group-%02d", i))
 	}
 	many = append(many, "media") // last, so a naive head-truncation drops it
-	codec := NewSessionCodec("secret", false, time.Hour, "media")
+	codec := NewSessionCodec("secret", false, time.Hour, "media", "")
 
 	cookie, err := codec.Encode(Claims{Subject: "u1", Groups: many})
 	if err != nil {
@@ -132,7 +132,7 @@ func TestSessionKeepsIdPGroupSpelling(t *testing.T) {
 	}
 	many = append(many, "media")
 	// Configured lower-case; the IdP emits "media".
-	codec := NewSessionCodec("secret", false, time.Hour, "MEDIA")
+	codec := NewSessionCodec("secret", false, time.Hour, "MEDIA", "")
 
 	cookie, err := codec.Encode(Claims{Subject: "u1", Groups: many})
 	if err != nil {

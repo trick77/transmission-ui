@@ -48,8 +48,11 @@ type Config struct {
 	RPCUser     string
 	RPCPass     string
 
-	// SecureCookies is false in dev mode so the flow works over plain http.
+	// SecureCookies is false only when the public URL is loopback.
 	SecureCookies bool
+	// GeneratedSessionSecret records that no secret was configured, so the
+	// caller can warn: every restart invalidates the outstanding sessions.
+	GeneratedSessionSecret bool
 }
 
 // Load reads the environment and validates it. Every error is returned at once
@@ -87,6 +90,7 @@ func Load() (Config, error) {
 		// BACKEND_PUBLIC_URL is informational: the redirect and logout URLs are
 		// configured directly, not derived from it, so it is not required.
 		for name, value := range map[string]string{
+			"BACKEND_PUBLIC_URL":         cfg.PublicURL,
 			"BACKEND_OIDC_ISSUER":        cfg.OIDCIssuer,
 			"BACKEND_OIDC_CLIENT_ID":     cfg.OIDCClientID,
 			"BACKEND_OIDC_CLIENT_SECRET": cfg.OIDCClientSecret,
@@ -96,11 +100,22 @@ func Load() (Config, error) {
 				problems = append(problems, name+" is required when BACKEND_AUTH_MODE=oidc")
 			}
 		}
+		// The callback is only mounted under the public URL's path, so a
+		// redirect URL outside it 404s after the round-trip to the IdP -- a
+		// failure that only shows up once a real login is attempted.
+		if cfg.PublicURL != "" && cfg.OIDCRedirectURL != "" &&
+			!strings.HasPrefix(cfg.OIDCRedirectURL, strings.TrimRight(cfg.PublicURL, "/")+"/") {
+			problems = append(problems, fmt.Sprintf(
+				"BACKEND_OIDC_REDIRECT_URL (%s) must sit under BACKEND_PUBLIC_URL (%s)",
+				cfg.OIDCRedirectURL, cfg.PublicURL))
+		}
 	case AuthModeForm:
 		// A local run needs no ceremony, so generate a per-process secret when
-		// none is set: sessions then die with the process, which is right for
-		// development and harmless for a deployment that sets one.
+		// none is set: sessions then die with the process. A deployment that
+		// omits it gets the same, which signs everyone out on every restart,
+		// so main.go warns about it.
 		if cfg.SessionSecret == "" {
+			cfg.GeneratedSessionSecret = true
 			buf := make([]byte, 32)
 			if _, err := rand.Read(buf); err != nil {
 				return Config{}, fmt.Errorf("generate session secret: %w", err)

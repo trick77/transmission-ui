@@ -22,8 +22,10 @@ export interface RpcErrorData { error_string?: string; result?: Record<string, u
 // was served.
 export function basePath(): string {
   const p = location.pathname
-  // Trim a trailing file name, then any trailing slash: /transmission/ and
-  // /transmission and /transmission/index.html all yield /transmission.
+  // Trim a trailing file name, then the trailing slash: /transmission/ and
+  // /transmission/index.html both yield /transmission. The server redirects
+  // /transmission to /transmission/ before this runs, so the no-slash form
+  // never reaches it.
   const dir = p.endsWith('/') ? p : p.slice(0, p.lastIndexOf('/') + 1)
   return dir.replace(/\/$/, '')
 }
