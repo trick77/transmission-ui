@@ -21,6 +21,8 @@
   --accent-ink:#faf9f5;
   --accent-soft: rgba(198,97,63,.14);
   --seed:      #9c9a92;   /* seeding: neutral, by decision */
+  --seed-dot:  #6f9e63;   /* except the compact row's status dot, where green is the only state cue */
+  --zebra:     rgba(250,249,245,.035);  /* alternating row band: readable, still quiet */
   --seed-soft: rgba(250,249,245,.06);
   --seed-bar:  #454540;
   --up:        #9c9a92;
@@ -43,7 +45,9 @@
 /* ───────── Base ───────── */
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{height:100%;margin:0}
+/* #root too: .app is height:100%, so every ancestor needs a height or it resolves against
+   an auto-height box, the shell grows past the viewport and the row list never scrolls. */
+html,body,#root{height:100%;margin:0}
 body{background:radial-gradient(1200px 600px at 20% -10%,rgba(198,97,63,.06),transparent 60%),radial-gradient(900px 500px at 100% 100%,rgba(214,161,90,.03),transparent 60%),var(--bg);color:var(--ink);font:13px/1.45 var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none;padding:0}
@@ -105,9 +109,9 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 
 /* ───────── Sidebar ───────── */
 .sidebar{border-right:1px solid var(--line);padding:14px 10px;overflow:auto;background:var(--bg)}
-.side-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:0 8px;margin:14px 0 6px}
+.side-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:0 8px;margin:11px 0 4px}
 .side-h:first-child{margin-top:0}
-.side-item{display:flex;align-items:center;gap:9px;height:30px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left}
+.side-item{display:flex;align-items:center;gap:9px;height:25px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left}
 .side-item:hover{background:var(--surface-2);color:var(--ink)}
 .side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:500;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
 .side-item .dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -140,8 +144,11 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .disk .bar.hot i{background:var(--accent)}
 
 /* ───────── Main ───────── */
-.main{display:grid;grid-template-columns:1fr auto;min-width:0;overflow:hidden}
-.list{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+/* min-height:0 on both: a grid/flex item defaults to min-height:auto and refuses to shrink
+   below its content, so without it the row list stretches the shell past the viewport and
+   .rows never becomes scrollable. */
+.main{display:grid;grid-template-columns:1fr auto;min-width:0;min-height:0;overflow:hidden}
+.list{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
 .toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line-soft);position:relative;flex-wrap:wrap}
 .fchip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:500}
 .fchip b{font-weight:500;color:var(--ink)}
@@ -174,8 +181,12 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .cols .sort{color:var(--ink);display:inline-flex;align-items:center;gap:3px}
 .rows{overflow:auto;flex:1;padding-bottom:20px}
 .row{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
-.row:hover{background:var(--surface)}
-.row.sel{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+/* Zebra: alternating bands carry the eye across a wide row, so the one-line layout drops
+   the per-row rule that would otherwise fight them. Hover and selection stay on top. */
+.row.one{border-bottom:0;padding:5px 16px}
+.row.one:nth-child(odd){background:var(--zebra)}
+.row:hover,.row.one:hover{background:var(--surface)}
+.row.sel,.row.one.sel:nth-child(odd){background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
 .row .r{text-align:right}
 .chk{width:16px;height:16px;border:1.5px solid var(--line);border-radius:4px;background:var(--surface)}
 .row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill)}
@@ -215,8 +226,8 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .spd.dl{color:var(--accent)} .spd.ul{color:var(--ink-2)} .spd.ul .arrow{color:var(--ink-3)} .spd.zero{color:var(--ink-3)}
 
 /* with inspector docked: drop Ratio + ETA, keep the list readable */
-.main.has-insp .cols,.main.has-insp .row{grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
-.main.has-insp .cols>:nth-child(n+7),.main.has-insp .row>:nth-child(n+7){display:none}
+.main.has-insp .cols:not(.one),.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
+.main.has-insp .cols:not(.one)>:nth-child(n+7),.main.has-insp .row:not(.one)>:nth-child(n+7){display:none}
 
 .empty{padding:60px 20px;text-align:center;color:var(--ink-3)}
 .empty .t{font-family:var(--serif);font-size:18px;color:var(--ink-2);margin-bottom:6px}
@@ -232,6 +243,40 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .cmenu .it.danger{color:var(--err)} .cmenu .it.danger svg{color:var(--err)}
 .cmenu .sub{position:absolute;right:calc(100% + 4px);left:auto;top:-6px;width:190px}
 .cmenu .it.qpos{position:relative}
+
+/* ───────── Compact density: one line per torrent ─────────
+   Size, Seeds, Ratio, Uploaded, Added on and Last active are one right-aligned
+   numeric block; Name, Tracker and Path are the left-aligned text bookends. */
+.cols.one,
+.row.one{grid-template-columns:24px minmax(180px,1.6fr) 84px 96px 56px 60px 80px 92px 88px minmax(96px,1fr) minmax(104px,1fr)}
+/* locale month names ("19. Sept. 2026") are wider than en-US, so no cell may wrap */
+.cols.one>*,.row.one>*{white-space:nowrap;overflow:hidden}
+.row.one .name{display:flex;align-items:center;gap:7px;position:relative}
+.row.one .name .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:block}
+.row.one.is-err .name .t{color:var(--err)}
+.row.one .sdot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--ink-3)}
+.row.one .sdot.seed{background:var(--seed-dot)}
+.row.one .sdot.dl{background:var(--accent)}
+.row.one .sdot.wait{background:var(--wait)}
+.row.one .sdot.stop{background:var(--stop)}
+.row.one .sdot.err{background:var(--err)}
+.row.one .acts{position:absolute;right:0;top:50%;transform:translateY(-50%);margin:0;padding-left:26px;display:flex;gap:2px;opacity:0;background:linear-gradient(90deg,transparent,var(--bg) 22%)}
+.row.one:hover .acts,.row.one.menu-open .acts{opacity:1}
+.row.one:hover .acts{background:linear-gradient(90deg,transparent,var(--surface) 22%)}
+.row.one.sel .acts{background:linear-gradient(90deg,transparent,#2e2521 22%)}
+.row.one .prog{flex-direction:row;align-items:center;gap:7px}
+.row.one .prog .bar{flex:1;min-width:24px}
+.row.one .prog .pv{flex:none;font-size:11px;color:var(--ink-2);display:block}
+.row.one .num{font-variant-numeric:tabular-nums}
+.row.one .faint{color:var(--ink-3)}
+.row.one .tcell{font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* labels have no room for chips on one line: a count, the names in its tooltip */
+.row.one .lbl-n{flex:none;font-size:10px;line-height:1;padding:2px 5px;border-radius:99px;border:1px solid var(--line);color:var(--ink-3)}
+/* with the inspector docked the tail columns go first: Path, Tracker, Last active, Added on, Uploaded */
+.main.has-insp .cols.one,
+.main.has-insp .row.one{grid-template-columns:24px minmax(160px,1fr) 80px 92px 52px 56px}
+.main.has-insp .cols.one>:nth-child(n+7),
+.main.has-insp .row.one>:nth-child(n+7){display:none}
 
 /* comfortable density (Interface setting) */
 :root[data-density="comfortable"] .row{padding:14px 16px}
@@ -445,7 +490,7 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
           <button class="x" id="selclear" title="Clear selection"><svg class="i" style="width:13px;height:13px"><use href="#i-x"/></svg></button>
         </div>
         <button class="btn ghost sm" id="fbtn"><svg class="i" style="width:14px;height:14px"><use href="#i-search"/></svg>Filter<span class="badge" id="fbadge" hidden>0</span></button>
-        <button class="btn ghost sm" title="Sort"><svg class="i" style="width:14px;height:14px"><use href="#i-sort"/></svg>State</button>
+        <button class="btn ghost sm" title="Sort"><svg class="i" style="width:14px;height:14px"><use href="#i-sort"/></svg>Name</button>
         <div class="fpop" id="fpop" hidden>
           <h4>Filter</h4>
           <div class="frow"><span>Size</span><div class="seg" data-k="size"><button data-v="any" class="on">Any</button><button data-v="lt1">&lt; 1 GB</button><button data-v="1to10">1–10 GB</button><button data-v="gt10">&gt; 10 GB</button></div></div>
@@ -458,7 +503,7 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
       </div>
       <div class="notice" id="notice" hidden><span class="st"></span><span><b>tracker.opentrackr.org</b> has been unreachable for 42 min · 5 torrents affected, DHT and PEX still finding peers</span><button class="btn sm ghost">Re-announce all</button><button class="btn sm ghost icon"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
       <div class="cols">
-        <span class="chk" id="selall" title="Select all"></span><span>Name</span><span class="r">Size</span><span>Progress</span><span class="r sort">Down <svg class="i" style="width:12px;height:12px"><use href="#i-chevd"/></svg></span><span class="r">Up</span><span class="r">Ratio</span><span class="r">ETA</span>
+        <span class="chk" id="selall" title="Select all"></span><span class="sort">Name <svg class="i" style="width:12px;height:12px"><use href="#i-up"/></svg></span><span class="r">Size</span><span>Progress</span><span class="r">Seeds</span><span class="r">Ratio</span><span class="r">Uploaded</span><span class="r">Added on</span><span class="r">Last active</span><span>Tracker</span><span>Path</span>
       </div>
       <div class="rows" id="rows"></div>
     </section>
@@ -489,6 +534,15 @@ const STATUS = {
   "error":         {cls:"err",  bar:"err",    label:"Error"},
 };
 const LBL = {linux:"#3f8cd6", blender:"#e8712f", archive:"#9b6bd6", audiobook:"#3aa87c"};
+
+// ── compact one-line row: derive its columns from the fields above, one dataset ──
+const pad = n => String(n).padStart(2,'0');
+const dstr = days => { const d = new Date(Date.now() - days*86400e3); return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`; };
+const idlestr = (d, id) => d === 0 ? `${(id * 7) % 50 + 5} s ago` : `${d}d 0h ago`;
+const TRK = {iso:"bttracker.debian.org", radarr:"tracker.blender.org", buffer:"tracker.blender.org",
+             audiobooks:"bt1.archive.org", "sonarr/docs":"bt1.archive.org"};
+const upl = t => { const [n,u] = t.size.split(' '); return `${(parseFloat(n)*parseFloat(t.ratio)).toFixed(2)} ${u}`; };
+const trk = t => TRK[rel(t.dir)] || 'tracker.opentrackr.org';
 const spd = (v, dir) => v === "0"
   ? `<span class="spd zero num">—</span>`
   : `<span class="spd ${dir} num"><svg class="i arrow"><use href="#i-${dir==='dl'?'down':'up'}"/></svg>${v}</span>`;
@@ -513,6 +567,34 @@ function row(t, sel){
     <span class="num r muted">${t.eta}</span>
   </div>`;
 }
+
+// Compact density: one line per torrent. The status word and the peer counts ride on the
+// dot's tooltip, the labels on a count beside the name.
+function rowOne(t, sel){
+  const s = STATUS[t.st];
+  const [conn, act] = t.peers.split(' · ');
+  const peers = conn === "0" ? 'No peers' : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
+  const why = t.err ? t.err : s.label === 'Verifying' ? 'Verifying local data' : `${s.label} · ${peers}`;
+  const acts = `<span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span>`;
+  return `<div class="row one${sel?' sel':''}${t.err?' is-err':''}" data-id="${t.id}">
+    <span class="chk"></span>
+    <div class="name">
+      <span class="sdot ${s.cls}" title="${why}"></span>
+      <span class="t" title="${t.err ? why : t.name}">${t.name}</span>
+      ${t.lbl.length?`<span class="lbl-n" title="${t.lbl.join(' · ')}">${t.lbl.length}</span>`:''}
+      ${acts}
+    </div>
+    <span class="num r muted">${t.size}</span>
+    <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num pv">${t.p}%</span></div>
+    <span class="num r ${t.swarm?'':'faint'}">${t.swarm || '—'}</span>
+    <span class="num r ${+t.ratio>=1?'':'muted'}">${t.ratio}</span>
+    <span class="num r muted">${upl(t)}</span>
+    <span class="num r muted">${dstr(t.age)}</span>
+    <span class="num r muted">${idlestr(t.idle, t.id)}</span>
+    <span class="tcell" title="${trk(t)}">${trk(t)}</span>
+    <span class="tcell" title="${rel(t.dir)}">${rel(t.dir)}/</span>
+  </div>`;
+}
 const FILTERS = {
   all:        {label:"All torrents",  f:t=>true},
   download:   {label:"Downloading",   f:t=>t.st==="download"},
@@ -526,6 +608,7 @@ const FILTERS = {
   trackererr: {label:"Tracker error", f:t=>t.id===12||t.id===1},
 };
 // default sort: problems first, then by how much attention a torrent needs
+// State order. The list sorts by name now; this stays because ?sort=state still reaches it.
 const RANK = t => t.st==="error" ? 0 : (t.trk ? 1 : t.st==="check"||t.st==="check-wait" ? 2 : t.st==="download-wait" ? 3 : t.st==="download" ? 4 : t.st==="seed-wait" ? 5 : t.st==="seed" ? 6 : 7);
 const ADV = {
   size:  {lt1:t=>gb(t.size)<1, "1to10":t=>gb(t.size)>=1&&gb(t.size)<=10, gt10:t=>gb(t.size)>10},
@@ -541,7 +624,7 @@ const gb = s => s.endsWith("MB") ? parseFloat(s)/1024 : parseFloat(s);
 function renderRows(selId, filter){
   const F = filter && filter.startsWith('dir:') ? {label: rel(filter.slice(4)), f: t => t.dir === filter.slice(4) || t.dir.startsWith(filter.slice(4) + '/')} : FILTERS[filter || 'all'];
   T.forEach(t => { t.trk = t.id===1 || t.id===12; });
-  const list = T.filter(F.f).filter(t => Object.entries(adv).every(([k,v]) => !v || v==='any' || ADV[k][v](t))).sort((a,b) => RANK(a)-RANK(b) || a.idle-b.idle);
+  const list = T.filter(F.f).filter(t => Object.entries(adv).every(([k,v]) => !v || v==='any' || ADV[k][v](t))).sort((a,b) => a.name.localeCompare(b.name));
   const fc2 = document.getElementById('fchips'); if (fc2) { const on = Object.entries(adv).filter(([k,v])=>v&&v!=='any');
     fc2.innerHTML = on.map(([k,v])=>`<span class="fchip"><b>${ADV_LABEL[k][v]}</b><button data-k="${k}" title="Remove"><svg class="i" style="width:11px;height:11px"><use href="#i-x"/></svg></button></span>`).join('');
     fc2.querySelectorAll('button').forEach(b=>b.onclick=()=>{ delete adv[b.dataset.k]; syncAdv(); renderRows(null, filter); });
@@ -553,7 +636,9 @@ function renderRows(selId, filter){
       const n = T.filter(t=>t.dir===p||t.dir.startsWith(p+'/')).length;
       out.push(`<button class="side-item${filter==='dir:'+p?' on':''}" data-d="${p}" style="padding-left:${8+(i-1)*14}px"><svg class="i" style="width:14px;height:14px"><use href="#i-folder"/></svg><span class="lbl">${parts[i-1]}</span><span class="cnt">${n}</span></button>`); } });
     fl.innerHTML = out.join(''); fl.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>renderRows(null,'dir:'+b.dataset.d)); }
-  document.getElementById('rows').innerHTML = list.length ? list.map(t=>row(t, t.id===selId)).join('')
+  const one = document.documentElement.dataset.density !== 'comfortable';
+  const cols = document.querySelector('.cols'); if (cols) cols.classList.toggle('one', one);
+  document.getElementById('rows').innerHTML = list.length ? list.map(t=>(one?rowOne:row)(t, t.id===selId)).join('')
     : `<div class="empty"><div class="t">Nothing matches</div>${Object.values(adv).some(v=>v&&v!=='any') ? 'Try loosening a filter · <a href="#" id="eclear" style="color:var(--accent)">clear all</a>' : 'No torrents in this view'}</div>`;
   const ec = document.getElementById('eclear'); if (ec) ec.onclick = e => { e.preventDefault(); adv = {}; syncAdv(); renderRows(null, filter); };
   const sb = document.getElementById('selbar'); if (sb) sb.hidden = !selId;
