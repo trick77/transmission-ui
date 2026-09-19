@@ -1,20 +1,23 @@
-# Production stack: transmission-daemon 4.1.3 with this UI baked in (see Containerfile).
+# Production stack: this UI in front of a transmission-daemon you run elsewhere.
 #
-# Two ways in, both to the same container port:
-#   - the UI at https://${TM_HOST} through an external Traefik that terminates TLS
-#     (requires the external "traefik" network: `docker network create traefik`)
-#   - the RPC directly on :9091 on the LAN, for radarr/sonarr and transmission-remote
-# The daemon's own RPC basic auth (TM_USER / TM_PASS) applies on both paths.
+# The image is the UI bundle plus a Go backend that
+#   - terminates OIDC against your identity provider and keeps the session in a
+#     signed cookie, and
+#   - proxies /transmission/rpc to the daemon, attaching the daemon's basic auth
+#     on the way out, so the browser never sees those credentials.
 #
-#   cp .env.example .env   # fill in TM_HOST, TM_USER / TM_PASS and the paths
-#   docker compose up -d                 # pulls ghcr.io/trick77/transmission-ui (release.yaml)
+#   cp .env.example .env   # fill in the OIDC block, TM_* and the session secret
+#   docker compose up -d                 # pulls ghcr.io/trick77/transmission-ui
 #   docker compose up -d --build         # or build locally from the Containerfile
+#
+# The daemon itself is NOT in this image. TM_RPC_UPSTREAM points at it; it keeps
+# its own RPC port for transmission-remote and the *arr apps.
 #
 # 4.1.x speaks JSON-RPC 2.0 with snake_case keys (rpc_version 19); the UI targets that and
 # does not talk to 4.0.x any more. If a version bump gets the client blacklisted again, the
 # sidebar shows "client rejected" per tracker within one announce cycle.
 services:
-  transmission:
+  transmission-ui:
     image: ghcr.io/trick77/transmission-ui:latest
     build:
       context: .
@@ -22,42 +25,31 @@ services:
     restart: unless-stopped
 
     environment:
-      PUID: "${PUID:-1000}"
-      PGID: "${PGID:-1000}"
-      TZ: "${TZ:-Europe/Zurich}"
-      # RPC basic auth. The browser prompts once; the UI never stores these.
-      USER: "${TM_USER}"
-      PASS: "${TM_PASS}"
-      # Where the daemon serves the UI from (baked into the image at /web).
-      TRANSMISSION_WEB_HOME: /web
-      # No HOST_WHITELIST: with RPC auth on, the daemon accepts any Host header
-      # (rpc-server.cc isHostnameAllowed), so Traefik's public name needs no entry.
-      # Peer port. The image rewrites settings.json from this on EVERY start, so
-      # .env is the source of truth; a change in Settings › Network is reverted at
-      # the next restart. Keep it equal to the mapping below.
-      PEERPORT: "${TM_PEER_PORT:-51413}"
-      # Everything else in settings.json is changed from the UI's Settings dialog.
-
-    volumes:
-      - ./config:/config                       # settings.json, resume data, torrent files
-      - "${TM_DOWNLOADS:-./downloads}:/downloads"  # download-dir; subfolders (buffer, radarr, sonarr…) appear in the sidebar
-      - "${TM_WATCH:-./watch}:/watch"          # drop .torrent files here to auto-add
-
-    ports:
-      # RPC + UI on the LAN. Traefik reaches the same port over the traefik network.
-      - "9091:9091"
-      # Peer port: BitTorrent traffic, not HTTP; never goes through Traefik. Same
-      # number on both sides because PEERPORT above makes the daemon listen on it.
-      - "${TM_PEER_PORT:-51413}:${TM_PEER_PORT:-51413}"
-      - "${TM_PEER_PORT:-51413}:${TM_PEER_PORT:-51413}/udp"
+      BACKEND_ADDR: ":8080"
+      BACKEND_PUBLIC_URL: "${BACKEND_PUBLIC_URL}"
+      BACKEND_SESSION_SECRET: "${BACKEND_SESSION_SECRET:?generate one, e.g. openssl rand -base64 48}"
+      # oidc (production) or dev (local only: signs everyone in automatically).
+      BACKEND_AUTH_MODE: "${BACKEND_AUTH_MODE:-oidc}"
+      BACKEND_OIDC_ISSUER: "${BACKEND_OIDC_ISSUER}"
+      BACKEND_OIDC_CLIENT_ID: "${BACKEND_OIDC_CLIENT_ID}"
+      BACKEND_OIDC_CLIENT_SECRET: "${BACKEND_OIDC_CLIENT_SECRET}"
+      BACKEND_OIDC_REDIRECT_URL: "${BACKEND_OIDC_REDIRECT_URL}"
+      BACKEND_OIDC_POST_LOGOUT_REDIRECT_URL: "${BACKEND_OIDC_POST_LOGOUT_REDIRECT_URL:-}"
+      # Empty = no group check; every authenticated user gets in.
+      BACKEND_OIDC_ALLOWED_GROUP: "${BACKEND_OIDC_ALLOWED_GROUP:-}"
+      # The daemon: where it is, and the RPC credentials to present to it.
+      TM_RPC_UPSTREAM: "${TM_RPC_UPSTREAM:-http://transmission:9091}"
+      TM_USER: "${TM_USER}"
+      TM_PASS: "${TM_PASS}"
 
     healthcheck:
-      # Basic auth covers /transmission/web/ too, so the probe must authenticate;
-      # unauthenticated it would 401 forever and mark the container unhealthy.
-      test: ["CMD-SHELL", "curl -fsS -o /dev/null -u \"$USER:$PASS\" http://127.0.0.1:9091/transmission/web/"]
+      # The SPA index is public; the RPC behind it is not. A 200 here means the
+      # binary is up and serving. The image is distroless, so this runs the
+      # daemon-free equivalent of a TCP probe via the shell Docker provides.
+      test: ["CMD", "/transmission-ui", "-healthcheck"]
       interval: 60s
       timeout: 5s
-      start_period: 30s
+      start_period: 10s
       start_interval: 5s
       retries: 3
 
@@ -65,21 +57,13 @@ services:
       - default
       - traefik
 
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          # Daemon RSS stays under ~300 MB with a few hundred torrents; the rest is page cache for
-          # the pieces being verified or seeded. 1g is comfortable; raise if verify runs get slow.
-          memory: 1g
-
     labels:
       traefik.enable: "true"
       traefik.docker.network: traefik
-      traefik.http.routers.transmission.rule: Host(`${TM_HOST}`)
-      traefik.http.routers.transmission.entrypoints: websecure
-      traefik.http.routers.transmission.tls: "true"
-      traefik.http.services.transmission.loadbalancer.server.port: "9091"
+      traefik.http.routers.transmission-ui.rule: Host(`${TM_HOST}`)
+      traefik.http.routers.transmission-ui.entrypoints: websecure
+      traefik.http.routers.transmission-ui.tls: "true"
+      traefik.http.services.transmission-ui.loadbalancer.server.port: "8080"
 
 networks:
   traefik:

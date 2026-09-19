@@ -85,10 +85,10 @@ describe('shell', () => {
     expect(document.activeElement).toBe(input)
   })
 
-  it('shows a connection banner when the daemon needs credentials, with a reload button', async () => {
+  it('shows a sign-in banner when there is no session', async () => {
     await mount({ unauthorized: true })
-    await screen.findByText(/Daemon needs credentials/, {}, { timeout: 4000 })
-    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+    await screen.findByText(/Not signed in/, {}, { timeout: 4000 })
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 })
 

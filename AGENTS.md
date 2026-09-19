@@ -7,6 +7,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - `ui/` Vite + React 19 + TS, plain CSS. `ui/src/styles/app.css` is ported from `design/src/head.html`: edit the mock first, then copy the `<style>` block over (fonts → `../assets/fonts/`).
 - `hack/` local daemon state, `fixtures.sh` (seeds every torrent state), `coverage-gate.sh` + `coverage-floors`.
 - `ui/sim/` standalone fake daemon (`node ui/sim/server.ts`, `:9092`). Node runs it with built-in type stripping, so keep it erasable: no enum, no parameter properties, `.ts` on every relative import, `import type { … }` in statement form only.
+- `backend/` Go: serves the embedded `ui/dist`, OIDC RP at `/api/auth/*` (signed-cookie session, no DB), reverse-proxies `/transmission/rpc` to the daemon with its basic auth attached. Ported from peeq's `internal/auth`.
 - `compose.yaml` = production stack (Containerfile image, `.env` from `.env.example`). `compose.dev.yaml` = throwaway local daemon.
 
 ## Daemon
@@ -21,7 +22,8 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - Unit + component tests: `ui/src/**/*.test.{ts,tsx}`, jsdom + @testing-library. Components run against `ui/src/test/fakeDaemon.ts` (in-memory RPC behind `fetch`); assert on the RPC calls it records, not on internals. New source file → a test that imports it, coverage `include` counts untested files.
 - e2e: `make fe-e2e` (Playwright, needs dev server + seeded local daemon; `e2e/served.spec.ts` needs `npm run build`). Screenshots in `ui/test-results/`.
 - Visible change → drive the running app, compare to `design/*.html` in Safari.
-- Ship: `npm run build` → rsync `ui/dist` to the server → mount at `/web`, `TRANSMISSION_WEB_HOME=/web`, restart. Rollback = unset the var. Or `docker compose up -d --build` with `compose.yaml` for the self-contained image.
+- Ship: `docker compose up -d --build` with `compose.yaml`. The image is UI + backend and contains no daemon; `TM_RPC_UPSTREAM` points at one. Bundle-only path still works (rsync `ui/dist`, mount at `/web`, `TRANSMISSION_WEB_HOME=/web`) but has no OIDC.
+- Backend gates: `npm run build` in `ui/` first, then `cp -R ui/dist/. backend/dist/` — `main.go` embeds the bundle and `backend/dist/` is gitignored, so a fresh checkout cannot build without it. Then `cd backend && go vet ./... && go test ./...`. Local run without an IdP: `BACKEND_AUTH_MODE=dev` signs everyone in.
 
 ## Conventions
 - All RPC calls go through `ui/src/rpc/methods.ts`; method and field names are the daemon's, snake_case throughout (rpc 18+). Take spellings from the upstream `docs/rpc-spec.md`, never from memory.

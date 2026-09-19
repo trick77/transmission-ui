@@ -1,12 +1,25 @@
-# Optional: a daemon image with this UI baked in. The documented ship path mounts ui/dist instead
-# (see docs); this is for the case where a self-contained image is easier to deploy.
-FROM node:26-alpine AS build
+# The shipped image: the UI bundle embedded in a Go binary that terminates OIDC
+# and proxies RPC to a transmission-daemon running elsewhere. It does NOT
+# contain a daemon; point TM_RPC_UPSTREAM at yours.
+FROM node:26-alpine AS ui
 WORKDIR /src
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY ui/ ./
 RUN npm run build
 
-FROM lscr.io/linuxserver/transmission:4.1.3-r0-ls360
-COPY --from=build /src/dist /web
-ENV TRANSMISSION_WEB_HOME=/web
+FROM golang:1.27-alpine AS backend
+WORKDIR /src
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+# The bundle is embedded (//go:embed all:dist), so it has to be in place before
+# the build, not copied into the runtime image.
+COPY --from=ui /src/dist ./dist
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/transmission-ui .
+
+FROM gcr.io/distroless/static-debian13:nonroot
+COPY --from=backend /out/transmission-ui /transmission-ui
+EXPOSE 8080
+USER nonroot:nonroot
+ENTRYPOINT ["/transmission-ui"]

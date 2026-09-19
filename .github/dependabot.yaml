@@ -1,5 +1,15 @@
 version: 2
 updates:
+  # Go backend
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      go-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
   # React frontend
   - package-ecosystem: npm
     directory: /ui

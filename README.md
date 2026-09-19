@@ -19,20 +19,28 @@ and does not talk to the 4.0.x protocol.
 
 Two ways in, both from the release:
 
-**Container image** — transmission-daemon with the UI baked in:
+**Container image** — the UI plus a small Go backend:
 
 ```
 ghcr.io/trick77/transmission-ui:latest
 ```
 
-`compose.yaml` in this repo is a working stack: the UI behind an external Traefik, RPC still on
-`:9091` for radarr/sonarr and `transmission-remote`. Copy `.env.example` to `.env` first.
+The backend serves the bundle, terminates OIDC against your identity provider, and proxies
+`/transmission/rpc` to a daemon you run separately, attaching the daemon's basic auth upstream so
+the browser never sees it. The image contains no daemon: point `TM_RPC_UPSTREAM` at yours, which
+keeps `:9091` for radarr/sonarr and `transmission-remote`.
+
+`compose.yaml` in this repo is a working stack behind an external Traefik. Copy `.env.example` to
+`.env` first and register a confidential OIDC client with your IdP, redirect URI
+`https://<host>/api/auth/callback`.
 
 **Bundle only** — mount it into a daemon you already run:
 
 1. Download `transmission-ui-<version>.zip` from the [releases](https://github.com/trick77/transmission-ui/releases) and unzip it somewhere the daemon can read.
 2. Mount it at `/web` and set `TRANSMISSION_WEB_HOME=/web`.
 3. Restart the daemon. Unsetting the variable puts the stock UI back.
+
+This path has no OIDC: the daemon serves the bundle and its own basic auth applies.
 
 ## Development
 

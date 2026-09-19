@@ -12,6 +12,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  backend:
+    name: Backend (vet + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+      # main.go embeds the bundle (//go:embed all:dist) and backend/dist is
+      # gitignored, so the UI has to be built before the Go build can run.
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
+      - run: cp -R ui/dist/. backend/dist/
+      - run: go vet ./...
+        working-directory: backend
+      - run: go test ./...
+        working-directory: backend
+
   ui:
     name: UI (typecheck + build + test)
     runs-on: ubuntu-latest
