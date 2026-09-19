@@ -182,9 +182,11 @@ export function rank(t: TorrentSummary): number {
   }
 }
 
-export function sortFn(key: SortKey, dir: 1 | -1): (a: TorrentSummary, b: TorrentSummary) => number {
+/** `base` is the session download dir, so Path sorts on what the row actually shows. */
+export function sortFn(key: SortKey, dir: 1 | -1, base = ''): (a: TorrentSummary, b: TorrentSummary) => number {
   const num = (f: (t: TorrentSummary) => number) => (a: TorrentSummary, b: TorrentSummary) => (f(a) - f(b)) * dir || a.name.localeCompare(b.name)
-  // Empty trackers and paths sort last in either direction, the way ETA parks unknowns.
+  // A missing tracker or path is the absence of a value, not a value that sorts low, so it
+  // parks last in both directions. (An unknown ETA differs: there it is a real extreme.)
   const text = (f: (t: TorrentSummary) => string) => (a: TorrentSummary, b: TorrentSummary) => {
     const x = f(a), y = f(b)
     if (!x !== !y) return x ? -1 : 1
@@ -203,7 +205,7 @@ export function sortFn(key: SortKey, dir: 1 | -1): (a: TorrentSummary, b: Torren
     case 'seeds': return num(t => swarmOf(t).seeds)
     case 'uploaded': return num(t => t.uploaded_ever)
     case 'tracker': return text(t => t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : '')
-    case 'path': return text(t => t.download_dir)
+    case 'path': return text(t => relDir(t.download_dir, base))
     default: return (a, b) => (rank(a) - rank(b)) * dir || b.activity_date - a.activity_date || a.name.localeCompare(b.name)
   }
 }

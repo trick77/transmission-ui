@@ -45,8 +45,8 @@ export function List() {
   const F = useMemo(() => filterFn(filter, base), [filter, base])
   const list = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return torrents.filter(F.f).filter(advFn(adv)).filter(t => !q || t.name.toLowerCase().includes(q)).sort(sortFn(sort, sortDir))
-  }, [torrents, F, adv, search, sort, sortDir])
+    return torrents.filter(F.f).filter(advFn(adv)).filter(t => !q || t.name.toLowerCase().includes(q)).sort(sortFn(sort, sortDir, base))
+  }, [torrents, F, adv, search, sort, sortDir, base])
   const ids = useMemo(() => list.map(t => t.id), [list])
   const total = list.reduce((a, t) => a + t.size_when_done, 0)
   const on = advActive(adv)
@@ -122,7 +122,7 @@ export function List() {
         <button className="btn ghost sm" id="fbtn" onClick={() => setFpop(p => !p)}>
           <Icon name="search" size={14} />Filter{on.length ? <span className="badge">{on.length}</span> : null}
         </button>
-        <button className="btn ghost sm" title="Sort" onClick={() => { set({ sort: 'state', sortDir: 1 }); syncUrl() }}>
+        <button className="btn ghost sm" title="Sort" onClick={() => { set({ sort: 'name', sortDir: 1 }); syncUrl() }}>
           <Icon name="sort" size={14} />{sort === 'state' ? 'State' : [...COLS, ...COLS_ONE].find(c => c.key === sort)?.label ?? sort}
         </button>
         <button className="btn ghost icon" id="tmenu" title="More" onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom + 6, kind: 'view', ids }) }}><Icon name="more" /></button>
@@ -153,7 +153,7 @@ export function List() {
         </div>
       ))}
 
-      <div className="cols">
+      <div className={'cols' + (one ? ' one' : '')}>
         <span className={'chk' + (allSel ? ' on' : someSel ? ' some' : '')} id="selall" title="Select all" onClick={selectAll} />
         {cols.map(c => (
           <span key={c.key} className={(c.cls ?? '') + (sort === c.key ? ' sort' : '')} style={{ cursor: 'pointer' }}

@@ -16,10 +16,11 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, o
   const s = statusView(t)
   const { seeds, leechers } = swarmOf(t)
   const swarm = seeds + leechers
+  const peers = t.peers_connected === 0 ? (swarm ? `No peers · ${compact(swarm)} in swarm` : 'No peers')
+    : `${t.peers_sending_to_us + t.peers_getting_from_us} of ${t.peers_connected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ''}`
   const sub = t.error !== 0 ? <span style={{ color: 'var(--err)' }}>{t.error_string || 'Error'}</span>
     : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
-    : t.peers_connected === 0 ? (swarm ? `No peers · ${compact(swarm)} in swarm` : 'No peers')
-    : `${t.peers_sending_to_us + t.peers_getting_from_us} of ${t.peers_connected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ''}`
+    : peers
   const dir = relDir(t.download_dir, base)
   const stopped = t.status === Status.Stopped
   const acts = (
@@ -33,16 +34,21 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, o
 
   if (compactRow) {
     const host = t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : ''
-    // The status word and the peer counts lose their line here, so they move into tooltips.
+    // The second line is gone, so what it carried moves into tooltips: the status word and
+    // the peer counts onto the dot, the labels onto the name.
     const why = t.error !== 0 ? (t.error_string || 'Error')
       : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
-      : s.label
+      : `${s.label} · ${peers}`
+    const nameTitle = t.error !== 0 ? why
+      : t.labels.length ? `${t.name}\n${t.labels.join(' · ')}`
+      : t.name
     return (
       <div className={'row one' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + (t.error !== 0 ? ' is-err' : '')} data-id={t.id}>
         <span className="chk" role="checkbox" aria-checked={selected} />
         <div className="name">
           <span className={'sdot ' + s.kind} title={why} />
-          <span className="t" title={t.error !== 0 ? why : t.name}>{t.name}</span>
+          <span className="t" title={nameTitle}>{t.name}</span>
+          {t.labels.length ? <span className="lbl-n" title={t.labels.join(' · ')}>{t.labels.length}</span> : null}
           {acts}
         </div>
         <span className="num r muted">{bytes(t.size_when_done)}</span>

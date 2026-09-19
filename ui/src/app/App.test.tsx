@@ -75,9 +75,19 @@ describe('shell', () => {
     expect(deb).toHaveTextContent('iso/')
     expect(deb.querySelector('.sdot.dl')).toBeInTheDocument()
     // the status word survives as a tooltip, since the second line is gone
-    expect(deb.querySelector('.sdot')).toHaveAttribute('title', 'Downloading')
+    expect(deb.querySelector('.sdot')!.getAttribute('title')).toMatch(/^Downloading/)
     expect(row('Apollo 11 Flight Journal').querySelector('.sdot.err')).toHaveAttribute('title', 'No data found! Ensure your drives are connected')
     expect(row('Big Buck Bunny (2008) 4K 60fps').querySelector('.sdot.seed')).toBeInTheDocument()
+
+    // the header must carry the same layout class as the rows, or the two grids drift apart
+    expect(document.querySelector('.cols')!.classList.contains('one')).toBe(true)
+
+    // labels have no chips on one line: a count with the names in its tooltip
+    const lbl = deb.querySelector('.lbl-n')!
+    expect(lbl).toHaveTextContent('1')
+    expect(lbl).toHaveAttribute('title', 'linux')
+    // and the peer counts the dropped line carried are on the status dot
+    expect(deb.querySelector('.sdot')!.getAttribute('title')).toMatch(/of 42 peers/)
   })
 
   it('compact headers sort by the columns the one-liner adds', async () => {

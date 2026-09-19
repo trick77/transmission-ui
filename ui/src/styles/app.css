@@ -214,8 +214,8 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .spd.dl{color:var(--accent)} .spd.ul{color:var(--ink-2)} .spd.ul .arrow{color:var(--ink-3)} .spd.zero{color:var(--ink-3)}
 
 /* with inspector docked: drop Ratio + ETA, keep the list readable */
-:root[data-density="comfortable"] .main.has-insp .cols,.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
-:root[data-density="comfortable"] .main.has-insp .cols>:nth-child(n+7),.main.has-insp .row:not(.one)>:nth-child(n+7){display:none}
+.main.has-insp .cols:not(.one),.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
+.main.has-insp .cols:not(.one)>:nth-child(n+7),.main.has-insp .row:not(.one)>:nth-child(n+7){display:none}
 
 .empty{padding:60px 20px;text-align:center;color:var(--ink-3)}
 .empty .t{font-family:var(--serif);font-size:18px;color:var(--ink-2);margin-bottom:6px}
@@ -235,10 +235,10 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 /* ───────── Compact density: one line per torrent ─────────
    Size, Seeds, Ratio, Uploaded, Added on and Last active are one right-aligned
    numeric block; Name, Tracker and Path are the left-aligned text bookends. */
-:root[data-density="compact"] .cols,
+.cols.one,
 .row.one{grid-template-columns:24px minmax(180px,1.6fr) 84px 96px 56px 60px 80px 92px 88px minmax(96px,1fr) minmax(104px,1fr)}
 /* locale month names ("19. Sept. 2026") are wider than en-US, so no cell may wrap */
-:root[data-density="compact"] .cols>*,.row.one>*{white-space:nowrap;overflow:hidden}
+.cols.one>*,.row.one>*{white-space:nowrap;overflow:hidden}
 .row.one .name{display:flex;align-items:center;gap:7px;position:relative}
 .row.one .name .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:block}
 .row.one.is-err .name .t{color:var(--err)}
@@ -258,10 +258,12 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .row.one .num{font-variant-numeric:tabular-nums}
 .row.one .faint{color:var(--ink-3)}
 .row.one .tcell{font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* labels have no room for chips on one line: a count, the names in its tooltip */
+.row.one .lbl-n{flex:none;font-size:10px;line-height:1;padding:2px 5px;border-radius:99px;border:1px solid var(--line);color:var(--ink-3)}
 /* with the inspector docked the tail columns go first: Path, Tracker, Last active, Added on, Uploaded */
-:root[data-density="compact"] .main.has-insp .cols,
+.main.has-insp .cols.one,
 .main.has-insp .row.one{grid-template-columns:24px minmax(160px,1fr) 80px 92px 52px 56px}
-:root[data-density="compact"] .main.has-insp .cols>:nth-child(n+7),
+.main.has-insp .cols.one>:nth-child(n+7),
 .main.has-insp .row.one>:nth-child(n+7){display:none}
 
 /* comfortable density (Interface setting) */
