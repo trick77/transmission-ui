@@ -20,9 +20,16 @@ import (
 
 const SessionCookieName = "tmui_session"
 
+// Enough to keep a useful group list for display without approaching the
+// per-cookie size limit.
+const maxCookieGroups = 16
+
 var ErrInvalidSession = errors.New("invalid session")
 
-// sessionPayload is what the cookie carries, JSON then base64url.
+// sessionPayload is what the cookie carries, JSON then base64url. The claims
+// are trimmed first: a user in many IdP groups could otherwise push the cookie
+// past the ~4KB browser limit, at which point the browser silently drops it and
+// the user loops through login with no server-side error to show for it.
 type sessionPayload struct {
 	Claims  Claims `json:"claims"`
 	Expires int64  `json:"exp"`
@@ -30,20 +37,22 @@ type sessionPayload struct {
 
 // SessionCodec signs and verifies session cookies.
 type SessionCodec struct {
-	secret []byte
-	secure bool
-	ttl    time.Duration
+	secret    []byte
+	secure    bool
+	ttl       time.Duration
+	keepGroup string // the group requireAuth checks; never trimmed away
 }
 
-// NewSessionCodec returns a codec over the given secret.
-func NewSessionCodec(secret string, secure bool, ttl time.Duration) *SessionCodec {
-	return &SessionCodec{secret: []byte(secret), secure: secure, ttl: ttl}
+// NewSessionCodec returns a codec over the given secret. keepGroup is the group
+// the authorization check reads; it is preserved when the group list is capped.
+func NewSessionCodec(secret string, secure bool, ttl time.Duration, keepGroup string) *SessionCodec {
+	return &SessionCodec{secret: []byte(secret), secure: secure, ttl: ttl, keepGroup: keepGroup}
 }
 
 // Encode returns a signed cookie carrying the claims.
 func (c *SessionCodec) Encode(claims Claims) (*http.Cookie, error) {
 	expires := time.Now().Add(c.ttl)
-	body, err := json.Marshal(sessionPayload{Claims: claims, Expires: expires.Unix()})
+	body, err := json.Marshal(sessionPayload{Claims: trimForCookie(claims, c.keepGroup), Expires: expires.Unix()})
 	if err != nil {
 		return nil, fmt.Errorf("encode session: %w", err)
 	}
@@ -100,6 +109,29 @@ func (c *SessionCodec) ClearCookie() *http.Cookie {
 		Secure:   c.secure,
 		SameSite: http.SameSiteLaxMode,
 	}
+}
+
+// trimForCookie caps the group list. The group the request path checks must
+// survive the cut, or requireAuth would reject a user who is in fact a member:
+// keep it first, then fill the rest up to the cap.
+func trimForCookie(claims Claims, keep string) Claims {
+	if len(claims.Groups) <= maxCookieGroups {
+		return claims
+	}
+	trimmed := make([]string, 0, maxCookieGroups)
+	if keep != "" && claims.HasGroup(keep) {
+		trimmed = append(trimmed, keep)
+	}
+	for _, g := range claims.Groups {
+		if len(trimmed) == maxCookieGroups {
+			break
+		}
+		if !strings.EqualFold(g, keep) {
+			trimmed = append(trimmed, g)
+		}
+	}
+	claims.Groups = trimmed
+	return claims
 }
 
 func (c *SessionCodec) sign(payload string) string {

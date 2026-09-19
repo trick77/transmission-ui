@@ -70,11 +70,11 @@ func main() {
 			os.Exit(1)
 		}
 		oidcService = svc
-	} else {
+	} else if cfg.AuthMode == config.AuthModeDev {
 		log.Warn("BACKEND_AUTH_MODE=dev: every visitor is signed in automatically")
 	}
 
-	sessions := auth.NewSessionCodec(cfg.SessionSecret, cfg.SecureCookies, cfg.SessionTTL)
+	sessions := auth.NewSessionCodec(cfg.SessionSecret, cfg.SecureCookies, cfg.SessionTTL, cfg.OIDCAllowedGroup)
 	srv := httpapi.New(cfg, oidcService, sessions, rpc, ui, log)
 
 	server := &http.Server{

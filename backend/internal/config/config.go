@@ -3,6 +3,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +16,9 @@ type AuthMode string
 
 const (
 	AuthModeOIDC AuthMode = "oidc"
+	// AuthModeForm is a login form checked against the daemon's own RPC
+	// credentials, for deployments with no identity provider.
+	AuthModeForm AuthMode = "form"
 	AuthModeDev  AuthMode = "dev"
 )
 
@@ -59,7 +64,9 @@ func Load() (Config, error) {
 		RPCUser:                   os.Getenv("TM_USER"),
 		RPCPass:                   os.Getenv("TM_PASS"),
 	}
-	cfg.SecureCookies = cfg.AuthMode == AuthModeOIDC
+	// Dev runs over plain http on loopback; everything else sits behind a
+	// TLS-terminating reverse proxy (see compose.yaml).
+	cfg.SecureCookies = cfg.AuthMode != AuthModeDev
 
 	var problems []string
 	switch cfg.AuthMode {
@@ -79,15 +86,30 @@ func Load() (Config, error) {
 				problems = append(problems, name+" is required when BACKEND_AUTH_MODE=oidc")
 			}
 		}
+	case AuthModeForm:
+		if cfg.SessionSecret == "" {
+			problems = append(problems, "BACKEND_SESSION_SECRET is required")
+		}
+		// The form checks the daemon's RPC credentials, so a blank password
+		// would let anyone in with just the username.
+		if cfg.RPCPass == "" {
+			problems = append(problems, "TM_PASS is required when BACKEND_AUTH_MODE=form")
+		}
 	case AuthModeDev:
 		// Dev mode auto-authenticates, so it must never be reachable in
-		// production. A missing secret is fine here; generate an ephemeral one.
+		// production. A missing secret gets a per-process random one: a fixed
+		// literal would be forgeable by anyone reading the source and would
+		// survive restarts.
 		if cfg.SessionSecret == "" {
-			cfg.SessionSecret = "dev-only-insecure-session-secret"
+			buf := make([]byte, 32)
+			if _, err := rand.Read(buf); err != nil {
+				return Config{}, fmt.Errorf("generate dev session secret: %w", err)
+			}
+			cfg.SessionSecret = base64.RawURLEncoding.EncodeToString(buf)
 		}
 	default:
-		problems = append(problems, fmt.Sprintf("BACKEND_AUTH_MODE must be %q or %q, got %q",
-			AuthModeOIDC, AuthModeDev, cfg.AuthMode))
+		problems = append(problems, fmt.Sprintf("BACKEND_AUTH_MODE must be %q, %q or %q, got %q",
+			AuthModeOIDC, AuthModeForm, AuthModeDev, cfg.AuthMode))
 	}
 
 	if cfg.RPCUser == "" {

@@ -27,7 +27,7 @@ func (f *fakeOIDC) ClearTransientCookies(http.ResponseWriter)         {}
 func newTestServer(t *testing.T, mode config.AuthMode, group string, oidc OIDC) (*Server, *auth.SessionCodec) {
 	t.Helper()
 	cfg := config.Config{AuthMode: mode, OIDCAllowedGroup: group, SessionTTL: time.Hour}
-	sessions := auth.NewSessionCodec("test-secret", false, time.Hour)
+	sessions := auth.NewSessionCodec("test-secret", false, time.Hour, group)
 	rpc := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("reached-daemon"))
 	})

@@ -8,6 +8,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - `hack/` local daemon state, `fixtures.sh` (seeds every torrent state), `coverage-gate.sh` + `coverage-floors`.
 - `ui/sim/` standalone fake daemon (`node ui/sim/server.ts`, `:9092`). Node runs it with built-in type stripping, so keep it erasable: no enum, no parameter properties, `.ts` on every relative import, `import type { … }` in statement form only.
 - `backend/` Go: serves the embedded `ui/dist`, OIDC RP at `/api/auth/*` (signed-cookie session, no DB), reverse-proxies `/transmission/rpc` to the daemon with its basic auth attached. Ported from peeq's `internal/auth`.
+- Auth modes (`BACKEND_AUTH_MODE`): `oidc` | `form` (server-rendered `/login`, checks `TM_USER`/`TM_PASS`, no IdP needed) | `dev` (auto-login, local only). An upstream 401 becomes a 502, never a passthrough: forwarding `WWW-Authenticate` would pop the browser dialog the backend exists to remove.
 - `compose.yaml` = production stack (Containerfile image, `.env` from `.env.example`). `compose.dev.yaml` = throwaway local daemon.
 
 ## Daemon

@@ -25,14 +25,21 @@ Two ways in, both from the release:
 ghcr.io/trick77/transmission-ui:latest
 ```
 
-The backend serves the bundle, terminates OIDC against your identity provider, and proxies
-`/transmission/rpc` to a daemon you run separately, attaching the daemon's basic auth upstream so
-the browser never sees it. The image contains no daemon: point `TM_RPC_UPSTREAM` at yours, which
-keeps `:9091` for radarr/sonarr and `transmission-remote`.
+The backend serves the bundle, signs users in, and proxies `/transmission/rpc` to a daemon you run
+separately, attaching the daemon's basic auth upstream so the browser never sees it. The image
+contains no daemon: point `TM_RPC_UPSTREAM` at yours, which keeps `:9091` for radarr/sonarr and
+`transmission-remote`.
 
-`compose.yaml` in this repo is a working stack behind an external Traefik. Copy `.env.example` to
-`.env` first and register a confidential OIDC client with your IdP, redirect URI
-`https://<host>/api/auth/callback`.
+Two ways to sign in, set by `BACKEND_AUTH_MODE`:
+
+- `oidc` — an identity provider. Register a confidential client with redirect URI
+  `https://<host>/api/auth/callback`, and optionally gate access on a group with
+  `BACKEND_OIDC_ALLOWED_GROUP`.
+- `form` — a login page that accepts the daemon's own RPC credentials (`TM_USER` / `TM_PASS`).
+  Nothing extra to provision: whoever may drive `transmission-remote` may drive the web UI.
+
+`compose.yaml` in this repo is a working stack behind an external Traefik, which terminates TLS for
+either mode. Copy `.env.example` to `.env` first.
 
 **Bundle only** — mount it into a daemon you already run:
 

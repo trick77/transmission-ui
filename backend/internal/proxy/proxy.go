@@ -9,9 +9,12 @@ package proxy
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 )
 
 // Config describes the upstream daemon.
@@ -47,6 +50,26 @@ func New(cfg Config) (http.Handler, error) {
 			}
 			// The session cookie is ours, not the daemon's.
 			r.Out.Header.Del("Cookie")
+		},
+		// A 401 from the daemon means OUR credentials are wrong, not the
+		// visitor's. Forwarding it verbatim would hand the browser a
+		// WWW-Authenticate header (it is not hop-by-hop, so ReverseProxy copies
+		// it), popping the native basic-auth dialog this whole backend exists to
+		// remove -- and the UI would read the 401 as a dead session and loop
+		// through sign-in forever. Report it as the upstream misconfig it is.
+		ModifyResponse: func(resp *http.Response) error {
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				log.Printf("transmission rejected our RPC credentials (%s); check TM_USER/TM_PASS", resp.Status)
+				resp.Header.Del("WWW-Authenticate")
+				resp.Body.Close()
+				resp.StatusCode = http.StatusBadGateway
+				resp.Status = "502 Bad Gateway"
+				resp.Body = io.NopCloser(strings.NewReader("upstream rejected our credentials"))
+				resp.ContentLength = -1
+				resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
+				resp.Header.Del("Content-Length")
+			}
+			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)

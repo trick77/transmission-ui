@@ -28,7 +28,9 @@ services:
       BACKEND_ADDR: ":8080"
       BACKEND_PUBLIC_URL: "${BACKEND_PUBLIC_URL}"
       BACKEND_SESSION_SECRET: "${BACKEND_SESSION_SECRET:?generate one, e.g. openssl rand -base64 48}"
-      # oidc (production) or dev (local only: signs everyone in automatically).
+      # oidc (an identity provider), form (a login page checked against
+      # TM_USER/TM_PASS, for setups with no IdP), or dev (local only: signs
+      # everyone in automatically). Traefik terminates TLS for all of them.
       BACKEND_AUTH_MODE: "${BACKEND_AUTH_MODE:-oidc}"
       BACKEND_OIDC_ISSUER: "${BACKEND_OIDC_ISSUER}"
       BACKEND_OIDC_CLIENT_ID: "${BACKEND_OIDC_CLIENT_ID}"
