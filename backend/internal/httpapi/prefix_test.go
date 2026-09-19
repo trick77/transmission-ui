@@ -100,6 +100,20 @@ func TestPrefixLoginPageURLs(t *testing.T) {
 	}
 }
 
+// The app reads its mount point from this tag; without it the RPC URL is
+// wrong under a prefix.
+func TestPrefixInjectsBaseMeta(t *testing.T) {
+	srv, sessions := prefixServer(t)
+	cookie, _ := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"media"}})
+	req := httptest.NewRequest(http.MethodGet, "/transmission/", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), `<meta name="tmui-base" content="/transmission">`) {
+		t.Fatalf("base meta not injected: %q", rec.Body.String())
+	}
+}
+
 func TestPrefixServesLoginAssets(t *testing.T) {
 	srv, _ := prefixServer(t)
 	rec := httptest.NewRecorder()

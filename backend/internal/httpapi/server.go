@@ -3,12 +3,15 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
+	"html"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/trick77/transmission-ui/backend/internal/auth"
 	"github.com/trick77/transmission-ui/backend/internal/config"
@@ -213,12 +216,35 @@ func (s *Server) staticHandler() http.Handler {
 					return
 				}
 			}
+			// Tell the app where it is mounted. It cannot infer this from the
+			// URL: on the bundle-only path the daemon serves the UI from
+			// /transmission/web/ while its RPC stays at /transmission/rpc.
+			// (serveIndexWithBase sets its own no-cache header.)
+			if s.cfg.BasePath != "" {
+				s.serveIndexWithBase(w, r)
+				return
+			}
 			// The index names the hashed bundles, so it must never be cached
 			// heuristically: a stale one asks for assets a redeploy removed.
 			w.Header().Set("Cache-Control", "no-cache")
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+// serveIndexWithBase writes index.html with the base-path meta tag filled in.
+func (s *Server) serveIndexWithBase(w http.ResponseWriter, r *http.Request) {
+	body, err := fs.ReadFile(s.ui, "index.html")
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	patched := bytes.Replace(body,
+		[]byte(`<meta name="tmui-base" content="">`),
+		[]byte(`<meta name="tmui-base" content="`+html.EscapeString(s.cfg.BasePath)+`">`), 1)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(patched))
 }
 
 // isAssetRequest reports whether a path should 404 rather than fall back to the

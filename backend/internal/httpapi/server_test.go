@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -31,7 +32,7 @@ func newTestServer(t *testing.T, mode config.AuthMode, group string, oidc OIDC) 
 	rpc := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("reached-daemon"))
 	})
-	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html>ui</html>")}}
+	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte(`<html><meta name="tmui-base" content="">ui</html>`)}}
 	return New(cfg, oidc, sessions, rpc, ui, slog.New(slog.DiscardHandler)), sessions
 }
 
@@ -145,7 +146,7 @@ func TestStaticFallsBackToIndex(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/some/spa/route", nil))
 	body, _ := io.ReadAll(rec.Body)
-	if rec.Code != http.StatusOK || string(body) != "<html>ui</html>" {
+	if rec.Code != http.StatusOK || !strings.Contains(string(body), "ui</html>") {
 		t.Fatalf("spa fallback failed: %d %q", rec.Code, body)
 	}
 }
