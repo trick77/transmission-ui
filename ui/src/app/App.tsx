@@ -58,8 +58,8 @@ export function App() {
       {connection === 'unauthorized' || connection === 'error' ? (
         <div className="notice" style={{ position: 'fixed', left: 'calc(var(--sidebar-w) + 16px)', bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>
           <span className="st" />
-          <span>{connection === 'unauthorized' ? <><b>Daemon needs credentials.</b> Sign in with the RPC username and password.</> : <><b>Can't reach the daemon.</b> {lastError} · retrying</>}</span>
-          {connection === 'unauthorized' ? <button className="btn sm" onClick={() => location.reload()}>Reload</button> : null}
+          <span>{connection === 'unauthorized' ? <><b>Not signed in.</b> Sign in to continue.</> : <><b>Can't reach the daemon.</b> {lastError} · retrying</>}</span>
+          {connection === 'unauthorized' ? <button className="btn sm" onClick={() => { location.href = '/api/auth/login' }}>Sign in</button> : null}
         </div>
       ) : null}
       {toastMsg ? <div className="notice" style={{ position: 'fixed', right: 16, bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>{toastMsg}</div> : null}

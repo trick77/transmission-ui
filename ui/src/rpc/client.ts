@@ -1,5 +1,7 @@
 // Transmission RPC transport: JSON-RPC 2.0 over one POST endpoint, plus the 409 session-id
-// handshake. Auth is the daemon's HTTP basic auth; the browser prompts, we never store credentials.
+// handshake. The backend terminates auth: it holds the OIDC session and attaches the daemon's
+// basic auth upstream, so the browser never sees daemon credentials. A 401 here means the
+// session is gone, and the app sends the user to /api/auth/login.
 //
 // The daemon speaks JSON-RPC 2.0 from 4.1.0 (rpc_version 18) on. The older bespoke envelope
 // still works but is deprecated upstream and this client does not use it.

@@ -4,6 +4,8 @@
 node_modules
 ui/dist/
 *.tsbuildinfo
+# The Vite bundle the Containerfile copies in before `go build` embeds it.
+backend/dist/
 
 # Coverage reports
 /coverage/
@@ -41,6 +43,9 @@ data/
 logs/
 
 # Throwaway dev daemon state
+hack/backend.pid
+hack/backend.log
+hack/transmission-ui
 hack/state/
 hack/downloads/
 hack/watch/

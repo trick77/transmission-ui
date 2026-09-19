@@ -12,6 +12,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  backend:
+    name: Backend (vet + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+      # main.go embeds the bundle (//go:embed all:dist) and backend/dist is
+      # gitignored, so the UI has to be built before the Go build can run.
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
+      - run: cp -R ui/dist/. backend/dist/
+      - run: go vet ./...
+        working-directory: backend
+      - run: go test ./...
+        working-directory: backend
+
   ui:
     name: UI (typecheck + build + test)
     runs-on: ubuntu-latest
@@ -98,8 +121,17 @@ jobs:
           printf 'TM_RPC_TARGET=http://localhost:9091\nTM_RPC_AUTH=dev:devpass\n' > ui/.env.local
           (cd ui && nohup npx vite --port 5173 --strictPort > /tmp/vite.log 2>&1 &)
           for i in $(seq 1 30); do curl -sf http://localhost:5173/ >/dev/null && break; sleep 1; done
+      # backend.spec.ts drives the shipped path: the Go binary serving the
+      # bundle and proxying RPC, in form mode so no identity provider is needed.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+      - name: Start backend
+        run: ./hack/backend.sh
       - run: npx playwright test
         working-directory: ui
+      - if: always()
+        run: ./hack/backend.sh stop
       - uses: actions/upload-artifact@v7
         if: always()
         with:
