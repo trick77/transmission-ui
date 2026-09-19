@@ -29,6 +29,10 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · transmission-ui</title>
+<!-- The bundle's /icon.svg sits behind staticHandler, which this page is served
+     before, so the icon is embedded here and served from /login-assets/ like
+     the fonts and the background. Same file as ui/icons/icon.svg. -->
+<link rel="icon" href="/login-assets/icon.svg" type="image/svg+xml">
 <style>
   @font-face{font-family:"Anthropic Sans";src:url("{{.Base}}/login-assets/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
   @font-face{font-family:"Anthropic Serif";src:url("{{.Base}}/login-assets/SerifWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
@@ -64,10 +68,10 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
     backdrop-filter:blur(12px);
   }
   .brand{display:flex;align-items:center;gap:9px;margin-bottom:18px}
-  .logo{width:22px;height:22px;border-radius:7px;flex:none;
-        background:linear-gradient(145deg,var(--accent),var(--accent-fill));
-        display:grid;place-items:center}
-  .logo svg{width:13px;height:13px;fill:none;stroke:#faf9f5;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  /* The mark, drawn as the favicon draws it: a filled gradient chip with the
+     glyph painted through it in the page ground. Geometry mirrors
+     ui/icons/icon.svg; change one and change the other. */
+  .logo{width:22px;height:22px;flex:none;display:block}
   .name{font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em}
   h1{margin:0 0 4px;font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.01em}
   p.sub{margin:0 0 20px;color:var(--ink-2);font-size:12px}
@@ -86,9 +90,18 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
 </style>
 <form class="card" method="post" action="{{.Base}}/login">
   <div class="brand">
-    <span class="logo" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
-    </span>
+    <svg class="logo" viewBox="3 3 18 18" aria-hidden="true">
+      <linearGradient id="logo-grad" x1="0" y1="0" x2="0.72" y2="1">
+        <stop offset="0" stop-color="#e08a68"/>
+        <stop offset="1" stop-color="#c25f34"/>
+      </linearGradient>
+      <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#logo-grad)"/>
+      <g transform="translate(4.1238 3.8284) scale(0.65635)" fill="#1f1f1e">
+        <path d="M10.5 3.4h3v9.6h-3z"/>
+        <path d="M5.5 9.9 7.6 7.8 12 12.2l4.4-4.4 2.1 2.1-6.5 6.5z"/>
+        <path d="M3.2 14.9h3v3.6h11.6v-3.6h3v6.6H3.2z"/>
+      </g>
+    </svg>
     <span class="name">transmission-ui</span>
   </div>
   <h1>Sign in</h1>

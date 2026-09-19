@@ -228,6 +228,13 @@ func (s *Server) staticHandler() http.Handler {
 			// heuristically: a stale one asks for assets a redeploy removed.
 			w.Header().Set("Cache-Control", "no-cache")
 		}
+		// Go's mime table has no entry for .webmanifest, so net/http sniffs the
+		// JSON and serves it as text/plain. Chrome then refuses the manifest and
+		// the app is not installable. Set it here rather than registering the
+		// type globally: this is the only file of its kind in the bundle.
+		if path.Ext(name) == ".webmanifest" {
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
 		files.ServeHTTP(w, r)
 	})
 }

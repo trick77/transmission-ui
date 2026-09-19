@@ -1,0 +1,38 @@
+<!--
+  Source for apple-touch-icon.png only. Not shipped: ui/icons/ is outside Vite's
+  publicDir, so nothing here is copied into the bundle.
+
+  Two things iOS forces that the transparent icon.svg cannot give it:
+
+  1. An opaque ground. iOS composites an apple-touch-icon onto PURE BLACK before
+     masking it, so a transparent one ships as a black square. #1f1f1e is the
+     app's own bg token, which is what that flattening should have produced.
+  2. Square corners. iOS applies its own superellipse mask; rounding the corners
+     of the TILE would double-round them. The chip inside keeps its rx 4 — those
+     corners are the mark's own and are meant to be seen.
+
+  The chip is smaller than in icon.svg (60% vs 100%) because it now sits inside
+  a tile with its own edges to breathe against, rather than being the whole
+  picture. This puts one rounded shape inside another, which is intended.
+
+  The mark is painted the tile's own #1f1f1e, so it reads as cut clean through
+  the chip to the tile behind it. Same three redrawn paths, same 3.0-unit
+  weights, same solved inner scale and the same true-bbox centring as icon.svg —
+  see that file for all of it, for why lucide's stroked download is not used,
+  and for the derived transform formulas. This file's coverage C is 0.60.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <linearGradient id="og" x1="0" y1="0" x2="0.72" y2="1">
+    <stop offset="0" stop-color="#e08a68"/>
+    <stop offset="1" stop-color="#c25f34"/>
+  </linearGradient>
+  <rect width="64" height="64" fill="#1f1f1e"/>
+  <g transform="translate(6.4000 6.4000) scale(2.13333)">
+    <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#og)"/>
+    <g transform="translate(4.1238 3.8284) scale(0.65635)" fill="#1f1f1e">
+      <path d="M10.5 3.4h3v9.6h-3z"/>
+      <path d="M5.5 9.9 7.6 7.8 12 12.2l4.4-4.4 2.1 2.1-6.5 6.5z"/>
+      <path d="M3.2 14.9h3v3.6h11.6v-3.6h3v6.6H3.2z"/>
+    </g>
+  </g>
+</svg>
