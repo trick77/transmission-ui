@@ -112,13 +112,32 @@ func healthcheck() int {
 	if strings.HasPrefix(addr, ":") {
 		addr = "127.0.0.1" + addr
 	}
-	client := &http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Get("http://" + addr + "/")
+	// Probe the app's own mount point: under a base path nothing is served at
+	// "/", so probing that reports every prefixed deployment as unhealthy and
+	// the reverse proxy drops it from routing.
+	cfg, err := config.Load()
+	base := ""
+	if err == nil {
+		base = cfg.BasePath
+	}
+	client := &http.Client{
+		Timeout: 4 * time.Second,
+		// A redirect is a healthy answer (signed-out form mode sends / to
+		// /login); following it would turn that into a needless second request.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get("http://" + addr + base + "/")
 	if err != nil {
 		return 1
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	// 2xx and 3xx are both healthy: signed-out form mode answers "/" with a
+	// redirect to the login page. A 4xx is not -- in particular a 404 means the
+	// app is not mounted where it thinks it is, which is the misrouting this
+	// probe exists to catch.
+	if resp.StatusCode >= 400 {
 		return 1
 	}
 	return 0
