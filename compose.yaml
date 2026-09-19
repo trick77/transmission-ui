@@ -44,9 +44,11 @@ services:
       TM_PASS: "${TM_PASS}"
 
     healthcheck:
-      # The SPA index is public; the RPC behind it is not. A 200 here means the
-      # binary is up and serving. The image is distroless, so this runs the
-      # daemon-free equivalent of a TCP probe via the shell Docker provides.
+      # Probes the app's own mount point, which is BACKEND_PUBLIC_URL's path
+      # when it has one. 2xx and 3xx pass, because signed-out form mode answers
+      # with a redirect to the login page; a 404 means the app is not mounted
+      # where it thinks it is. The image is distroless, so the binary probes
+      # itself rather than shelling out to curl or wget.
       test: ["CMD", "/transmission-ui", "-healthcheck"]
       interval: 60s
       timeout: 5s
