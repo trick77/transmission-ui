@@ -59,12 +59,20 @@ func New(cfg Config) (http.Handler, error) {
 		// through sign-in forever. Report it as the upstream misconfig it is.
 		ModifyResponse: func(resp *http.Response) error {
 			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-				log.Printf("transmission rejected our RPC credentials (%s); check TM_USER/TM_PASS", resp.Status)
+				// 401 is bad credentials; 403 is the daemon's rpc-whitelist,
+				// which defaults to 127.0.0.1 and so rejects this backend as
+				// soon as it runs in its own container. Naming the wrong one
+				// sends the operator to the wrong setting.
+				if resp.StatusCode == http.StatusForbidden {
+					log.Printf("transmission refused the RPC connection (403); its rpc-whitelist likely does not include this container's address")
+				} else {
+					log.Printf("transmission rejected our RPC credentials (401); check TM_USER/TM_PASS")
+				}
 				resp.Header.Del("WWW-Authenticate")
 				resp.Body.Close()
 				resp.StatusCode = http.StatusBadGateway
 				resp.Status = "502 Bad Gateway"
-				resp.Body = io.NopCloser(strings.NewReader("upstream rejected our credentials"))
+				resp.Body = io.NopCloser(strings.NewReader("upstream refused the request"))
 				resp.ContentLength = -1
 				resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
 				resp.Header.Del("Content-Length")

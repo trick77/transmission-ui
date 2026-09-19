@@ -123,6 +123,36 @@ func TestSessionKeepsCheckedGroupWhenTrimming(t *testing.T) {
 	}
 }
 
+// The cookie must carry the IdP's spelling of the group, not the configured
+// one, so /api/auth/me does not report a name the IdP never issued.
+func TestSessionKeepsIdPGroupSpelling(t *testing.T) {
+	many := make([]string, 0, 30)
+	for i := range 30 {
+		many = append(many, fmt.Sprintf("group-%02d", i))
+	}
+	many = append(many, "Arr")
+	// Configured lower-case; the IdP emits "Arr".
+	codec := NewSessionCodec("secret", false, time.Hour, "arr")
+
+	cookie, err := codec.Encode(Claims{Subject: "u1", Groups: many})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	got, err := codec.Decode(requestWithCookie(cookie))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	found := ""
+	for _, g := range got.Groups {
+		if strings.EqualFold(g, "arr") {
+			found = g
+		}
+	}
+	if found != "Arr" {
+		t.Fatalf("group spelling rewritten: got %q, want %q", found, "Arr")
+	}
+}
+
 func TestHasGroup(t *testing.T) {
 	c := Claims{Groups: []string{"Arr", "Tools"}}
 	if !c.HasGroup("arr") {

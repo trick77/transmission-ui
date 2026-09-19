@@ -117,6 +117,16 @@ func TestFormModeRedirectsRootToLogin(t *testing.T) {
 	}
 }
 
+// A deep link, not just "/", must also reach the form when signed out.
+func TestFormModeRedirectsDeepLinkToLogin(t *testing.T) {
+	srv, _ := formServer(t)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/some/client/route", nil))
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/login" {
+		t.Fatalf("want redirect to /login, got %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
 // /login must not exist in oidc mode, where the IdP owns the credentials.
 func TestLoginPageAbsentInOIDCMode(t *testing.T) {
 	srv, _ := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})

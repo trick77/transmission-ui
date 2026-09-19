@@ -74,6 +74,15 @@ func main() {
 		log.Warn("BACKEND_AUTH_MODE=dev: every visitor is signed in automatically")
 	}
 
+	// Secure cookies are set for every non-dev mode, which assumes a
+	// TLS-terminating proxy in front. Without one the browser drops the session
+	// cookie and the user loops between / and /login with nothing in the log to
+	// explain it, so say so at startup.
+	if cfg.SecureCookies && cfg.PublicURL != "" && !strings.HasPrefix(cfg.PublicURL, "https://") {
+		log.Warn("BACKEND_PUBLIC_URL is not https: the session cookie is marked Secure and the browser will drop it, so sign-in will loop",
+			"public_url", cfg.PublicURL)
+	}
+
 	sessions := auth.NewSessionCodec(cfg.SessionSecret, cfg.SecureCookies, cfg.SessionTTL, cfg.OIDCAllowedGroup)
 	srv := httpapi.New(cfg, oidcService, sessions, rpc, ui, log)
 

@@ -119,14 +119,20 @@ func trimForCookie(claims Claims, keep string) Claims {
 		return claims
 	}
 	trimmed := make([]string, 0, maxCookieGroups)
-	if keep != "" && claims.HasGroup(keep) {
-		trimmed = append(trimmed, keep)
+	// Append the IdP's own spelling, not the configured one: authorization is
+	// case-insensitive, but /api/auth/me would otherwise report a group name
+	// the IdP never issued.
+	for _, g := range claims.Groups {
+		if keep != "" && strings.EqualFold(g, keep) {
+			trimmed = append(trimmed, g)
+			break
+		}
 	}
 	for _, g := range claims.Groups {
 		if len(trimmed) == maxCookieGroups {
 			break
 		}
-		if !strings.EqualFold(g, keep) {
+		if keep == "" || !strings.EqualFold(g, keep) {
 			trimmed = append(trimmed, g)
 		}
 	}

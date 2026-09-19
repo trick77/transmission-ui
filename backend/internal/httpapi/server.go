@@ -147,6 +147,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	// Same check requireAuth applies: a session issued before the group was
+	// revoked, or under a laxer allowed-group setting, must not still read as
+	// signed in here while every RPC call returns 403.
+	if !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"subject":  claims.Subject,
@@ -166,15 +173,6 @@ func (s *Server) staticHandler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		// Form mode owns a login page, so send an unauthenticated visitor there
-		// rather than loading the app just to show it a banner. OIDC mode leaves
-		// the shell to render: its sign-in leaves this origin entirely.
-		if s.cfg.AuthMode == config.AuthModeForm && name == "index.html" {
-			if _, err := s.sessions.Decode(r); err != nil {
-				http.Redirect(w, r, "/login", http.StatusFound)
-				return
-			}
-		}
 		info, err := fs.Stat(s.ui, name)
 		switch {
 		case err == nil && !info.IsDir():
@@ -193,6 +191,18 @@ func (s *Server) staticHandler() http.Handler {
 			name = "index.html"
 		}
 		if name == "index.html" {
+			// Form mode owns a login page, so send an unauthenticated visitor
+			// there rather than loading the app just to show it a banner. This
+			// sits after the switch so it covers client-side routes too, not
+			// only "/" -- otherwise a deep link still rendered the shell.
+			// OIDC mode leaves the shell to render: its sign-in leaves this
+			// origin entirely.
+			if s.cfg.AuthMode == config.AuthModeForm {
+				if _, err := s.sessions.Decode(r); err != nil {
+					http.Redirect(w, r, "/login", http.StatusFound)
+					return
+				}
+			}
 			// The index names the hashed bundles, so it must never be cached
 			// heuristically: a stale one asks for assets a redeploy removed.
 			w.Header().Set("Cache-Control", "no-cache")

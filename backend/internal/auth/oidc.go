@@ -203,9 +203,14 @@ func (b realOIDCBackend) VerifyClaims(ctx context.Context, token *oauth2.Token) 
 	if err := idToken.Claims(&oidcClaims); err != nil {
 		return VerifiedClaims{}, err
 	}
+	// Prefer given_name + family_name so the full name (incl. last name) is
+	// shown, but only when BOTH are present: composing from one half would turn
+	// an IdP's "Jan Mueller" into "Jan".
 	name := oidcClaims.Name
-	if composed := strings.TrimSpace(oidcClaims.GivenName + " " + oidcClaims.FamilyName); composed != "" {
-		name = composed
+	if oidcClaims.GivenName != "" && oidcClaims.FamilyName != "" {
+		name = oidcClaims.GivenName + " " + oidcClaims.FamilyName
+	} else if name == "" {
+		name = strings.TrimSpace(oidcClaims.GivenName + " " + oidcClaims.FamilyName)
 	}
 	return VerifiedClaims{
 		Claims: Claims{

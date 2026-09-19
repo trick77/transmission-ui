@@ -1,10 +1,10 @@
 package httpapi
 
 import (
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"io"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -142,6 +142,20 @@ func TestRPCPathRejectsNonPost(t *testing.T) {
 	}
 	if rec.Header().Get("Allow") != "POST" {
 		t.Fatalf("missing Allow header: %q", rec.Header().Get("Allow"))
+	}
+}
+
+// /api/auth/me must apply the same group check as the RPC guard, or a revoked
+// user still reads as signed in while every RPC call returns 403.
+func TestMeRejectsWrongGroup(t *testing.T) {
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	cookie, _ := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"Other"}})
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d", rec.Code)
 	}
 }
 
