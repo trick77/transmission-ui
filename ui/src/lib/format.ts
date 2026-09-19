@@ -62,6 +62,16 @@ export function dateTime(unixSeconds: number): string {
   return sameDay ? `Today, ${time}` : d.toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
+/**
+ * Fixed-width calendar date for the compact row's right-aligned Added-on column.
+ * Numeric on purpose: a localised month name ("19. Sept. 2026") is wider and varies in
+ * width from row to row, which wraps the one-line row and breaks the tabular column.
+ */
+export function date(unixSeconds: number): string {
+  if (!unixSeconds) return '—'
+  return new Date(unixSeconds * 1000).toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
 export function percent(p: number, digits = 0): string { return `${(p * 100).toFixed(digits)}%` }
 
 export function compact(n: number): string {

@@ -33,9 +33,18 @@ test('list renders every daemon torrent and the sidebar counts match', async ({ 
   await shot(page, 'list')
 })
 
-test('problem torrents sort first by default', async ({ page }) => {
-  const first = page.locator('.row').first()
-  await expect(first.locator('.chip.err')).toBeVisible()
+test('the list sorts by name by default, errors no longer jump the queue', async ({ page }) => {
+  const names = (await torrents()).map(t => t.name).sort((a, b) => a.localeCompare(b))
+  await expect(page.locator('.row').first().locator('.name .t')).toHaveText(names[0])
+  await expect(page.locator('.cols .sort')).toHaveText(/Name/)
+})
+
+test('the errored torrent still reads as an error, on the compact status dot', async ({ page }) => {
+  // torrents() does not fetch `error`, so ask for it directly
+  const all = await rpc<{ torrents: { id: number; error: number }[] }>('torrent_get', { fields: ['id', 'error'] })
+  const err = all.torrents.find(t => t.error !== 0)
+  test.skip(!err, 'no errored torrent in this dataset')
+  await expect(page.locator(`.row[data-id="${err!.id}"] .sdot.err`)).toBeVisible()
 })
 
 test('sidebar filter narrows the list and updates the title', async ({ page }) => {
@@ -68,7 +77,7 @@ test('pause and resume flip the daemon status', async ({ page }) => {
   await row.hover()
   await row.locator('.acts button').first().click()
   await expect.poll(async () => (await torrents()).find(t => t.id === seeding.id)!.status, { timeout: 8000 }).toBe(0)
-  await expect(row.locator('.chip.stop')).toBeVisible({ timeout: 8000 })
+  await expect(row.locator('.sdot.stop')).toBeVisible({ timeout: 8000 })
   await row.hover()
   await row.locator('.acts button').first().click()
   await expect.poll(async () => (await torrents()).find(t => t.id === seeding.id)!.status, { timeout: 8000 }).not.toBe(0)
@@ -102,7 +111,7 @@ test('context menu and labels dialog write labels', async ({ page }) => {
 
 test('inspector tabs show real detail data', async ({ page }) => {
   const t = (await torrents()).find(x => x.status === 6)!
-  await page.locator(`.row[data-id="${t.id}"] .name .t span`).first().click()
+  await page.locator(`.row[data-id="${t.id}"] .name .t`).first().click()
   await expect(page.locator('.inspector .insp-head .t')).toHaveText(t.name)
   await expect(page.locator('.pieces i').first()).toBeVisible()
   await shot(page, 'inspector-overview')
@@ -154,7 +163,7 @@ test('verify local data on the errored torrent goes through Check and lands back
     const t = (await rpc<{ torrents: { id: number; error: number; status: number }[] }>('torrent_get', { fields: ['id', 'error', 'status'], ids: [bad.id] })).torrents[0]
     return t.status === 2 || t.status === 1 ? 'checking' : t.error !== 0 ? 'error' : 'other'
   }, { timeout: 10000 }).not.toBe('other')
-  await expect(row.locator('.chip.err')).toBeVisible({ timeout: 15000 })
+  await expect(row.locator('.sdot.err')).toBeVisible({ timeout: 15000 })
 })
 
 test('settings round-trip through session-set', async ({ page }) => {

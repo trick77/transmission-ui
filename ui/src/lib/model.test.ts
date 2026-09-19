@@ -19,7 +19,7 @@ let nextId = 1
 function tor(o: Partial<TorrentSummary> = {}): TorrentSummary {
   return {
     id: nextId++, name: `t${nextId}`, status: Status.Seed, error: 0, error_string: '', percent_done: 1, size_when_done: 2e9, total_size: 2e9, left_until_done: 0,
-    rate_download: 0, rate_upload: 0, upload_ratio: 1.5, eta: -1, peers_connected: 0, peers_sending_to_us: 0, peers_getting_from_us: 0, labels: [],
+    rate_download: 0, rate_upload: 0, upload_ratio: 1.5, uploaded_ever: 3e9, eta: -1, peers_connected: 0, peers_sending_to_us: 0, peers_getting_from_us: 0, labels: [],
     download_dir: '/data/torrents/iso', is_finished: false, queue_position: 0, added_date: now - 86400 * 2, activity_date: now - 3600, done_date: now - 3600,
     recheck_progress: 0, metadata_percent_complete: 1, tracker_stats: [ts()], bandwidth_priority: 0, hash_string: 'h', magnet_link: 'magnet:?xt=urn:btih:h', ...o,
   }
@@ -181,6 +181,39 @@ describe('sort', () => {
     expect([a, b].sort(sortFn('activity', -1))[0]).toBe(b)
     const err = tor({ error: 1, name: 'z' })
     expect([a, err, b].sort(sortFn('state', 1))[0]).toBe(err)
+  })
+
+  it('sorts the columns the compact row adds', () => {
+    const base = '/data/torrents'
+    const mk = (o: Partial<TorrentSummary>) => tor({ tracker_stats: [ts()], download_dir: `${base}/iso`, ...o })
+    const aa = mk({ name: 'a', uploaded_ever: 1e9, download_dir: `${base}/aaa`, tracker_stats: [ts({ announce: 'http://aaa.example.org/announce' })] })
+    const zz = mk({ name: 'b', uploaded_ever: 9e9, download_dir: `${base}/zzz`, tracker_stats: [ts({ announce: 'http://zzz.example.org/announce' })] })
+    expect([aa, zz].sort(sortFn('uploaded', -1))[0]).toBe(zz)
+    expect([zz, aa].sort(sortFn('tracker', 1))[0]).toBe(aa)
+    expect([zz, aa].sort(sortFn('path', 1, base))[0]).toBe(aa)
+
+    // seeds come from the swarm, not the peer counts
+    const few = mk({ name: 'c', tracker_stats: [ts({ seeder_count: 2 })] })
+    const many = mk({ name: 'd', tracker_stats: [ts({ seeder_count: 400 })] })
+    expect([few, many].sort(sortFn('seeds', -1))[0]).toBe(many)
+  })
+
+  it('parks a missing tracker or path last whichever way it sorts', () => {
+    const base = '/data/torrents'
+    const has = tor({ name: 'a', download_dir: `${base}/iso`, tracker_stats: [ts()] })
+    const none = tor({ name: 'b', download_dir: base, tracker_stats: [] })   // relDir → ''
+    for (const dir of [1, -1] as const) {
+      expect([none, has].sort(sortFn('tracker', dir))[1]).toBe(none)
+      expect([none, has].sort(sortFn('path', dir, base))[1]).toBe(none)
+    }
+  })
+
+  it('sorts Path on the displayed relative dir, not the raw one', () => {
+    const base = '/data/torrents'
+    // raw: "/data/torrents/zzz" < "/elsewhere"; relative: "zzz" sorts after the base row
+    const inBase = tor({ name: 'a', download_dir: `${base}/zzz` })
+    const outside = tor({ name: 'b', download_dir: '/elsewhere' })
+    expect([inBase, outside].sort(sortFn('path', 1, base)).map(t => t.name)).toEqual(['b', 'a'])
   })
 })
 

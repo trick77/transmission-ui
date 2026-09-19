@@ -13,6 +13,18 @@ const COLS: { key: SortKey; label: string; cls?: string }[] = [
   { key: 'down', label: 'Down', cls: 'r' }, { key: 'up', label: 'Up', cls: 'r' }, { key: 'ratio', label: 'Ratio', cls: 'r' }, { key: 'eta', label: 'ETA', cls: 'r' },
 ]
 
+// One line per torrent: the second line carried the status text and the path, so the row
+// gets those as columns of their own. Down, Up and ETA make way.
+const COLS_ONE: { key: SortKey; label: string; cls?: string }[] = [
+  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r' }, { key: 'progress', label: 'Progress' },
+  { key: 'seeds', label: 'Seeds', cls: 'r' }, { key: 'ratio', label: 'Ratio', cls: 'r' }, { key: 'uploaded', label: 'Uploaded', cls: 'r' },
+  { key: 'added', label: 'Added on', cls: 'r' }, { key: 'activity', label: 'Last active', cls: 'r' },
+  { key: 'tracker', label: 'Tracker' }, { key: 'path', label: 'Path' },
+]
+
+// Text columns read A→Z on the first click; numbers and dates lead with the largest.
+const TEXT_COLS: SortKey[] = ['name', 'tracker', 'path']
+
 export function List() {
   const torrents = useStore(s => s.torrents)
   const filter = useStore(s => s.filter)
@@ -25,13 +37,16 @@ export function List() {
   const session = useStore(s => s.session)
   const dismissed = useStore(s => s.dismissed)
   const connection = useStore(s => s.connection)
+  const density = useStore(s => s.density)
+  const one = density === 'compact'
+  const cols = one ? COLS_ONE : COLS
   const base = session?.download_dir ?? ''
 
   const F = useMemo(() => filterFn(filter, base), [filter, base])
   const list = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return torrents.filter(F.f).filter(advFn(adv)).filter(t => !q || t.name.toLowerCase().includes(q)).sort(sortFn(sort, sortDir))
-  }, [torrents, F, adv, search, sort, sortDir])
+    return torrents.filter(F.f).filter(advFn(adv)).filter(t => !q || t.name.toLowerCase().includes(q)).sort(sortFn(sort, sortDir, base))
+  }, [torrents, F, adv, search, sort, sortDir, base])
   const ids = useMemo(() => list.map(t => t.id), [list])
   const total = list.reduce((a, t) => a + t.size_when_done, 0)
   const on = advActive(adv)
@@ -107,8 +122,8 @@ export function List() {
         <button className="btn ghost sm" id="fbtn" onClick={() => setFpop(p => !p)}>
           <Icon name="search" size={14} />Filter{on.length ? <span className="badge">{on.length}</span> : null}
         </button>
-        <button className="btn ghost sm" title="Sort" onClick={() => { set({ sort: 'state', sortDir: 1 }); syncUrl() }}>
-          <Icon name="sort" size={14} />{sort === 'state' ? 'State' : COLS.find(c => c.key === sort)?.label ?? sort}
+        <button className="btn ghost sm" title="Sort" onClick={() => { set({ sort: 'name', sortDir: 1 }); syncUrl() }}>
+          <Icon name="sort" size={14} />{sort === 'state' ? 'State' : [...COLS, ...COLS_ONE].find(c => c.key === sort)?.label ?? sort}
         </button>
         <button className="btn ghost icon" id="tmenu" title="More" onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom + 6, kind: 'view', ids }) }}><Icon name="more" /></button>
         {fpop ? (
@@ -138,11 +153,11 @@ export function List() {
         </div>
       ))}
 
-      <div className="cols">
+      <div className={'cols' + (one ? ' one' : '')}>
         <span className={'chk' + (allSel ? ' on' : someSel ? ' some' : '')} id="selall" title="Select all" onClick={selectAll} />
-        {COLS.map(c => (
+        {cols.map(c => (
           <span key={c.key} className={(c.cls ?? '') + (sort === c.key ? ' sort' : '')} style={{ cursor: 'pointer' }}
-            onClick={() => { set(s => ({ sort: c.key, sortDir: s.sort === c.key ? (s.sortDir === 1 ? -1 : 1) : (c.key === 'name' ? 1 : -1) })); syncUrl() }}>
+            onClick={() => { set(s => ({ sort: c.key, sortDir: s.sort === c.key ? (s.sortDir === 1 ? -1 : 1) : (TEXT_COLS.includes(c.key) ? 1 : -1) })); syncUrl() }}>
             {c.label}{sort === c.key ? <Icon name={sortDir === -1 ? 'chevd' : 'up'} size={12} /> : null}
           </span>
         ))}
@@ -150,7 +165,7 @@ export function List() {
 
       <div className="rows" id="rows" onClick={onRowClick} onContextMenu={onContext}>
         {list.length ? list.map(t => (
-          <Row key={t.id} t={t} base={base} selected={selected.has(t.id)} focused={focusId === t.id}
+          <Row key={t.id} t={t} base={base} compactRow={one} selected={selected.has(t.id)} focused={focusId === t.id}
             onMore={e => { const target = selected.has(t.id) ? [...selected] : [t.id]; setMenu({ x: e.clientX, y: e.clientY, kind: 'row', ids: target }) }} />
         )) : (
           <div className="empty">
