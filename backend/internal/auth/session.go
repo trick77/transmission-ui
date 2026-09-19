@@ -41,12 +41,26 @@ type SessionCodec struct {
 	secure    bool
 	ttl       time.Duration
 	keepGroup string // the group requireAuth checks; never trimmed away
+	path      string // cookie Path: the app's prefix, so siblings never see it
 }
 
 // NewSessionCodec returns a codec over the given secret. keepGroup is the group
 // the authorization check reads; it is preserved when the group list is capped.
-func NewSessionCodec(secret string, secure bool, ttl time.Duration, keepGroup string) *SessionCodec {
-	return &SessionCodec{secret: []byte(secret), secure: secure, ttl: ttl, keepGroup: keepGroup}
+// basePath scopes the cookie: on a shared host the sibling apps live at other
+// prefixes and have no business receiving this session token.
+func NewSessionCodec(secret string, secure bool, ttl time.Duration, keepGroup, basePath string) *SessionCodec {
+	return &SessionCodec{
+		secret: []byte(secret), secure: secure, ttl: ttl,
+		keepGroup: keepGroup, path: cookiePath(basePath),
+	}
+}
+
+// cookiePath turns "" or "/prefix" into the Path a cookie should carry.
+func cookiePath(basePath string) string {
+	if basePath == "" {
+		return "/"
+	}
+	return basePath + "/"
 }
 
 // Encode returns a signed cookie carrying the claims.
@@ -61,7 +75,7 @@ func (c *SessionCodec) Encode(claims Claims) (*http.Cookie, error) {
 	return &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    value,
-		Path:     "/",
+		Path:     c.path,
 		Expires:  expires,
 		HttpOnly: true,
 		Secure:   c.secure,
@@ -102,7 +116,7 @@ func (c *SessionCodec) ClearCookie() *http.Cookie {
 	return &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
-		Path:     "/",
+		Path:     c.path,
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,

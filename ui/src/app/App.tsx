@@ -6,6 +6,7 @@ import { Inspector } from '../inspector/Inspector'
 import { Dialogs } from '../dialogs/Dialogs'
 import { get, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
+import { basePath } from '../rpc/client'
 import { run } from '../state/store'
 
 export function App() {
@@ -59,7 +60,7 @@ export function App() {
         <div className="notice" style={{ position: 'fixed', left: 'calc(var(--sidebar-w) + 16px)', bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>
           <span className="st" />
           <span>{connection === 'unauthorized' ? <><b>Not signed in.</b> Sign in to continue.</> : <><b>Can't reach the daemon.</b> {lastError} · retrying</>}</span>
-          {connection === 'unauthorized' ? <button className="btn sm" onClick={() => { location.href = '/api/auth/login' }}>Sign in</button> : null}
+          {connection === 'unauthorized' ? <button className="btn sm" onClick={() => { location.href = `${basePath()}/api/auth/login` }}>Sign in</button> : null}
         </div>
       ) : null}
       {toastMsg ? <div className="notice" style={{ position: 'fixed', right: 16, bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>{toastMsg}</div> : null}

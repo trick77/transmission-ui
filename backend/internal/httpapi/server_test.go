@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -27,17 +28,17 @@ func (f *fakeOIDC) ClearTransientCookies(http.ResponseWriter)         {}
 func newTestServer(t *testing.T, mode config.AuthMode, group string, oidc OIDC) (*Server, *auth.SessionCodec) {
 	t.Helper()
 	cfg := config.Config{AuthMode: mode, OIDCAllowedGroup: group, SessionTTL: time.Hour}
-	sessions := auth.NewSessionCodec("test-secret", false, time.Hour, group)
+	sessions := auth.NewSessionCodec("test-secret", false, time.Hour, group, "")
 	rpc := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("reached-daemon"))
 	})
-	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html>ui</html>")}}
+	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte(`<html><meta name="tmui-base" content="">ui</html>`)}}
 	return New(cfg, oidc, sessions, rpc, ui, slog.New(slog.DiscardHandler)), sessions
 }
 
 // The proxy must be unreachable without a valid session.
 func TestRPCRequiresSession(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/transmission/rpc", nil))
 	if rec.Code != http.StatusUnauthorized {
@@ -49,8 +50,8 @@ func TestRPCRequiresSession(t *testing.T) {
 }
 
 func TestRPCWithSessionReachesDaemon(t *testing.T) {
-	srv, sessions := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
-	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"Arr"}})
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"media"}})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestRPCWithSessionReachesDaemon(t *testing.T) {
 
 // A valid session for someone outside the allowed group is still refused.
 func TestRPCRejectsWrongGroup(t *testing.T) {
-	srv, sessions := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	cookie, _ := sessions.Encode(auth.Claims{Subject: "u2", Groups: []string{"Other"}})
 	req := httptest.NewRequest(http.MethodPost, "/transmission/rpc", nil)
 	req.AddCookie(cookie)
@@ -77,7 +78,7 @@ func TestRPCRejectsWrongGroup(t *testing.T) {
 }
 
 func TestCallbackRejectsWrongGroup(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeOIDC, "Arr",
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media",
 		&fakeOIDC{claims: auth.Claims{Subject: "u3", Groups: []string{"Nope"}}})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/auth/callback?code=x", nil))
@@ -90,8 +91,8 @@ func TestCallbackRejectsWrongGroup(t *testing.T) {
 }
 
 func TestCallbackIssuesSession(t *testing.T) {
-	srv, sessions := newTestServer(t, config.AuthModeOIDC, "Arr",
-		&fakeOIDC{claims: auth.Claims{Subject: "u1", Groups: []string{"Arr"}}})
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media",
+		&fakeOIDC{claims: auth.Claims{Subject: "u1", Groups: []string{"media"}}})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/auth/callback?code=x", nil))
 	if rec.Code != http.StatusFound {
@@ -113,28 +114,9 @@ func TestCallbackIssuesSession(t *testing.T) {
 	}
 }
 
-// Dev mode signs in without an IdP so the UI can be driven locally.
-func TestDevModeLoginIssuesSession(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeDev, "Arr", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/auth/login", nil))
-	if rec.Code != http.StatusFound {
-		t.Fatalf("want redirect, got %d", rec.Code)
-	}
-	found := false
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == auth.SessionCookieName && c.Value != "" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("dev login issued no session")
-	}
-}
-
 // A GET on the RPC path must not fall through to the SPA handler.
 func TestRPCPathRejectsNonPost(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/transmission/rpc", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -148,7 +130,7 @@ func TestRPCPathRejectsNonPost(t *testing.T) {
 // /api/auth/me must apply the same group check as the RPC guard, or a revoked
 // user still reads as signed in while every RPC call returns 403.
 func TestMeRejectsWrongGroup(t *testing.T) {
-	srv, sessions := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	cookie, _ := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"Other"}})
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 	req.AddCookie(cookie)
@@ -160,11 +142,11 @@ func TestMeRejectsWrongGroup(t *testing.T) {
 }
 
 func TestStaticFallsBackToIndex(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeOIDC, "Arr", &fakeOIDC{})
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/some/spa/route", nil))
 	body, _ := io.ReadAll(rec.Body)
-	if rec.Code != http.StatusOK || string(body) != "<html>ui</html>" {
+	if rec.Code != http.StatusOK || !strings.Contains(string(body), "ui</html>") {
 		t.Fatalf("spa fallback failed: %d %q", rec.Code, body)
 	}
 }

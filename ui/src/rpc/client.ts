@@ -16,7 +16,28 @@ export class RpcError extends Error {
 /** JSON-RPC error `data`: an optional longer message plus method-defined extra keys. */
 export interface RpcErrorData { error_string?: string; result?: Record<string, unknown> }
 
-const ENDPOINT = (import.meta.env.VITE_RPC_URL as string | undefined) || '/transmission/rpc'
+// The app may be served under a path prefix (seedbox.example.com/transmission),
+// where an origin-absolute path would escape the prefix and miss the reverse
+// proxy's route. The backend states its prefix in a meta tag when it serves
+// index.html; it cannot be derived from location.pathname, because on the
+// bundle-only path the daemon serves the UI from /transmission/web/ while its
+// RPC stays at the fixed /transmission/rpc.
+export function basePath(): string {
+  const meta = document.querySelector('meta[name="tmui-base"]')
+  const v = meta?.getAttribute('content')?.trim() ?? ''
+  return v === '/' ? '' : v.replace(/\/$/, '')
+}
+
+// Resolved on first use, not at module load: the meta tag is in <head>, so it
+// is parsed before any script runs, but keeping this lazy avoids depending on
+// module evaluation order.
+let endpoint: string | null = null
+function rpcEndpoint(): string {
+  if (endpoint === null) {
+    endpoint = (import.meta.env.VITE_RPC_URL as string | undefined) || `${basePath()}/transmission/rpc`
+  }
+  return endpoint
+}
 let sessionId: string | null = null
 let id = 0
 
@@ -30,7 +51,7 @@ type RpcResponse<T> = {
 export async function rpc<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}, retry = true): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (sessionId) headers['X-Transmission-Session-Id'] = sessionId
-  const res = await fetch(ENDPOINT, {
+  const res = await fetch(rpcEndpoint(), {
     method: 'POST',
     headers,
     body: JSON.stringify({ jsonrpc: '2.0', method, params, id: ++id }),

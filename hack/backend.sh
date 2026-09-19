@@ -26,8 +26,11 @@ cp -R "$ROOT/ui/dist/." "$ROOT/backend/dist/"
 
 go build -C "$ROOT/backend" -o "$ROOT/hack/transmission-ui" .
 
+# BACKEND_PUBLIC_URL is loopback, so the session cookie is not marked Secure:
+# Safari drops a Secure cookie on plain http and the sign-in would loop.
 BACKEND_ADDR="127.0.0.1:$PORT" \
 BACKEND_AUTH_MODE=form \
+BACKEND_PUBLIC_URL="http://127.0.0.1:$PORT" \
 BACKEND_SESSION_SECRET=e2e-only-not-a-real-secret \
 TM_RPC_UPSTREAM="${TM_RPC_UPSTREAM:-http://127.0.0.1:9091}" \
 TM_USER="${TM_USER:-dev}" \

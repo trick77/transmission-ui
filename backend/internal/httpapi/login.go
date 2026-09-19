@@ -30,8 +30,8 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · transmission-ui</title>
 <style>
-  @font-face{font-family:"Anthropic Sans";src:url("/login-assets/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
-  @font-face{font-family:"Anthropic Serif";src:url("/login-assets/SerifWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
+  @font-face{font-family:"Anthropic Sans";src:url("{{.Base}}/login-assets/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
+  @font-face{font-family:"Anthropic Serif";src:url("{{.Base}}/login-assets/SerifWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
   :root{
     color-scheme: dark;
     --bg:#1f1f1e; --surface:#1b1b1a; --surface-2:#2c2c2a; --surface-3:#363632;
@@ -51,7 +51,7 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
     /* cover: fill the viewport at any aspect, no letterbox bands. The art is
        16:9, so a very tall window crops the sides; its centre is empty by
        design, which is where the card sits. */
-    background:var(--bg) url("/login-assets/login-bg.webp") center/cover no-repeat fixed;
+    background:var(--bg) url("{{.Base}}/login-assets/login-bg.webp") center/cover no-repeat fixed;
   }
   /* The art has an empty centre; a soft scrim keeps the card legible over it
      without washing the circuitry out at the edges. */
@@ -84,7 +84,7 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
   @media (prefers-reduced-motion:no-preference){.card{animation:rise .18s ease-out}}
   @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
-<form class="card" method="post" action="/login">
+<form class="card" method="post" action="{{.Base}}/login">
   <div class="brand">
     <span class="logo" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
@@ -106,18 +106,18 @@ func (s *Server) renderLogin(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = loginPage.Execute(w, struct{ Error string }{msg})
+	_ = loginPage.Execute(w, struct{ Error, Base string }{msg, s.cfg.BasePath})
 }
 
 // loginAssetHandler serves the page's embedded background and fonts. They are
 // immutable for the life of the binary, so they cache hard.
-func loginAssetHandler() http.Handler {
+func loginAssetHandler(basePath string) http.Handler {
 	sub, err := fs.Sub(loginAssets, "assets")
 	if err != nil {
 		panic(err) // the embed is compile-time; a failure here is a build bug
 	}
 	files := http.FileServer(http.FS(sub))
-	return http.StripPrefix("/login-assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.StripPrefix(basePath+"/login-assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		files.ServeHTTP(w, r)
 	}))
@@ -126,7 +126,7 @@ func loginAssetHandler() http.Handler {
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	// Already signed in: no reason to show the form again.
 	if _, err := s.sessions.Decode(r); err == nil {
-		http.Redirect(w, r, "/", http.StatusFound)
+		http.Redirect(w, r, s.cfg.BasePath+"/", http.StatusFound)
 		return
 	}
 	s.renderLogin(w, http.StatusOK, "")

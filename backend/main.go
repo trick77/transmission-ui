@@ -64,17 +64,16 @@ func main() {
 			ClientSecret: cfg.OIDCClientSecret,
 			RedirectURL:  cfg.OIDCRedirectURL,
 			SecureCookie: cfg.SecureCookies,
+			BasePath:     cfg.BasePath,
 		})
 		if err != nil {
 			log.Error("oidc discovery", "err", err)
 			os.Exit(1)
 		}
 		oidcService = svc
-	} else if cfg.AuthMode == config.AuthModeDev {
-		log.Warn("BACKEND_AUTH_MODE=dev: every visitor is signed in automatically")
 	}
 
-	// Secure cookies are set for every non-dev mode, which assumes a
+	// Secure cookies are set unless the public URL is loopback, which assumes a
 	// TLS-terminating proxy in front. Without one the browser drops the session
 	// cookie and the user loops between / and /login with nothing in the log to
 	// explain it, so say so at startup.
@@ -83,7 +82,11 @@ func main() {
 			"public_url", cfg.PublicURL)
 	}
 
-	sessions := auth.NewSessionCodec(cfg.SessionSecret, cfg.SecureCookies, cfg.SessionTTL, cfg.OIDCAllowedGroup)
+	if cfg.GeneratedSessionSecret {
+		log.Warn("BACKEND_SESSION_SECRET is unset: generated a per-process one, so every restart signs everyone out")
+	}
+
+	sessions := auth.NewSessionCodec(cfg.SessionSecret, cfg.SecureCookies, cfg.SessionTTL, cfg.OIDCAllowedGroup, cfg.BasePath)
 	srv := httpapi.New(cfg, oidcService, sessions, rpc, ui, log)
 
 	server := &http.Server{
