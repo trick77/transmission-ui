@@ -90,6 +90,31 @@ describe('shell', () => {
     await screen.findByText(/Not signed in/, {}, { timeout: 4000 })
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
+
+  it('shows the retry banner when the daemon is unreachable', async () => {
+    await mount()
+    // Drop the connection after the first successful poll: the banner switches
+    // to the error wording and the list stays put.
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'))
+    await screen.findByText(/Can't reach the daemon/, {}, { timeout: 4000 })
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
+  })
+
+  it('sends the sign-in button to the login endpoint', async () => {
+    await mount({ unauthorized: true })
+    const btn = await screen.findByRole('button', { name: 'Sign in' }, { timeout: 4000 })
+    // jsdom will not navigate, and location.href has no spy-able setter, so
+    // swap the whole object for the duration of the click.
+    const real = window.location
+    let target = ''
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...real, get href() { return target }, set href(v: string) { target = v } },
+    })
+    fireEvent.click(btn)
+    Object.defineProperty(window, 'location', { configurable: true, value: real })
+    expect(target).toBe('/api/auth/login')
+  })
 })
 
 describe('sidebar', () => {
