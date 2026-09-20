@@ -96,6 +96,52 @@ describe('shell', () => {
     expect(deb.querySelector('.sdot')!.getAttribute('title')).toMatch(/of 42 peers/)
   })
 
+  it('the dot and action tracks are headerless cells, and the open menu lights its row', async () => {
+    await mount({ density: 'compact', sort: 'name' })
+    const cols = document.querySelector('.cols') as HTMLElement
+    // chk, dot, Name, actions, then the 9 labelled columns: the two extra cells carry no
+    // label, and must not be sort triggers.
+    expect(cols.children).toHaveLength(13)
+    expect(cols.children[1]).toBeEmptyDOMElement()
+    expect(cols.children[3]).toBeEmptyDOMElement()
+    // Grid children and cells line up, or the tail auto-places into a second row.
+    const r = row('Big Buck Bunny (2008) 4K 60fps')
+    expect(r.children).toHaveLength(13)
+    expect(r.children[1]).toHaveClass('sdot')
+    expect(r.children[3]).toHaveClass('acts')
+    // Hover ends when the pointer moves onto the menu, so the lit state is a class.
+    expect(r).not.toHaveClass('menu-open')
+    fireEvent.click(within(r).getByTitle('More'))
+    expect(row('Big Buck Bunny (2008) 4K 60fps')).toHaveClass('menu-open')
+    // useDismiss attaches its listeners in a timeout, so the opening click cannot close it.
+    await act(async () => { await new Promise(r => setTimeout(r, 0)) })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(row('Big Buck Bunny (2008) 4K 60fps')).not.toHaveClass('menu-open'))
+  })
+
+  it('the action trigger is reachable by keyboard', async () => {
+    await mount({ density: 'compact', sort: 'name' })
+    const r = row('Big Buck Bunny (2008) 4K 60fps')
+    const btn = within(r).getByTitle('More')
+    btn.focus()
+    expect(document.activeElement).toBe(btn)
+    // opacity composes: the gate must lift on .acts, not on the button, or a focused
+    // button at opacity 1 inside a parent at 0 still renders invisible.
+    expect(r.matches(':focus-within')).toBe(true)
+  })
+
+  it('two-line rows get the action column but no dot track', async () => {
+    await mount()
+    const cols = document.querySelector('.cols') as HTMLElement
+    // chk, Name, actions, then 6 labelled columns -- one fewer than compact: no dot.
+    expect(cols.children).toHaveLength(9)
+    expect(cols.children[2]).toBeEmptyDOMElement()
+    const r = row('Big Buck Bunny (2008) 4K 60fps')
+    expect(r.children).toHaveLength(9)
+    expect(r.children[2]).toHaveClass('acts')
+    expect(r.querySelector('.sdot')).toBeNull()
+  })
+
   it('compact headers sort by the columns the one-liner adds', async () => {
     await mount({ density: 'compact', sort: 'name' })
     const cols = document.querySelector('.cols') as HTMLElement
@@ -396,12 +442,14 @@ describe('list interactions', () => {
     expect(document.getElementById('selbar')).toHaveTextContent('8 selected')
   })
 
-  it('row hover actions pause/resume; context menu items dispatch RPCs and open dialogs', async () => {
+  it('row menu pauses and resumes; its items dispatch RPCs and open dialogs', async () => {
     await mount()
     const r = row('Big Buck Bunny (2008) 4K 60fps')
-    fireEvent.click(within(r).getByTitle('Pause'))
+    // Pause lives in the menu now, not on the row: the column holds only the trigger.
+    expect(within(r).queryByTitle('Pause')).toBeNull()
+    fireEvent.click(within(r).getByTitle('More'))
+    fireEvent.click(within(document.querySelector('.cmenu') as HTMLElement).getByText('Pause'))
     await waitFor(() => expect(daemon.of('torrent_stop')[0]).toEqual({ ids: [2] }))
-    await waitFor(() => expect(within(row('Big Buck Bunny (2008) 4K 60fps')).getByTitle('Resume')).toBeInTheDocument())
     fireEvent.contextMenu(row('Big Buck Bunny (2008) 4K 60fps'))
     let menu = document.querySelector('.cmenu') as HTMLElement
     fireEvent.click(within(menu).getByText('Resume'))

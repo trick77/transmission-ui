@@ -10,7 +10,7 @@ export function torrentMenu(ids: number[]): MenuItem[] {
   const anyStopped = ids.some(id => s.byId.get(id)?.status === Status.Stopped)
   const q = (where: 'top' | 'up' | 'down' | 'bottom') => () => void run('Queue', () => api.queueMove(where, ids))
   return [
-    anyStopped ? { icon: 'play', label: ids.length > 1 ? 'Resume' : 'Resume', k: '␣', onClick: () => void run('Resume', () => api.start(ids)) }
+    anyStopped ? { icon: 'play', label: 'Resume', k: '␣', onClick: () => void run('Resume', () => api.start(ids)) }
       : { icon: 'pause', label: 'Pause', k: '␣', onClick: () => void run('Pause', () => api.stop(ids)) },
     { icon: 'globe', label: 'Re-announce', onClick: () => void run('Re-announce', () => api.reannounce(ids)) },
     { icon: 'check', label: 'Verify local data', onClick: () => void run('Verify', () => api.verify(ids)) },
