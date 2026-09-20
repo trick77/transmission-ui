@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Icon } from '../icons/Icon'
 import { ago, bytes, dateTime, duration, inFuture, percent, rateParts, ratio, KB } from '../lib/format'
 import { classifyAnnounce, hostOf, statusView, swarmOf, relDir } from '../lib/model'
-import type { TorrentDetail } from '../rpc/types'
+import type { Session, TorrentDetail } from '../rpc/types'
 import * as api from '../rpc/methods'
 import { focus, run, set, useStore } from '../state/store'
 import { NumInput, Seg, Toggle, Opt, Sec } from '../app/ui'
@@ -62,7 +62,18 @@ function Pieces({ d }: { d: TorrentDetail }) {
   return <div className="pieces" aria-label="Pieces">{cells.map((c, i) => <i key={i} className={c} />)}</div>
 }
 
+// Global mode (0) follows the session's stopper, which may be switched off entirely;
+// the torrent's own seed_ratio_limit is meaningless there.
+function seedLimit(d: TorrentDetail, session: Session | null) {
+  const stop = (limit: number, scope: string) => <>Stop at ratio <span className="num">{limit.toFixed(2)}</span> <span className="faint">({scope})</span></>
+  if (d.seed_ratio_mode === 2) return 'Unlimited'
+  if (d.seed_ratio_mode === 1) return stop(d.seed_ratio_limit, 'this torrent')
+  if (!session?.seed_ratio_limited) return <>Unlimited <span className="faint">(global)</span></>
+  return stop(session.seed_ratio_limit, 'global')
+}
+
 function Overview({ d, base }: { d: TorrentDetail; base: string }) {
+  const session = useStore(st => st.session)
   const [dn, du] = rateParts(d.rate_download), [un, uu] = rateParts(d.rate_upload)
   const avail = d.availability?.length ? d.availability : []
   const availPct = avail.length ? avail.filter(a => a !== 0).length / avail.length : d.percent_done
@@ -94,7 +105,7 @@ function Overview({ d, base }: { d: TorrentDetail; base: string }) {
         {next ? <><dt>Next announce</dt><dd className="num">{inFuture(next.next_announce_time)} <span className="faint">· {hostOf(next.announce)}</span></dd></> : null}
         <dt>Running time</dt><dd className="num">{d.percent_done >= 1 ? duration(d.seconds_seeding) + ' seeding' : duration(d.seconds_downloading)}</dd>
         <dt>Last activity</dt><dd className="num">{ago(d.activity_date)}</dd>
-        <dt>Seed limit</dt><dd>{d.seed_ratio_mode === 2 ? 'Unlimited' : <>Stop at ratio <span className="num">{(d.seed_ratio_mode === 1 ? d.seed_ratio_limit : d.seed_ratio_limit).toFixed(2)}</span> <span className="faint">({d.seed_ratio_mode === 0 ? 'global' : 'this torrent'})</span></>}</dd>
+        <dt>Seed limit</dt><dd>{seedLimit(d, session)}</dd>
       </dl>
 
       <Sec>Details</Sec>
