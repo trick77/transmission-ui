@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { SidebarResizer } from './SidebarResizer'
-import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebar, get, set } from '../state/store'
+import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebar, displayedSidebarW, get, set } from '../state/store'
 
 const handle = () => document.querySelector('.side-resizer') as HTMLElement
 /** Press on the handle at the current border, so a move to x yields a width of x. */
@@ -10,8 +10,14 @@ const grab = (h: HTMLElement, pointerId = 1, pointerType = 'mouse') =>
 const pref = () => document.documentElement.style.getPropertyValue('--sidebar-pref')
 const stored = () => JSON.parse(localStorage.getItem('tm.sidebar-w') || 'null')
 
+/** jsdom reports 1024 by default; the clamp keys on 40vw, so tests set it. */
+function withViewport(width: number) {
+  Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: width })
+}
+
 beforeEach(() => {
   localStorage.clear()
+  withViewport(1600)   // 40vw = 640, so the 420 max is the binding cap
   document.documentElement.style.removeProperty('--sidebar-pref')
   set({ sidebarW: SIDEBAR_DEFAULT })
 })
@@ -29,6 +35,19 @@ describe('clampSidebar', () => {
   // to the window and storing the result would lose the preference on an iPad rotation.
   it('ignores the viewport', () => {
     expect(clampSidebar(SIDEBAR_MAX)).toBe(SIDEBAR_MAX)
+  })
+})
+
+describe('displayedSidebarW', () => {
+  // Mirrors the CSS clamp in app.css, so the two must not be able to disagree.
+  it('mirrors the clamp it stands in for', () => {
+    withViewport(1600)              // 40vw = 640, so the 420 max wins
+    expect(displayedSidebarW(420)).toBe(420)
+    expect(displayedSidebarW(100)).toBe(SIDEBAR_MIN)
+    withViewport(1024)              // iPad portrait: 40vw = 409.6 wins over the max
+    expect(displayedSidebarW(420)).toBe(410)
+    withViewport(400)               // 40vw = 160, below the min, so the min wins
+    expect(displayedSidebarW(300)).toBe(SIDEBAR_MIN)
   })
 })
 
@@ -265,7 +284,83 @@ describe('SidebarResizer', () => {
     expect(document.activeElement).toBe(h)
   })
 
+  // The reset is a TOUCH gesture, and a mouse must not trigger it: the strip
+  // straddles the border, so an ordinary double-click a couple of pixels into the
+  // list used to throw a stored width away with nothing to undo it. A mouse has
+  // the arrow keys and Home, which is the route back it is meant to use.
+  it('does not reset on a mouse double-click', () => {
+    const clock = vi.spyOn(performance, 'now')
+    set({ sidebarW: 380 })
+    render(<SidebarResizer />)
+    const h = handle()
+
+    clock.mockReturnValue(1000)
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    clock.mockReturnValue(1100)              // well inside the tap window
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    fireEvent.pointerUp(h, { pointerId: 1 })
+
+    expect(get().sidebarW).toBe(380)         // the width survives the double-click
+    expect(localStorage.getItem('tm.sidebar-w')).toBeNull()
+  })
+
   // The tablet's only way back to the default: no context menu, no dblclick to rely on.
+  // A widening drag under the cap used to land its travel on the RENDERED edge, so
+  // a 5px nudge on an iPad wrote the capped 410 over the 420 a desktop session set.
+  it('keeps a preference the cap is hiding when the drag widens', () => {
+    withViewport(1024)              // 40vw = 410; the stored 420 shows as 410
+    set({ sidebarW: SIDEBAR_MAX })
+    render(<SidebarResizer />)
+    const h = handle()
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 410 })
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 415 })
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    expect(get().sidebarW).toBe(SIDEBAR_MAX)      // 420 survives, not cut to 415
+    expect(stored()).toBe(SIDEBAR_MAX)
+  })
+
+  // Narrowing still works from the edge under the finger, so it tracks from the
+  // first pixel rather than spending the gap between the two numbers.
+  it('narrows from the edge the user can see', () => {
+    withViewport(1024)
+    set({ sidebarW: SIDEBAR_MAX })
+    render(<SidebarResizer />)
+    const h = handle()
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 410 })
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 370 })   // pull 40px left
+    expect(pref()).toBe('370px')                                // tracked, no dead zone
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    expect(get().sidebarW).toBe(370)
+  })
+
+  // aria-valuenow described a sidebar that is not on screen: it reported the
+  // preference while the separator sat at the capped edge.
+  it('announces where the separator actually is', () => {
+    withViewport(1024)
+    set({ sidebarW: SIDEBAR_MAX })
+    render(<SidebarResizer />)
+    expect(handle()).toHaveAttribute('aria-valuenow', '410')
+    expect(handle()).toHaveAttribute('aria-valuemax', '410')
+  })
+
+  // CSS repaints the edge on a resize but React does not re-render, so the
+  // separator went on announcing the width from the last render.
+  it('re-announces the edge when the window changes size', async () => {
+    withViewport(1600)
+    set({ sidebarW: SIDEBAR_MAX })
+    render(<SidebarResizer />)
+    expect(handle()).toHaveAttribute('aria-valuenow', '420')
+
+    withViewport(1024)
+    fireEvent(window, new Event('resize'))
+    await waitFor(() => expect(handle()).toHaveAttribute('aria-valuenow', '410'))
+
+    withViewport(1600)
+    fireEvent(window, new Event('resize'))
+    await waitFor(() => expect(handle()).toHaveAttribute('aria-valuenow', '420'))
+  })
+
   it('resets on a double tap', () => {
     const clock = vi.spyOn(performance, 'now')
     set({ sidebarW: 400 })

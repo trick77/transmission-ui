@@ -55,6 +55,18 @@ export function clampSidebar(w: number): number {
   return Math.min(Math.max(Math.round(w), SIDEBAR_MIN), SIDEBAR_MAX)
 }
 
+/**
+ * What the CSS clamp on --sidebar-w resolves the preference to, computed rather than
+ * measured. Mirrors `clamp(180px, pref, min(420px, 40vw))` in app.css: measuring the
+ * .sidebar box instead reads a width that is still settling right after a change,
+ * and the two must not be able to disagree.
+ */
+export function displayedSidebarW(preference: number): number {
+  const vw = document.documentElement.clientWidth || 0
+  const cap = vw > 0 ? Math.min(SIDEBAR_MAX, 0.4 * vw) : SIDEBAR_MAX
+  return Math.round(Math.max(SIDEBAR_MIN, Math.min(preference, cap)))
+}
+
 function initialSidebarW(): number {
   const v = readLocal<number>('tm.sidebar-w', SIDEBAR_DEFAULT)
   return typeof v === 'number' && Number.isFinite(v) ? clampSidebar(v) : SIDEBAR_DEFAULT
