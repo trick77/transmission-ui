@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Icon } from '../icons/Icon'
-import { ago, bytes, compact, date, eta, percent, rateParts, ratio, ratioValue } from '../lib/format'
+import { ago, bytes, compact, date, eta, percent, rateParts, ratio, ratioOwed } from '../lib/format'
 import { hostOf, relDir, statusView, swarmOf } from '../lib/model'
 import { Status, type TorrentSummary } from '../rpc/types'
 import * as api from '../rpc/methods'
@@ -63,9 +63,12 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
           <span className="num pv">{percent(t.percent_done)}</span>
         </div>
         <span className={'num r' + (seeds ? '' : ' faint')}>{seeds ? compact(seeds) : '—'}</span>
-        <span className={'num r' + (ratioValue(t.upload_ratio) >= 1 ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
-        <span className="num r muted">{bytes(t.uploaded_ever)}</span>
-        <span className="num r muted">{date(t.added_date)}</span>
+        {/* Below 1.0 is the interesting case — those still owe the swarm and need seeding —
+            so they keep the full ink and the settled ones fade back. */}
+        <span className={'num r' + (ratioOwed(t.upload_ratio) ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
+        <span className="num r muted">{bytes(t.uploaded_ever, 1)}</span>
+        {/* Relative like Last active; the exact date stays one hover away. */}
+        <span className="num r muted" title={date(t.added_date)}>{ago(t.added_date)}</span>
         <span className="num r muted">{ago(t.activity_date)}</span>
         <span className={'tcell' + (host ? '' : ' faint')} title={host}>{host || '—'}</span>
         <span className={'tcell' + (dir ? '' : ' faint')} title={dir}>{dir ? dir + '/' : '—'}</span>
@@ -95,7 +98,7 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
       </div>
       <Speed bps={t.rate_download} dir="dl" />
       <Speed bps={t.rate_upload} dir="ul" />
-      <span className={'num r' + (ratioValue(t.upload_ratio) >= 1 ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
+      <span className={'num r' + (ratioOwed(t.upload_ratio) ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
       <span className="num r muted">{eta(t.eta, t.status === Status.Seed || t.status === Status.SeedWait)}</span>
     </div>
   )

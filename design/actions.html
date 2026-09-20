@@ -220,30 +220,6 @@ body.resizing{cursor:col-resize;user-select:none}
 .sel-bar .btn.danger{color:var(--err)}
 .sel-bar .x{margin-left:2px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--accent)}
 .sel-bar .x:hover{background:rgba(217,119,87,.18)}
-/* Bulk removal progress. Status, not a control, so it stays neutral: no accent, and red
-   only if a torrent actually failed. The daemon blocks its whole RPC thread while it
-   unlinks, so nothing else on screen moves during a step -- the step counter ticking
-   between steps is the only honest liveness cue. The bar is stepped (width jumps per
-   finished torrent), which keeps the stylesheet free of its first @keyframes. */
-.rm-bar{display:flex;align-items:center;gap:8px;padding:0 4px 0 12px;height:34px;border-radius:999px;background:var(--surface-3);color:var(--ink-2);font-weight:500;font-size:12px;box-shadow:inset 0 0 0 1px var(--line)}
-.rm-bar .v{white-space:nowrap;color:var(--ink)}
-.rm-bar .who{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2);font-weight:400}
-.rm-bar .track{width:90px;height:4px;border-radius:999px;background:var(--surface-2);overflow:hidden;flex:none}
-.rm-bar .track i{display:block;height:100%;width:var(--p,0%);background:var(--ink-3);border-radius:999px;transition:width .2s}
-.rm-bar .btn{color:var(--ink);height:26px;padding:0 8px;gap:5px}
-.rm-bar .btn:hover{background:rgba(255,255,255,.06)}
-.rm-bar.done{color:var(--ink-2)}
-.rm-bar.done .track i{background:var(--ink-3)}
-.rm-bar.has-fail .track i{background:var(--err)}
-/* Rows on their way out: dimmed and inert, so it is obvious they are no longer live data
-   and cannot be clicked into a second remove. */
-.row.pending{opacity:.45;pointer-events:none}
-.row.pending .acts{display:none}
-.row.pending .rm-st{color:var(--ink-2)}
-/* A failed removal is the one pending state the user still has to act on, so it keeps
-   full opacity and stays clickable. */
-.row.pending.failed{opacity:1;pointer-events:auto}
-.row.pending.failed .rm-st{color:var(--err)}
 .row .chk{cursor:pointer}
 .row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23faf9f5' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");background-size:12px;background-position:center;background-repeat:no-repeat}
 .chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
@@ -606,12 +582,6 @@ body.resizing{cursor:col-resize;user-select:none}
           <button class="btn sm ghost icon" title="More: verify, re-announce, queue, limits"><svg class="i"><use href="#i-more"/></svg></button>
           <button class="x" id="selclear" title="Clear selection"><svg class="i" style="width:13px;height:13px"><use href="#i-x"/></svg></button>
         </div>
-        <div class="rm-bar" id="rmbar" hidden>
-          <span class="v" id="rmcount">Removing 1 of 10</span>
-          <span class="who" id="rmwho">debian-13.1.0-amd64-netinst.iso</span>
-          <span class="track"><i id="rmfill" style="--p:0%"></i></span>
-          <button class="btn sm ghost" id="rmstop">Stop</button>
-        </div>
         <button class="btn ghost sm" id="fbtn"><svg class="i" style="width:14px;height:14px"><use href="#i-search"/></svg>Filter<span class="badge" id="fbadge" hidden>0</span></button>
         <button class="btn ghost sm" title="Sort"><svg class="i" style="width:14px;height:14px"><use href="#i-sort"/></svg>Name</button>
         <div class="fpop" id="fpop" hidden>
@@ -632,7 +602,7 @@ body.resizing{cursor:col-resize;user-select:none}
     </section>
 <script>
 // Sample session — mixed states so every status colour appears.
-let T = [
+const T = [
   {id:1, name:"debian-13.1.0-amd64-DVD-1.iso", st:"download", p:63, size:"4.71 GB", dl:"12.4 MB/s", ul:"1.21 MB/s", ratio:"0.18", eta:"3m 12s", peers:"42 · 18", swarm:"1.2k", av:"3.4", lbl:["linux"], age:0, idle:0, dir:"/data/torrents/iso"},
   {id:2, name:"Cosmos Laundromat (2015) 2160p Blender Open Movie", st:"download", p:91, size:"3.02 GB", dl:"3.14 MB/s", ul:"612 kB/s", ratio:"0.44", eta:"1m 28s", peers:"27 · 11", swarm:"318", av:"9.1", lbl:["blender"], age:1, idle:0, dir:"/data/torrents/buffer"},
   {id:3, name:"enwiki-20260801-pages-articles-multistream.xml.bz2", st:"download", p:34, size:"24.1 GB", dl:"88 kB/s", ul:"0", ratio:"0.02", eta:"2d 4h", peers:"3 · 1", swarm:"4", av:"0.9", lbl:["archive"], age:12, idle:0, dir:"/data/torrents/buffer"},
@@ -677,14 +647,12 @@ function row(t, sel){
   const sub = t.err ? `<span style="color:var(--err)">${t.err}</span>`
     : s.label === "Verifying" ? `Verifying local data`
     : conn === "0" ? `No peers` : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
-  const rm = RM.state[t.id];
-  const subText = rm ? `<span class="rm-st">${rm}</span>` : sub;
-  return `<div class="row${sel?' sel':''}${rm?' pending':''}${rm&&rm.startsWith('Failed')?' failed':''}" data-id="${t.id}">
+  return `<div class="row${sel?' sel':''}" data-id="${t.id}">
     <span class="chk"></span>
     <div class="name">
       <div class="t"><span>${t.name}</span>${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
         <span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span></div>
-      <div class="m"><span class="chip ${s.cls}"><span class="dot"></span>${s.label}</span><span class="sep"></span><span>${subText}</span><span class="sep"></span><span>${rel(t.dir)}/</span></div>
+      <div class="m"><span class="chip ${s.cls}"><span class="dot"></span>${s.label}</span><span class="sep"></span><span>${sub}</span><span class="sep"></span><span>${rel(t.dir)}/</span></div>
     </div>
     <span class="num r muted">${t.size}</span>
     <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num"><span>${t.p}%</span>${t.swarm?`<span class="av" title="Seeds in swarm">${t.swarm} seeds</span>`:''}</span></div>
@@ -703,12 +671,11 @@ function rowOne(t, sel){
   const peers = conn === "0" ? 'No peers' : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
   const why = t.err ? t.err : s.label === 'Verifying' ? 'Verifying local data' : `${s.label} · ${peers}`;
   const acts = `<span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span>`;
-  const rm = RM.state[t.id];
-  return `<div class="row one${sel?' sel':''}${t.err?' is-err':''}${rm?' pending':''}${rm&&rm.startsWith('Failed')?' failed':''}" data-id="${t.id}">
+  return `<div class="row one${sel?' sel':''}${t.err?' is-err':''}" data-id="${t.id}">
     <span class="chk"></span>
     <div class="name">
       <span class="sdot ${s.cls}" title="${why}"></span>
-      <span class="t" title="${rm ? rm : t.err ? why : t.name}">${t.name}${rm?` <span class="rm-st">· ${rm}</span>`:''}</span>
+      <span class="t" title="${t.err ? why : t.name}">${t.name}</span>
       ${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
       ${acts}
     </div>
@@ -747,9 +714,8 @@ const ADV_LABEL = {size:{lt1:"< 1 GB","1to10":"1–10 GB",gt10:"> 10 GB"}, age:{
 let adv = {};
 const BASE = "/data/torrents";
 const rel = d => d.startsWith(BASE + "/") ? d.slice(BASE.length + 1) : d;
-const RM = { state:{}, ids:[], done:0, fails:0, stopped:false, timer:null, del:true, filter:null };
 const gb = s => s.endsWith("MB") ? parseFloat(s)/1024 : parseFloat(s);
-function renderRows(selId, filter){ RM.filter = filter;
+function renderRows(selId, filter){
   const F = filter && filter.startsWith('dir:') ? {label: rel(filter.slice(4)), f: t => t.dir === filter.slice(4) || t.dir.startsWith(filter.slice(4) + '/')} : FILTERS[filter || 'all'];
   T.forEach(t => { t.trk = t.id===1 || t.id===12; });
   const list = T.filter(F.f).filter(t => Object.entries(adv).every(([k,v]) => !v || v==='any' || ADV[k][v](t))).sort((a,b) => a.name.localeCompare(b.name));
@@ -769,7 +735,7 @@ function renderRows(selId, filter){ RM.filter = filter;
   document.getElementById('rows').innerHTML = list.length ? list.map(t=>(one?rowOne:row)(t, t.id===selId)).join('')
     : `<div class="empty"><div class="t">Nothing matches</div>${Object.values(adv).some(v=>v&&v!=='any') ? 'Try loosening a filter · <a href="#" id="eclear" style="color:var(--accent)">clear all</a>' : 'No torrents in this view'}</div>`;
   const ec = document.getElementById('eclear'); if (ec) ec.onclick = e => { e.preventDefault(); adv = {}; syncAdv(); renderRows(null, filter); };
-  const sb = document.getElementById('selbar'); if (sb) sb.hidden = !selId || RM.ids.length > 0;
+  const sb = document.getElementById('selbar'); if (sb) sb.hidden = !selId;
   const ft = document.getElementById('ftitle'), fc = document.getElementById('fcount');
   if (ft) ft.textContent = F.label;
   if (fc) fc.textContent = (list.length===T.length ? `${T.length}` : `${list.length} of ${T.length}`) + ` · ${list.reduce((a,t)=>a+gb(t.size),0).toFixed(1)} GB`;
@@ -790,81 +756,9 @@ function contextMenu(rowEl){
     it('trash','Remove and delete data…','⌫','danger') + it('x','Remove from list','⌘⌫','danger');
   document.body.appendChild(m);
 }
-// ───────── Bulk removal, mocked ─────────
-// The daemon deletes serially and blocks its RPC thread for each torrent, so there is no
-// server-side progress to read. The client makes it by issuing one torrent-remove per
-// torrent and counting the responses: every reply means that one's files are really gone.
-// This mock fakes the reply timing (file count, not size, drives the real duration).
-function rmRender(){
-  const bar = document.getElementById('rmbar'); if (!bar) return;
-  const total = RM.ids.length;
-  bar.hidden = !total;
-  if (!total) return;
-  const fill = document.getElementById('rmfill');
-  fill.style.setProperty('--p', Math.round(RM.done/total*100) + '%');
-  bar.classList.toggle('has-fail', RM.fails > 0);
-  const cur = RM.ids[RM.done];
-  const finished = RM.done >= total || RM.stopped;
-  bar.classList.toggle('done', finished);
-  const verb = RM.del ? 'Deleting' : 'Removing';
-  document.getElementById('rmcount').textContent = finished
-    ? (RM.fails ? `Removed ${RM.done - RM.fails} of ${total}, ${RM.fails} failed` : `Removed ${RM.done} torrents`)
-    : `${verb} ${RM.done + 1} of ${total}`;
-  const who = document.getElementById('rmwho');
-  who.textContent = finished ? '' : (T.find(t=>t.id===cur)?.name || '');
-  const sbtn = document.getElementById('rmstop');
-  sbtn.hidden = finished && !RM.fails;
-  sbtn.textContent = finished ? 'Dismiss' : 'Stop';
-  sbtn.onclick = finished ? rmDismiss : rmHalt;
-}
-function rmStep(){
-  if (RM.stopped) { rmRender(); return; }
-  const total = RM.ids.length;
-  if (RM.done >= total) { rmRender(); RM.timer = setTimeout(rmEnd, 2200); return; }
-  const id = RM.ids[RM.done];
-  // one torrent in the batch fails, so the mock shows the partial-failure wording too
-  const fail = RM.done === 6;
-  RM.state[id] = RM.del ? 'Deleting files…' : 'Removing…';
-  renderRows(null, RM.filter); rmRender();
-  RM.timer = setTimeout(() => {
-    if (fail) { RM.state[id] = 'Failed: permission denied'; RM.fails++; }
-    else { delete RM.state[id]; T = T.filter(t=>t.id!==id); }
-    RM.done++;
-    renderRows(null, RM.filter); rmStep();
-  }, 700 + (RM.done % 3) * 500);
-}
-function rmEnd(){
-  // A torrent that failed to go keeps its marker and its row: the whole point of this
-  // feature is that nothing disappears silently, and that includes failures. Only the
-  // successful ones are cleared. The pill sticks around too when something failed, so
-  // the summary has to be dismissed rather than blinking past.
-  if (RM.fails) { rmRender(); return; }
-  Object.keys(RM.state).forEach(k=>delete RM.state[k]);
-  RM.ids = []; RM.done = 0; RM.fails = 0; RM.stopped = false;
-  renderRows(null, RM.filter); rmRender();
-}
-function rmDismiss(){
-  Object.keys(RM.state).forEach(k=>delete RM.state[k]);
-  RM.ids = []; RM.done = 0; RM.fails = 0; RM.stopped = false;
-  renderRows(null, RM.filter); rmRender();
-}
-function rmStart(ids, del){
-  clearTimeout(RM.timer);
-  RM.ids = ids.slice(); RM.done = 0; RM.fails = 0; RM.stopped = false; RM.del = del !== false;
-  RM.ids.forEach(id => { RM.state[id] = 'Queued for removal'; });
-  document.querySelectorAll('.row').forEach(r=>r.classList.remove('sel'));
-  syncSel();
-  renderRows(null, RM.filter); rmStep();
-}
-function rmHalt(){
-  RM.stopped = true;
-  Object.keys(RM.state).forEach(k=>{ if (RM.state[k]==='Queued for removal') delete RM.state[k]; });
-  renderRows(null, RM.filter); rmRender();
-  RM.timer = setTimeout(rmEnd, 2200);
-}
 function syncSel(){
   const rows = [...document.querySelectorAll('.row')], sel = rows.filter(r=>r.classList.contains('sel'));
-  const sb = document.getElementById('selbar'); if (!sb) return; sb.hidden = !sel.length || RM.ids.length > 0;
+  const sb = document.getElementById('selbar'); if (!sb) return; sb.hidden = !sel.length;
   document.getElementById('selcount').textContent = sel.length + ' selected';
   const a = document.getElementById('selall'); a.classList.toggle('on', sel.length && sel.length===rows.length); a.classList.toggle('some', sel.length && sel.length<rows.length);
 }
@@ -882,118 +776,211 @@ function toolbarMenu(anchor){
 </script>
   </div>
 </div>
-<div class="scrim">
-  <div class="modal" style="width:820px;height:640px;flex-direction:row">
-    <nav style="width:190px;border-right:1px solid var(--line);padding:14px 10px;background:var(--bg);flex:none" id="snav">
-      <div class="side-h">Preferences</div>
-      <button class="side-item on" data-s="speed"><span class="lbl">Speed</span></button>
-      <button class="side-item" data-s="downloads"><span class="lbl">Downloads</span></button>
-      <button class="side-item" data-s="seeding"><span class="lbl">Seeding</span></button>
-      <button class="side-item" data-s="queue"><span class="lbl">Queue</span></button>
-      <button class="side-item" data-s="network"><span class="lbl">Network</span></button>
-      <button class="side-item" data-s="peers"><span class="lbl">Peers</span></button>
-      <button class="side-item" data-s="privacy"><span class="lbl">Privacy</span></button>
-      <div class="side-h" style="margin-top:22px">Session</div>
-      <div class="hint" style="padding:0 8px;line-height:1.6">transmission-daemon 4.1.3<br>rpc 6.0.1<br>Uptime 6d 14h<br><span class="num">↓ 218 GB · ↑ 391 GB</span><br>Ratio <span class="num">1.79</span></div>
-    </nav>
-    <div style="display:flex;flex-direction:column;min-width:0;flex:1">
-      <div class="modal-h"><span class="t" id="stitle">Speed</span><div class="spacer"></div><button class="btn ghost icon"><svg class="i"><use href="#i-x"/></svg></button></div>
-      <div class="modal-b" style="flex:1">
 
-        <div data-s="speed">
-          <div class="sec">Global limits</div>
-          <div class="opt"><div class="txt"><div class="l">Download limit</div></div><div class="ctl"><div class="input mono"><input value="20000"><span class="unit">kB/s</span></div><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Upload limit</div></div><div class="ctl"><div class="input mono"><input value="2500"><span class="unit">kB/s</span></div><span class="toggle on"></span></div></div>
-          <div class="sec" style="display:flex;align-items:center;gap:8px"><svg class="i" style="width:14px;height:14px;color:var(--ink-3)"><use href="#i-turtle"/></svg>Alternative speed limits</div>
-          <div class="hint" style="margin:-4px 0 6px">Temporary limits, toggled with the turtle in the toolbar or on a schedule.</div>
-          <div class="opt"><div class="txt"><div class="l">Download limit</div></div><div class="ctl"><div class="input mono"><input value="2000"><span class="unit">kB/s</span></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Upload limit</div></div><div class="ctl"><div class="input mono"><input value="250"><span class="unit">kB/s</span></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Scheduled</div><div class="d">Enable alternative limits automatically</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Between</div></div><div class="ctl"><div class="input mono" style="width:84px"><input value="08:00"></div><span class="faint">and</span><div class="input mono" style="width:84px"><input value="23:00"></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">On days</div></div><div class="ctl"><div class="seg"><button class="on">Mo</button><button class="on">Tu</button><button class="on">We</button><button class="on">Th</button><button class="on">Fr</button><button>Sa</button><button>Su</button></div></div></div>
-        </div>
+<style>
+/* ── Mock-only chrome. None of this ships; it frames the comparison. ── */
+.mk{position:fixed;inset:0;overflow:auto;background:var(--bg);padding:28px 32px 80px;z-index:100}
+.mk h1{font-family:var(--serif);font-weight:500;font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+.mk .lede{color:var(--ink-2);max-width:74ch;margin:0 0 26px;font-size:13px;line-height:1.6}
+.mk h2{font-family:var(--serif);font-weight:500;font-size:18px;margin:30px 0 4px}
+.mk .note{color:var(--ink-2);font-size:12px;line-height:1.6;max-width:78ch;margin:0 0 12px}
+.mk .note b{color:var(--ink);font-weight:500}
+.mk .frame{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--bg);margin-bottom:6px}
+.mk .cap{font-size:11px;color:var(--ink-3);font-family:var(--mono);padding:7px 12px;border-bottom:1px solid var(--line-soft);background:var(--surface)}
+.mk .cap.bad{color:var(--err)}
+.mk .cap.good{color:var(--seed-dot)}
+.mk .narrow{max-width:560px}
+.mk .tag{display:inline-block;font:11px var(--mono);padding:1px 7px;border-radius:999px;background:var(--surface-3);color:var(--ink-2);margin-left:7px}
 
-        <div data-s="downloads" hidden>
-          <div class="sec">Locations</div>
-          <div class="opt"><div class="txt"><div class="l">Download to</div><div class="d">412 GB free</div></div><div class="ctl"><div class="input wide"><svg class="i" style="color:var(--ink-3)"><use href="#i-folder"/></svg><input value="~/Downloads"></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Keep incomplete files in</div></div><div class="ctl"><div class="input wide"><svg class="i" style="color:var(--ink-3)"><use href="#i-folder"/></svg><input value="~/Downloads/.incomplete"></div><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Append “.part” to incomplete files</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="sec">Adding</div>
-          <div class="opt"><div class="txt"><div class="l">Watch folder for .torrent files</div></div><div class="ctl"><div class="input wide"><svg class="i" style="color:var(--ink-3)"><use href="#i-folder"/></svg><input value="~/Downloads/torrents"></div><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Start torrents when added</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Delete .torrent file after adding</div></div><div class="ctl"><span class="toggle"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Sequential download by default</div><div class="d">New torrents fetch their pieces in order</div></div><div class="ctl"><span class="toggle"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Run script when download completes</div></div><div class="ctl"><div class="input wide mono"><input placeholder="/path/to/script.sh"></div><span class="toggle"></span></div></div>
-          <div class="sec">Storage</div>
-          <div class="opt"><div class="txt"><div class="l">Preallocation</div><div class="d">Reserve disk space up front to avoid fragmentation</div></div><div class="ctl"><div class="seg"><button>Off</button><button class="on">Sparse</button><button>Full</button></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Cache size</div></div><div class="ctl"><div class="input mono"><input value="16"><span class="unit">MiB</span></div></div></div>
-        </div>
+/* ── Proposal: a real column for the row actions ──────────────────────
+   Today .acts is position:absolute, right:0, opacity:0 until :hover, over a
+   gradient mask that fades the Path column underneath. Three things break:
+   it hides content it overlaps, it is invisible until hover, and on a touch
+   screen there is no hover at all, so it is unreachable. A grid column of its
+   own fixes all three at once. */
+.row.one.v2{grid-template-columns:24px minmax(420px,1fr) 40px 84px 96px 56px 60px 80px 92px 88px 140px 160px}
+.row.one.v2>:nth-child(n+13){display:none}
+.cols.one.v2{grid-template-columns:24px minmax(420px,1fr) 40px 84px 96px 56px 60px 80px 92px 88px 140px 160px}
+.cols.one.v2>:nth-child(n+13){display:none}
+/* In the column the trigger needs no gradient, no absolute placement and no
+   hover gate: it simply sits there, one cell wide, always legible. */
+.row.one.v2 .acts{position:static;transform:none;opacity:1;background:none;padding:0;margin:0;display:flex;justify-content:center}
+.row.one.v2:hover .acts,.row.one.v2.sel .acts{background:none}
+.acts button.more{color:var(--ink-3)}
+.row:hover .acts button.more{color:var(--ink-2)}
+.acts button.more:hover{background:var(--surface-3);color:var(--ink)}
+/* Quiet by default, lit only while its menu is open, so a wall of rows does not
+   turn into a column of loud glyphs. */
+.row.menu-open .acts button.more{background:var(--surface-3);color:var(--ink)}
 
-        <div data-s="seeding" hidden>
-          <div class="sec">Stop seeding</div>
-          <div class="opt"><div class="txt"><div class="l">At ratio</div></div><div class="ctl"><div class="input mono"><input value="2.00"></div><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">When idle for</div></div><div class="ctl"><div class="input mono"><input value="30"><span class="unit">min</span></div><span class="toggle"></span></div></div>
-          <div class="sec">Finished torrents</div>
-          <div class="opt"><div class="txt"><div class="l">Run script when seeding completes</div></div><div class="ctl"><div class="input wide mono"><input placeholder="/path/to/script.sh"></div><span class="toggle"></span></div></div>
-        </div>
+/* Mobile: the tail columns drop, the trigger never does. It is the only way to
+   reach Pause, Remove and the rest without a right-click, so it outranks every
+   column it would otherwise compete with for width. */
+.mk .phone{width:420px;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.mk .phone .cols.one.v2,.mk .phone .row.one.v2{grid-template-columns:24px minmax(0,1fr) 40px 72px 70px}
+.mk .phone .cols.one.v2>:nth-child(n+6),.mk .phone .row.one.v2>:nth-child(n+6){display:none}
+.mk .phone .row.one.v2 .acts{opacity:1}
+/* Keyboard reach: the trigger must come back for :focus-within too, or tabbing to
+   it reveals nothing. Loom's sidebar variant is the only one of its three that
+   gets this right; worth copying from the good one. */
+.row.one.v2 .acts button.more:focus-visible{visibility:visible;outline:2px solid var(--accent);outline-offset:1px}
 
-        <div data-s="queue" hidden>
-          <div class="sec">Queue sizes</div>
-          <div class="opt"><div class="txt"><div class="l">Downloads active at once</div></div><div class="ctl"><div class="input mono"><input value="3"></div><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Seeds active at once</div></div><div class="ctl"><div class="input mono"><input value="8"></div><span class="toggle on"></span></div></div>
-          <div class="sec">Stalled</div>
-          <div class="opt"><div class="txt"><div class="l">Treat as stalled after</div><div class="d">Stalled torrents don’t count against the queue</div></div><div class="ctl"><div class="input mono"><input value="30"><span class="unit">min</span></div><span class="toggle on"></span></div></div>
-        </div>
+/* Touch targets. The test is (hover: none), not (pointer: coarse) — loom settles
+   this: the problem is a device that never fires hover, and a trackpad-less tablet
+   answers "coarse" while a hybrid laptop answers both. Loom keys every row
+   affordance off hover:none for exactly this reason.
+   Note also visibility, not opacity: an invisible element keeps its slot, so
+   nothing reflows when it appears. Loom's artifacts table reserves the column
+   the same way, and says so in its own comment. */
+@media (hover: none){
+  .acts button.more{visibility:visible}
+  .acts button{width:40px;height:40px}
+}
+.mk .coarse .acts button{width:40px;height:40px}
+.mk .coarse .row.one.v2{grid-template-columns:24px minmax(0,1fr) 52px 72px 70px}
+.mk .coarse .row.one.v2>:nth-child(n+6){display:none}
+.mk .coarse .cols.one.v2{grid-template-columns:24px minmax(0,1fr) 52px 72px 70px}
+.mk .coarse .cols.one.v2>:nth-child(n+6){display:none}
 
-        <div data-s="network" hidden>
-          <div class="sec">Listening port</div>
-          <div class="opt"><div class="txt"><div class="l">Peer port</div><div class="d" style="display:flex;align-items:center;gap:14px"><span style="display:flex;align-items:center;gap:5px"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>IPv4 open</span><span style="display:flex;align-items:center;gap:5px"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>IPv6 open</span></div></div><div class="ctl"><div class="input mono"><input value="51413"></div><button class="btn sm">Test</button></div></div>
-          <div class="opt"><div class="txt"><div class="l">Randomize port on launch</div></div><div class="ctl"><span class="toggle"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Port forwarding (UPnP / NAT-PMP)</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="sec">Peer discovery</div>
-          <div class="opt"><div class="txt"><div class="l">Distributed hash table (DHT)</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Peer exchange (PEX)</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Local peer discovery (LPD)</div></div><div class="ctl"><span class="toggle"></span></div></div>
-          <div class="sec">Transports</div>
-          <div class="opt"><div class="txt"><div class="l">TCP</div><div class="d">Plain TCP peer connections</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">µTP</div><div class="d">Congestion-aware transport, reduces impact on other traffic</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="sec">Remote access</div>
-          <div class="opt"><div class="txt"><div class="l">RPC port</div></div><div class="ctl"><div class="input mono"><input value="9091"></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Whitelist</div></div><div class="ctl"><div class="input wide mono"><input value="127.0.0.1, 192.168.1.*"></div><span class="toggle on"></span></div></div>
-        </div>
+/* The menu itself is unchanged apart from Pause moving in at the top, where it
+   already was. Shown inline here rather than positioned against a row. */
+.mk .menushot{position:static;width:250px;margin:0}
+.mk .row2{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+</style>
 
-        <div data-s="peers" hidden>
-          <div class="sec">Limits</div>
-          <div class="opt"><div class="txt"><div class="l">Max peers per torrent</div></div><div class="ctl"><div class="input mono"><input value="50"></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Max peers overall</div></div><div class="ctl"><div class="input mono"><input value="200"></div></div></div>
-          <div class="sec">Encryption</div>
-          <div class="opt"><div class="txt"><div class="l">Prefer encrypted peers</div></div><div class="ctl"><div class="seg"><button>Allow</button><button class="on">Prefer</button><button>Require</button></div></div></div>
-          <div class="sec">Blocklist</div>
-          <div class="opt"><div class="txt"><div class="l">Enable blocklist</div><div class="d">312,904 rules · updated 2 days ago</div></div><div class="ctl"><button class="btn sm">Update</button><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Blocklist URL</div></div><div class="ctl"><div class="input wide mono"><input value="https://example.org/level1.gz"></div></div></div>
-        </div>
+<div class="mk">
+  <h1>Row actions and the context menu</h1>
+  <p class="lede">
+    Three changes, shown against the current row. The actions get a column of their own after
+    Name, the inline pause button folds into the context menu, and the trigger stays visible at
+    every width instead of appearing on hover.
+  </p>
 
-        <div data-s="privacy" hidden>
-          <div class="sec">Interface</div>
-          <div class="opt"><div class="txt"><div class="l">Theme</div></div><div class="ctl"><div class="seg"><button class="on">System</button><button>Light</button><button>Dark</button></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Row density</div></div><div class="ctl"><div class="seg"><button class="on">Compact</button><button>Comfortable</button></div></div></div>
-          <div class="opt"><div class="txt"><div class="l">Refresh interval</div></div><div class="ctl"><div class="input mono"><input value="2"><span class="unit">s</span></div></div></div>
-          <div class="sec">Notifications</div>
-          <div class="opt"><div class="txt"><div class="l">Notify when a download completes</div></div><div class="ctl"><span class="toggle on"></span></div></div>
-          <div class="opt"><div class="txt"><div class="l">Notify when a torrent is added</div></div><div class="ctl"><span class="toggle"></span></div></div>
-        </div>
+  <h2>1 · What it does today <span class="tag">current</span></h2>
+  <p class="note">
+    <b>.acts</b> is <b>position:absolute; right:0; opacity:0</b>, lit only on <b>:hover</b>, sitting on a
+    gradient that fades out whatever column it covers. So the controls hide the Path cell underneath,
+    they are invisible until the pointer arrives, and on a touch screen there is no hover event at all,
+    which leaves them unreachable. The first row below is drawn in its resting state, the second on hover.
+  </p>
+  <div class="frame">
+    <div class="cap bad">resting — no affordance at all, and Path reads to the edge</div>
+    <div id="cur1"></div>
+    <div class="cap bad">:hover — the controls appear and mask the end of Path</div>
+    <div id="cur2"></div>
+  </div>
 
+  <h2>2 · A column of its own <span class="tag">proposed</span></h2>
+  <p class="note">
+    A 40px grid column right after Name. Nothing overlaps, nothing fades, the glyph is always
+    present and merely dims: <b>--ink-3</b> at rest, <b>--ink-2</b> on row hover, full ink while its
+    menu is open. Pause is gone from the row; it lives in the menu, one click away, where Resume,
+    Verify and Remove already are.
+  </p>
+  <div class="frame">
+    <div class="cap good">column after Name — every row reachable, Path intact</div>
+    <div id="new1"></div>
+  </div>
+  <p class="note">
+    The grid pairing matters here: the compact row goes from 11 children to 12, so
+    <b>grid-template-columns</b> and the matching <b>&gt;:nth-child(n+N){display:none}</b> both move,
+    or the leftover cells wrap into an implicit second row and double the row height.
+  </p>
+
+  <h2>3 · Narrow and touch <span class="tag">proposed</span></h2>
+  <p class="note">
+    Below the breakpoint the tail columns drop as they do now, but the actions column is never one
+    of them. It is the only route to Pause and Remove without a right-click, so it survives every
+    other column. On a coarse pointer the button grows from 24x22 to 40x40.
+  </p>
+  <div class="row2">
+    <div>
+      <div class="frame phone">
+        <div class="cap good">narrow — Ratio, Seeds and the dates drop, the trigger stays</div>
+        <div id="ph1"></div>
       </div>
-      <div class="modal-f"><span class="hint">Changes apply immediately to the running session</span><div class="spacer"></div><button class="btn primary">Done</button></div>
+    </div>
+    <div>
+      <div class="frame phone coarse">
+        <div class="cap good">coarse pointer — 40px target</div>
+        <div id="ph2"></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>4 · The menu, with Pause folded in</h2>
+  <p class="note">
+    Unchanged from today except that it is now the only home for Pause. Remove and Remove-and-delete
+    stay two separately worded entries, and Remove-and-delete keeps the first slot with <b>⌫</b>.
+  </p>
+  <div class="row2">
+    <div class="cmenu menushot" id="menu1"></div>
+    <div class="note" style="max-width:34ch">
+      Pause sits first, where the eye lands, and carries its <b>␣</b> shortcut so the keyboard path
+      stays discoverable after the button is gone. A stopped torrent shows Resume in the same slot.
     </div>
   </div>
 </div>
+
 <script>
-renderRows(null);
-document.getElementById('snav').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return;
-  document.querySelectorAll('#snav button').forEach(x=>x.classList.toggle('on', x===b));
-  document.querySelectorAll('.modal-b [data-s]').forEach(x=>x.hidden = x.dataset.s !== b.dataset.s);
-  document.getElementById('stitle').textContent = b.textContent.trim(); });
-// deep link: ?section=downloads|seeding|queue|network|peers|privacy
-{ const q = new URLSearchParams(location.search).get('section'), b = q && document.querySelector(`#snav [data-s="${q}"]`); if (b) b.click(); }
+const Q = new URLSearchParams(location.search);
+
+/* Two representative torrents from the shared dataset: one downloading, one stopped,
+   so the Pause/Resume swap in the first slot is visible. */
+const A = T.find(t => t.st === 'dl') || T[0];
+const B = T.find(t => t.st === 'stopped') || T[1];
+
+function head(cls){
+  const c = document.createElement('div'); c.className = 'cols one ' + cls;
+  const labels = ['', 'Name', cls.includes('v2') ? '' : null, 'Size', 'Progress', 'Seeds', 'Ratio', 'Uploaded', 'Added on', 'Last active', 'Tracker', 'Path'].filter(x => x !== null);
+  c.innerHTML = labels.map((l, i) => i === 0 ? '<span class="chk"></span>' : `<span class="${i > 2 ? 'r' : ''}">${l}</span>`).join('');
+  return c;
+}
+
+/* Render one compact row, then move .acts into its own cell for the v2 variants. */
+function mkRow(t, cls){
+  const wrap = document.createElement('div');
+  wrap.innerHTML = rowOne(t);
+  const r = wrap.firstElementChild;
+  r.className = 'row one ' + cls;
+  if (cls.includes('v2')) {
+    const acts = r.querySelector('.acts');
+    acts.querySelectorAll('button:not(.more)').forEach(b => b.remove());   // pause moves into the menu
+    r.querySelector('.name').after(acts);
+  }
+  return r;
+}
+
+function fill(id, rows, cls){
+  const host = document.getElementById(id);
+  host.appendChild(head(cls));
+  rows.forEach(t => host.appendChild(mkRow(t, cls)));
+}
+
+fill('cur1', [A, B], '');
+fill('cur2', [A, B], '');
+document.querySelectorAll('#cur2 .row').forEach(r => r.style.background = 'var(--surface)');
+document.querySelectorAll('#cur2 .acts').forEach(a => { a.style.opacity = 1; a.style.background = 'linear-gradient(90deg,transparent,var(--surface) 22%)'; });
+
+fill('new1', [A, B], 'v2');
+fill('ph1', [A, B], 'v2');
+fill('ph2', [A, B], 'v2');
+
+/* The menu, rendered inline instead of anchored to a row. */
+const it = (icon, label, k = '', cls = '') =>
+  `<div class="it ${cls}"><svg class="i"><use href="#i-${icon}"/></svg>${label}${k ? `<span class="k">${k}</span>` : ''}</div>`;
+document.getElementById('menu1').innerHTML =
+  it('pause', 'Pause', '␣') + it('globe', 'Re-announce') + it('check', 'Verify local data') + `<div class="sep"></div>` +
+  `<div class="it qpos"><svg class="i"><use href="#i-sort"/></svg>Queue position<svg class="i chev"><use href="#i-chev"/></svg></div>` +
+  it('tag', 'Labels…') + it('folder', 'Set location…') + it('file', 'Rename…') + it('gear', 'Limits & priority…') + `<div class="sep"></div>` +
+  it('magnet', 'Copy magnet link', '⌘C') + it('link', 'Open folder') + `<div class="sep"></div>` +
+  it('trash', 'Remove and delete data…', '⌫', 'danger') + it('x', 'Remove from list', '⌘⌫', 'danger');
+
+/* Clicking a trigger opens the real menu, so the mock is explorable. */
+document.querySelector('.mk').addEventListener('click', e => {
+  const mb = e.target.closest('.more');
+  document.querySelectorAll('.cmenu:not(.menushot)').forEach(x => x.remove());
+  document.querySelectorAll('.row.menu-open').forEach(r => r.classList.remove('menu-open'));
+  if (mb) { contextMenu(mb.closest('.row')); e.stopPropagation(); }
+});
 </script>

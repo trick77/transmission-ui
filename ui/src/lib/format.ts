@@ -26,6 +26,10 @@ export function rateParts(bps: number): [string, string] {
 export const RATIO_NA = -1, RATIO_INF = -2
 export function ratioValue(r: number): number { return r === RATIO_INF ? Infinity : r < 0 ? 0 : r }
 export function ratio(r: number): string { return r === RATIO_INF ? '∞' : r < 0 ? '—' : r.toFixed(2) }
+/** Below 1.0 still owes the swarm and keeps the full ink; settled ones fade back.
+ *  A ratio that is merely unknown ("—") is not a debt, so it fades too — ratioValue
+ *  flattens that sentinel to 0, which would otherwise read as the loudest case. */
+export function ratioOwed(r: number): boolean { return r >= 0 && r < 1 }
 
 export function eta(seconds: number, finished = false): string {
   if (finished) return '∞'
@@ -42,10 +46,29 @@ export function duration(seconds: number): string {
   return `${m}m ${s % 60}s`
 }
 
+/** Coarse relative time: one unit, never two. `duration` is the precise form and
+ *  stays that way for ETA and running time — here the exact hour stops mattering
+ *  once a day has passed, and "3 days ago" reads better than "3d 7h ago". */
 export function ago(unixSeconds: number): string {
   if (!unixSeconds) return '—'
   const s = Math.max(0, Date.now() / 1000 - unixSeconds)
-  return `${duration(s)} ago`
+  // Seconds have to stay: activity_date ticks on every transferring torrent, so without
+  // this the whole Last active column of a busy list reads "0m ago".
+  if (s < 60) return `${Math.floor(s)}s ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  // Weeks stop at a month and months at a year, so nothing ever reads "13 months".
+  if (d < 7) return plural(d, 'day')
+  if (d < 30) return plural(Math.floor(d / 7), 'week')
+  if (d < 365) return plural(Math.floor(d / 30), 'month')
+  return plural(Math.floor(d / 365), 'year')
+}
+
+function plural(n: number, unit: string): string {
+  return `${n} ${unit}${n === 1 ? '' : 's'} ago`
 }
 
 export function inFuture(unixSeconds: number): string {

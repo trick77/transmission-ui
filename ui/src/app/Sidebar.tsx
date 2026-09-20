@@ -49,20 +49,6 @@ export function Sidebar() {
         ))}
       </> : null}
 
-      {disks.length ? <>
-        <div className="side-h">Disk</div>
-        {disks.map(d => {
-          const total = d.total_size ?? 0
-          const used = total ? 1 - d.size_bytes / total : 0
-          return (
-            <div key={d.path} className="disk" title={d.path}>
-              <div className="p"><span>{relDir(d.path, base) || d.path.split('/').filter(Boolean).pop() || d.path}</span><b>{bytes(d.size_bytes)} free</b></div>
-              <div className={'bar' + (total && d.size_bytes / total < 0.1 ? ' hot' : '')} style={{ ['--p' as string]: `${Math.round(used * 100)}%` }}><i /></div>
-            </div>
-          )
-        })}
-      </> : null}
-
       {trackers.length ? <>
         <div className="side-h">Trackers</div>
         {trackers.map(t => {
@@ -77,6 +63,20 @@ export function Sidebar() {
               {t.state !== 'ok' ? <span className={'st ' + (bad ? 'down' : 'issues')} style={sub ? { marginTop: 5 } : undefined} /> : null}
               <span className="cnt">{t.count}</span>
             </button>
+          )
+        })}
+      </> : null}
+
+      {disks.length ? <>
+        <div className="side-h">Disk</div>
+        {disks.map(d => {
+          const total = d.total_size ?? 0
+          const used = total ? 1 - d.size_bytes / total : 0
+          return (
+            <div key={d.path} className="disk" title={d.path}>
+              <div className="p"><span>{relDir(d.path, base) || d.path.split('/').filter(Boolean).pop() || d.path}</span><b>{bytes(d.size_bytes)} free</b></div>
+              <div className={'bar' + (total && d.size_bytes / total < 0.1 ? ' hot' : '')} style={{ ['--p' as string]: `${Math.round(used * 100)}%` }}><i /></div>
+            </div>
           )
         })}
       </> : null}

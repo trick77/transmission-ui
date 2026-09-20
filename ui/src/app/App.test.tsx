@@ -69,10 +69,13 @@ describe('shell', () => {
     for (const gone of ['Down', 'Up', 'ETA']) expect(within(cols).queryByText(gone)).toBeNull()
 
     const deb = row('debian-13.1.0-amd64-DVD-1.iso')
-    expect(deb).toHaveTextContent('5.20 GB')                // uploaded, now a summary field
+    expect(deb).toHaveTextContent('5.2 GB')                 // uploaded, fixed to one decimal
     expect(deb).toHaveTextContent('bttracker.debian.org')
-    // numeric date: a localised month name is wider and would wrap the row
-    expect(deb.textContent).toMatch(/\d{2}[./-]\d{2}[./-]\d{4}|\d{4}-\d{2}-\d{2}/)
+    // Added on reads relative like Last active; the exact date is the cell's tooltip,
+    // numeric because a localised month name is wider and would wrap the row.
+    expect(deb).toHaveTextContent('3 days ago')
+    const added = [...deb.querySelectorAll('span.num.r')].find(s => s.getAttribute('title'))!
+    expect(added.getAttribute('title')).toMatch(/\d{2}[./-]\d{2}[./-]\d{4}|\d{4}-\d{2}-\d{2}/)
     expect(deb).toHaveTextContent('iso/')
     expect(deb.querySelector('.sdot.dl')).toBeInTheDocument()
     // the status word survives as a tooltip, since the second line is gone
@@ -214,9 +217,57 @@ describe('sidebar', () => {
     expect(within(side as HTMLElement).getByText('radarr')).toBeInTheDocument()
     expect(within(side as HTMLElement).getByText('docs')).toBeInTheDocument()
     await waitFor(() => expect(side.querySelector('.disk')).toHaveTextContent('412 GB free'))
+    // The bar fills with the USED share, not the free one: 412 GB of 1.8 TB is 77% used.
+    // Plenty of headroom here, so it stays neutral — .hot is the near-full warning.
+    const bar = side.querySelector('.disk .bar') as HTMLElement
+    expect(bar.style.getPropertyValue('--p')).toBe('77%')
+    expect(bar).not.toHaveClass('hot')
+    expect(side.lastElementChild).toHaveClass('disk')   // Disk closes the sidebar, after Trackers
     expect(side).toHaveTextContent('tracker.opentrackr.org')
     expect(side.querySelector('.side-item.two .sub.down')).toHaveTextContent(/down · .* · Connection timed out/)
     expect(side).toHaveTextContent('1 of 1 failing · HTTP response code 404')
+  })
+
+  it('a nearly full disk turns the bar hot', async () => {
+    await mount()
+    const side = document.querySelector('.sidebar')!
+    await waitFor(() => expect(side.querySelector('.disk')).toBeInTheDocument())
+    // 40 GB left of 1 TB: under the 10% mark, so the bar goes hot at 96% used.
+    act(() => { set({ freeSpace: new Map([['/data', { path: '/data', size_bytes: 40e9, total_size: 1e12 }]]) }) })
+    const bar = side.querySelector('.disk .bar') as HTMLElement
+    expect(bar).toHaveClass('hot')
+    expect(bar.style.getPropertyValue('--p')).toBe('96%')
+    expect(side.querySelector('.disk')).toHaveTextContent('40.0 GB free')
+  })
+
+  it('a ratio under 1.0 keeps the ink, a settled one fades', async () => {
+    await mount({ density: 'compact', sort: 'name' })
+    // Ratio is the 5th .num.r cell of a compact row; read it by value instead.
+    const cell = (name: string, value: string) =>
+      [...row(name).querySelectorAll('span.num.r')].find(s => s.textContent === value)!
+    // 0.98 still owes the swarm: full ink, no .muted.
+    expect(cell('Tears of Steel (2012) 4K', '0.98')).not.toHaveClass('muted')
+    // 3.42 has paid its way back: muted.
+    expect(cell('Big Buck Bunny (2008) 4K 60fps', '3.42')).toHaveClass('muted')
+  })
+
+  it('both row layouts ink the ratio the same way', async () => {
+    // The two-line row has a ratio column of its own; it drifted from the compact
+    // one once already, so pin the pair together.
+    await mount()
+    const cell = (name: string, value: string) =>
+      [...row(name).querySelectorAll('span.num.r')].find(s => s.textContent === value)!
+    expect(cell('Tears of Steel (2012) 4K', '0.98')).not.toHaveClass('muted')
+    expect(cell('Big Buck Bunny (2008) 4K 60fps', '3.42')).toHaveClass('muted')
+  })
+
+  it('an unknown ratio stays quiet: "—" is not a debt', async () => {
+    // ratioValue flattens the -1 sentinel to 0, so a naive "< 1" would render the
+    // torrent that has transferred nothing as loudly as one that owes the swarm.
+    await mount({ torrents: [torrent({ id: 1, name: 'Fresh', upload_ratio: -1 })] })
+    const na = [...row('Fresh').querySelectorAll('span.num.r')].find(s => s.textContent === '—')!
+    expect(na).toBeInTheDocument()
+    expect(na).toHaveClass('muted')
   })
 
   it('filters: status, label, folder, tracker; title and count follow; URL syncs', async () => {

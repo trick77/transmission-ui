@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioValue } from './format'
+import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioOwed, ratioValue, RATIO_INF, RATIO_NA } from './format'
 
 describe('bytes', () => {
   it('formats SI units with sensible digits', () => {
@@ -14,6 +14,13 @@ describe('bytes', () => {
     expect(bytes(NaN)).toBe('—')
   })
   it('honours explicit digits', () => { expect(bytes(1536, 0)).toBe('2 kB') })
+  it('one digit is always shown, so the Uploaded column keeps its decimal point', () => {
+    // The adaptive default drops the decimal above 100, which is why 773 MB read bare.
+    expect(bytes(773e6)).toBe('773 MB')
+    expect(bytes(773e6, 1)).toBe('773.0 MB')
+    expect(bytes(0, 1)).toBe('0.0 B')
+    expect(bytes(21.94e9, 1)).toBe('21.9 GB')
+  })
   it('gb converts', () => { expect(gb(2e9)).toBe(2) })
 })
 
@@ -27,6 +34,16 @@ describe('ratio / eta / duration', () => {
     expect(ratio(-1)).toBe('—'); expect(ratio(-2)).toBe('∞'); expect(ratio(3.4167)).toBe('3.42')
     expect(ratioValue(-1)).toBe(0); expect(ratioValue(-2)).toBe(Infinity); expect(ratioValue(1.5)).toBe(1.5)
   })
+  it('only a real debt is owed: the sentinels are not', () => {
+    expect(ratioOwed(0.98)).toBe(true)
+    expect(ratioOwed(0)).toBe(true)
+    expect(ratioOwed(1)).toBe(false)
+    expect(ratioOwed(3.42)).toBe(false)
+    // ratioValue flattens n/a to 0, which would otherwise ink an unknown ratio
+    // as loudly as a genuine debt. Infinite owes nothing either.
+    expect(ratioOwed(RATIO_NA)).toBe(false)
+    expect(ratioOwed(RATIO_INF)).toBe(false)
+  })
   it('eta', () => { expect(eta(-1)).toBe('—'); expect(eta(10, true)).toBe('∞'); expect(eta(192)).toBe('3m 12s') })
   it('duration', () => {
     expect(duration(5)).toBe('5 s')
@@ -39,6 +56,42 @@ describe('ratio / eta / duration', () => {
     expect(ago(now - 120)).toMatch(/^2m/)
     expect(inFuture(now - 1)).toBe('now')
     expect(inFuture(now + 300)).toMatch(/^in 5m/)
+  })
+  it('ago climbs one unit at a time, and never mixes two', () => {
+    const now = Date.now() / 1000
+    const H = 3600, D = 86400
+    expect(ago(now - 55 * 60)).toBe('55m ago')
+    expect(ago(now - 23 * H)).toBe('23h ago')
+    // The hour stops being interesting the moment a day has passed.
+    expect(ago(now - D - 7 * H)).toBe('1 day ago')
+    expect(ago(now - 3 * D)).toBe('3 days ago')
+    expect(ago(now - 7 * D)).toBe('1 week ago')
+    expect(ago(now - 20 * D)).toBe('2 weeks ago')
+    expect(ago(now - 30 * D)).toBe('1 month ago')
+    expect(ago(now - 150 * D)).toBe('5 months ago')
+    expect(ago(now - 365 * D)).toBe('1 year ago')
+    expect(ago(now - 800 * D)).toBe('2 years ago')
+  })
+  it('ago flips singular to plural exactly at two', () => {
+    const now = Date.now() / 1000, D = 86400
+    expect(ago(now - D)).toBe('1 day ago')
+    expect(ago(now - 2 * D)).toBe('2 days ago')
+    expect(ago(now - 14 * D)).toBe('2 weeks ago')
+    expect(ago(now - 60 * D)).toBe('2 months ago')
+  })
+  it('ago flips at the exact hour and day boundaries', () => {
+    const now = Date.now() / 1000, H = 3600
+    expect(ago(now - 59 * 60)).toBe('59m ago')
+    expect(ago(now - 60 * 60)).toBe('1h ago')
+    expect(ago(now - 24 * H)).toBe('1 day ago')
+  })
+  it('ago keeps seconds: activity_date ticks constantly on a busy list', () => {
+    const now = Date.now() / 1000
+    expect(ago(now - 5)).toBe('5s ago')
+    expect(ago(now - 59)).toBe('59s ago')
+    expect(ago(now - 60)).toBe('1m ago')
+    // A clock running ahead of the daemon must not produce a negative reading.
+    expect(ago(now + 30)).toBe('0s ago')
   })
 })
 

@@ -48,6 +48,24 @@ test('the list sorts by name by default, errors no longer jump the queue', async
   await expect(page.locator('.cols .sort')).toHaveText(/Name/)
 })
 
+test('the Size head stays centred whether or not it is the sort column', async ({ page }) => {
+  // .sort makes the head inline-flex, which renders text-align inert, so sorting by
+  // Size used to snap the label left. Only a real browser computes this, which is why
+  // the check lives here and not in jsdom.
+  const size = page.locator('.cols .r.hl')
+  const offset = async () => size.evaluate(el => {
+    const cell = el.getBoundingClientRect()
+    const r = document.createRange(); r.selectNodeContents(el)
+    const text = r.getBoundingClientRect()
+    return Math.round(text.left - cell.left) - Math.round(cell.right - text.right)
+  })
+  // Centred means equal gaps either side; allow a pixel of rounding.
+  expect(Math.abs(await offset())).toBeLessThanOrEqual(2)
+  await size.click()
+  await expect(size).toHaveClass(/sort/)
+  expect(Math.abs(await offset())).toBeLessThanOrEqual(2)
+})
+
 test('the errored torrent still reads as an error, on the compact status dot', async ({ page }) => {
   // torrents() does not fetch `error`, so ask for it directly
   const all = await rpc<{ torrents: { id: number; error: number }[] }>('torrent_get', { fields: ['id', 'error'] })
