@@ -300,6 +300,9 @@ function announce(state: SimState, t: TorrentDetail, now: number): void {
   if (t.status === ST.Stopped) return
   const r = state.rand
   for (const ts of t.tracker_stats) {
+    // A backup that has never announced stays that way: the daemon only reaches for
+    // it when the tracker it did announce to stops working, which nothing here does.
+    if (!ts.has_announced && ts.tier > 0 && t.tracker_stats.some(o => o.has_announced)) continue
     if (ts.next_announce_time > now) continue
     const ok = moodOf(state, ts.announce) === 'ok'
     ts.has_announced = true

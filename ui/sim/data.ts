@@ -155,6 +155,8 @@ interface Spec {
   added: number
   idle?: number
   trackers?: string[]
+  /** Index into `trackers` from which on the tiers are untouched backups (never announced). */
+  backups?: number
   files?: number
   comment?: string
   creator?: string
@@ -218,7 +220,8 @@ const SPECS: Spec[] = [
   },
   {
     name: 'Tears of Steel (2012) 4K', dir: D.movies, labels: ['blender'], status: ST.SeedWait,
-    size: 4.4 * GB, ratio: 0.98, added: 25, trackers: ['blender', 'attic'], files: 2, swarm: 3,
+    // the second tracker is a backup the daemon never needed: inspector shows it, sidebar does not
+    size: 4.4 * GB, ratio: 0.98, added: 25, trackers: ['blender', 'attic'], backups: 1, files: 2, swarm: 3,
   },
   {
     name: 'Cosmos Laundromat (2015) 2K', dir: D.buffer, labels: ['blender'], status: ST.Seed,
@@ -372,7 +375,10 @@ function buildOne(spec: Spec, id: number, now: number, seed: number): TorrentDet
 
   const trackerKeys = spec.trackers ?? ['opentrackr']
   const announced = spec.status !== ST.Stopped
-  const trackerStats = trackerKeys.map((k, i) => trackerStat(k, i, i, now, r, announced))
+  // `backups` marks trailing trackers the daemon never had to reach for: present in the
+  // inspector, absent from the sidebar. Stopped torrents announce to nothing anyway.
+  const backupFrom = spec.backups != null ? spec.backups : trackerKeys.length
+  const trackerStats = trackerKeys.map((k, i) => trackerStat(k, i, i, now, r, announced && i < backupFrom))
 
   const pieceSize = size > 40 * GB ? 16 * 1024 * 1024 : size > 4 * GB ? 4 * 1024 * 1024 : 2 * 1024 * 1024
   const piece_count = isMagnet ? 0 : Math.max(1, Math.ceil(size / pieceSize))

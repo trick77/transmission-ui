@@ -3,6 +3,7 @@
 
 import { Status, type TorrentSummary, type TrackerStat } from '../rpc/types'
 import { daysSince, gb, ratioValue } from './format'
+import { trackerName } from './trackers'
 
 export type ChipKind = 'dl' | 'seed' | 'wait' | 'stop' | 'err'
 
@@ -67,7 +68,7 @@ export function trackerHealth(torrents: TorrentSummary[]): TrackerHealth[] {
   const byHost = new Map<string, { count: number; announced: number; failing: number; rejected: number; torrentLevel: number; since: number; result: string }>()
   for (const t of torrents) {
     const seen = new Set<string>()
-    for (const ts of t.tracker_stats) {
+    for (const ts of usedTrackers(t)) {
       const host = hostOf(ts.announce)
       if (seen.has(host)) continue
       seen.add(host)
@@ -97,8 +98,25 @@ export function trackerHealth(torrents: TorrentSummary[]): TrackerHealth[] {
     else if (allFailing && now - since >= DOWN_AFTER_S) state = 'down'
     else if (h.failing > 0 || h.torrentLevel > 0) state = 'issues'
     return { host, count: h.count, failing: h.failing + h.torrentLevel, state, since, result: shortResult(h.result) }
-  }).sort((a, b) => b.count - a.count || a.host.localeCompare(b.host))
+  }).sort((a, b) => b.count - a.count || trackerName(a.host).localeCompare(trackerName(b.host)))
 }
+
+/**
+ * The trackers a torrent actually uses. One that never announced while a sibling
+ * did is a backup the daemon never needed, and it says nothing about that tracker.
+ * Stopped torrents announce to nothing at all, so they keep every tracker --
+ * otherwise a daemon restart would empty the sidebar. The sidebar, the
+ * `tracker:` filter and the re-announce notice all go through this, or they
+ * disagree about which torrents a tracker has.
+ */
+export function usedTrackers(t: TorrentSummary): TrackerStat[] {
+  const anyAnnounced = t.tracker_stats.some(ts => ts.has_announced)
+  return anyAnnounced ? t.tracker_stats.filter(ts => ts.has_announced) : t.tracker_stats
+}
+
+/** Whether a torrent announces to `host` -- backups it never needed do not count. */
+export const usesTracker = (t: TorrentSummary, host: string) =>
+  usedTrackers(t).some(ts => hostOf(ts.announce) === host)
 
 export function hostOf(announce: string): string {
   try {
@@ -138,7 +156,8 @@ export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'seed', 'active', '
 export function filterFn(filter: string, base: string): { label: string; f: (t: TorrentSummary) => boolean } {
   if (filter.startsWith('label:')) { const l = filter.slice(6); return { label: l, f: t => t.labels.includes(l) } }
   if (filter.startsWith('dir:')) { const d = filter.slice(4); return { label: relDir(d, base) || d, f: t => t.download_dir === d || t.download_dir.startsWith(d + '/') } }
-  if (filter.startsWith('tracker:')) { const h = filter.slice(8); return { label: h, f: t => t.tracker_stats.some(ts => hostOf(ts.announce) === h) } }
+  // The key stays the host so old links keep working; the label is what the sidebar shows.
+  if (filter.startsWith('tracker:')) { const h = filter.slice(8); return { label: trackerName(h), f: t => usesTracker(t, h) } }
   // 'trackererr' was folded into 'error'; keep old links and bookmarks pointing at
   // the filter that still covers them rather than silently falling back to 'all'.
   if (filter === 'trackererr') return FILTERS.error
@@ -210,7 +229,7 @@ export function sortFn(key: SortKey, dir: 1 | -1, base = ''): (a: TorrentSummary
     case 'activity': return num(t => t.activity_date)
     case 'seeds': return num(t => swarmOf(t).seeds)
     case 'uploaded': return num(t => t.uploaded_ever)
-    case 'tracker': return text(t => t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : '')
+    case 'tracker': return text(t => t.tracker_stats.length ? trackerName(hostOf(t.tracker_stats[0].announce)) : '')
     case 'path': return text(t => relDir(t.download_dir, base))
     default: return (a, b) => (rank(a) - rank(b)) * dir || b.activity_date - a.activity_date || a.name.localeCompare(b.name)
   }

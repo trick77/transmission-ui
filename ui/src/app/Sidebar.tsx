@@ -1,6 +1,7 @@
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { FILTERS, FILTER_ORDER, folderTree, labelCounts, trackerHealth, relDir } from '../lib/model'
+import { trackerName } from '../lib/trackers'
 import { set, syncUrl, useStore } from '../state/store'
 
 function pick(filter: string) { set({ filter, selected: new Set() }); syncUrl() }
@@ -53,13 +54,15 @@ export function Sidebar() {
         <div className="side-h">Trackers</div>
         {trackers.map(t => {
           const bad = t.state === 'down' || t.state === 'rejected'
+          // Label is the name, but the filter key stays the host so old URLs keep working.
+          const name = trackerName(t.host)
           const sub = t.state === 'down' ? `down · ${duration(Date.now() / 1000 - t.since)} · ${t.result}`
             : t.state === 'rejected' ? `client rejected · ${t.result}`
             : t.state === 'issues' ? `${t.failing} of ${t.count} failing${t.result ? ' · ' + t.result : ''}` : ''
           return (
             <button key={t.host} className={'side-item' + (sub ? ' two' : '') + (filter === 'tracker:' + t.host ? ' on' : '')} onClick={() => pick('tracker:' + t.host)} title={t.host}>
               <Icon name="globe" size={14} style={sub ? { marginTop: 2 } : undefined} />
-              {sub ? <span className="col"><span className="lbl">{t.host}</span><span className={'sub' + (bad ? ' down' : '')}>{sub}</span></span> : <span className="lbl">{t.host}</span>}
+              {sub ? <span className="col"><span className="lbl">{name}</span><span className={'sub' + (bad ? ' down' : '')}>{sub}</span></span> : <span className="lbl">{name}</span>}
               {t.state !== 'ok' ? <span className={'st ' + (bad ? 'down' : 'issues')} style={sub ? { marginTop: 5 } : undefined} /> : null}
               <span className="cnt">{t.count}</span>
             </button>

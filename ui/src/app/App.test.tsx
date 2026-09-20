@@ -70,7 +70,9 @@ describe('shell', () => {
 
     const deb = row('debian-13.1.0-amd64-DVD-1.iso')
     expect(deb).toHaveTextContent('5.2 GB')                 // uploaded, fixed to one decimal
-    expect(deb).toHaveTextContent('bttracker.debian.org')
+    // the tracker cell shows the name; the announce host stays in the tooltip
+    expect(deb.querySelector('.tcell')).toHaveTextContent('Debian')
+    expect(deb.querySelector('.tcell')).toHaveAttribute('title', 'bttracker.debian.org')
     // Added on reads relative like Last active; the exact date is the cell's tooltip,
     // numeric because a localised month name is wider and would wrap the row.
     expect(deb).toHaveTextContent('3 days ago')
@@ -223,7 +225,7 @@ describe('sidebar', () => {
     expect(bar.style.getPropertyValue('--p')).toBe('77%')
     expect(bar).not.toHaveClass('hot')
     expect(side.lastElementChild).toHaveClass('disk')   // Disk closes the sidebar, after Trackers
-    expect(side).toHaveTextContent('tracker.opentrackr.org')
+    expect(side).toHaveTextContent('OpenTrackr')
     expect(side.querySelector('.side-item.two .sub.down')).toHaveTextContent(/down · .* · Connection timed out/)
     expect(side).toHaveTextContent('1 of 1 failing · HTTP response code 404')
   })
@@ -283,7 +285,7 @@ describe('sidebar', () => {
     expect(document.getElementById('ftitle')).toHaveTextContent('radarr')
     expect(rows()).toHaveLength(2)
     expect(document.querySelector('.toolbar .count')).toHaveTextContent('2 of 8')
-    fireEvent.click(within(side).getByText('archive.org'))
+    fireEvent.click(within(side).getByText('Archive.org'))
     expect(rows()).toHaveLength(1)
     fireEvent.click(side.querySelector('[data-f="all"]')!)
     expect(rows()).toHaveLength(8)
@@ -292,7 +294,8 @@ describe('sidebar', () => {
   it('tracker-down notice offers re-announce and can be dismissed for the outage', async () => {
     await mount()
     const notice = await screen.findByText(/has been unreachable/)
-    expect(notice).toHaveTextContent('tracker.opentrackr.org')
+    expect(notice).toHaveTextContent('OpenTrackr')                       // name, matching the sidebar
+    expect(notice.querySelector('b')).toHaveAttribute('title', 'tracker.opentrackr.org')
     fireEvent.click(screen.getByRole('button', { name: 'Re-announce all' }))
     await waitFor(() => expect(daemon.of('torrent_reannounce')[0]).toEqual({ ids: [8] }))
     fireEvent.click(screen.getByTitle('Dismiss'))
