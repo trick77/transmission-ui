@@ -29,7 +29,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 
 ## Conventions
 - All RPC calls go through `ui/src/rpc/methods.ts`; method and field names are the daemon's, snake_case throughout (rpc 18+). Take spellings from the upstream `docs/rpc-spec.md`, never from memory.
-- Derived views (filters, sort, folders, tracker health) live in `ui/src/lib/model.ts`, mirrored from `design/src/rows.html`.
+- Derived views (filters, sort, folders, tracker health) live in `ui/src/lib/model.ts`, mirrored from `design/src/rows.html`. One Error filter covers both a daemon error and a failing tracker; `filterFn` still maps the retired `trackererr` key onto it so old links work.
 - Bulk actions = one RPC with an id array. Remove vs remove+delete are always two separate, differently worded actions. Remove+delete is the default (⌫, sel-bar button, first menu entry); remove-only is ⌘⌫. Do not "fix" that inversion.
 - Colour rules: accent only for active download + controls, red only for errors, everything else neutral.
 - Row grids come in pairs: a `grid-template-columns` change needs the matching `>:nth-child(n+N){display:none}`, or leftover cells auto-place into an implicit second row and double the row height. Two-line rows have 8 children, compact 11. Below 1200px the tail columns drop (at 1194px Name was at its 180px floor, 24 of 29 names clipped).

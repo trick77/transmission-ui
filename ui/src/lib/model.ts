@@ -115,7 +115,7 @@ function shortResult(r: string): string {
 }
 
 // ─── sidebar filters ───
-export type FilterKey = 'all' | 'download' | 'seed' | 'active' | 'inactive' | 'finished' | 'queued' | 'stopped' | 'error' | 'trackererr'
+export type FilterKey = 'all' | 'download' | 'seed' | 'active' | 'inactive' | 'finished' | 'queued' | 'stopped' | 'error'
 
 export const FILTERS: Record<FilterKey, { label: string; f: (t: TorrentSummary) => boolean }> = {
   all: { label: 'All torrents', f: () => true },
@@ -126,16 +126,22 @@ export const FILTERS: Record<FilterKey, { label: string; f: (t: TorrentSummary) 
   finished: { label: 'Finished', f: t => t.is_finished || (t.percent_done >= 1 && t.metadata_percent_complete >= 1) },
   queued: { label: 'Queued / Checking', f: isQueuedOrChecking },
   stopped: { label: 'Stopped', f: t => t.status === Status.Stopped && t.error === 0 },
-  error: { label: 'Error', f: t => t.error !== 0 },
-  trackererr: { label: 'Tracker error', f: hasTrackerProblem },
+  // A daemon error and a failing tracker are different conditions, but both mean
+  // "this torrent needs looking at" and in practice the same torrents carry both,
+  // so they share one entry. The predicate runs once per torrent, so a torrent
+  // with both appears once.
+  error: { label: 'Error', f: t => t.error !== 0 || hasTrackerProblem(t) },
 }
-export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'seed', 'active', 'inactive', 'finished', 'queued', 'stopped', 'error', 'trackererr']
+export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'seed', 'active', 'inactive', 'finished', 'queued', 'stopped', 'error']
 
 /** A filter string is a FilterKey, `label:<name>`, `dir:<path>` (prefix) or `tracker:<host>`. */
 export function filterFn(filter: string, base: string): { label: string; f: (t: TorrentSummary) => boolean } {
   if (filter.startsWith('label:')) { const l = filter.slice(6); return { label: l, f: t => t.labels.includes(l) } }
   if (filter.startsWith('dir:')) { const d = filter.slice(4); return { label: relDir(d, base) || d, f: t => t.download_dir === d || t.download_dir.startsWith(d + '/') } }
   if (filter.startsWith('tracker:')) { const h = filter.slice(8); return { label: h, f: t => t.tracker_stats.some(ts => hostOf(ts.announce) === h) } }
+  // 'trackererr' was folded into 'error'; keep old links and bookmarks pointing at
+  // the filter that still covers them rather than silently falling back to 'all'.
+  if (filter === 'trackererr') return FILTERS.error
   return FILTERS[Object.hasOwn(FILTERS, filter) ? (filter as FilterKey) : 'all']
 }
 

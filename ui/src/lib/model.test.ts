@@ -113,27 +113,30 @@ describe('filters', () => {
     tor({ status: Status.Stopped }),
     tor({ status: Status.Stopped, error: 3 }),
     tor({ status: Status.Seed, tracker_stats: [ts({ last_announce_succeeded: false, last_announce_result: 'timed out' })], labels: ['x'], download_dir: '/data/torrents/radarr/sub' }),
+    tor({ status: Status.Stopped, error: 3, tracker_stats: [ts({ last_announce_succeeded: false, last_announce_result: 'timed out' })] }),
   ]
   it('sidebar filters partition sensibly', () => {
     const count = (k: keyof typeof FILTERS) => set.filter(FILTERS[k].f).length
-    expect(count('all')).toBe(8)
+    expect(count('all')).toBe(9)
     expect(count('download')).toBe(1)
     expect(count('seed')).toBe(3)
     expect(count('active')).toBe(2)
-    expect(count('inactive')).toBe(4)
-    expect(count('finished')).toBe(7)
+    expect(count('inactive')).toBe(5)
+    expect(count('finished')).toBe(8)
     expect(count('queued')).toBe(2)
     expect(count('stopped')).toBe(1)
-    expect(count('error')).toBe(1)
-    expect(count('trackererr')).toBe(1)
-    expect(FILTER_ORDER).toContain('trackererr')
+    // One filter for both conditions: a daemon error (error: 3), a failing
+    // tracker, and one torrent carrying both, which it counts once.
+    expect(count('error')).toBe(3)
+    expect(FILTER_ORDER).not.toContain('trackererr')
   })
   it('filterFn handles label:, dir:, tracker: and unknown keys', () => {
     const base = '/data/torrents'
     expect(set.filter(filterFn('label:x', base).f)).toHaveLength(1)
     expect(filterFn('dir:/data/torrents/radarr', base).label).toBe('radarr')
     expect(set.filter(filterFn('dir:/data/torrents/radarr', base).f)).toHaveLength(1)
-    expect(set.filter(filterFn('tracker:tracker.example.org', base).f)).toHaveLength(8)
+    expect(set.filter(filterFn('tracker:tracker.example.org', base).f)).toHaveLength(9)
+    expect(filterFn('trackererr', base).label).toBe('Error')   // folded in; old links still work
     expect(filterFn('bogus', base).label).toBe('All torrents')
     expect(filterFn('constructor', base).label).toBe('All torrents')   // prototype keys are not filters
     expect(filterFn('dir:/elsewhere', base).label).toBe('/elsewhere')
