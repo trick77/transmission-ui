@@ -35,4 +35,14 @@ document.getElementById('selclear').onclick = () => { document.querySelectorAll(
 document.getElementById('tmenu').onclick = e => { document.querySelectorAll('.cmenu').forEach(x=>x.remove()); toolbarMenu(e.currentTarget); e.stopPropagation(); };
 if (Q.get('sel')) selectIds(Q.get('sel').split(',').map(Number));
 if (Q.has('tmenu')) toolbarMenu(document.getElementById('tmenu'));
+// Bulk removal: the sel-bar's Remove hands its ids to the sequence and steps aside.
+document.querySelector('#selbar .btn.danger').onclick = () => {
+  const ids = [...document.querySelectorAll('.row.sel')].map(r=>+r.dataset.id);
+  if (ids.length) rmStart(ids, true);
+};
+// ?rm=10 removes the first N rows in view, so the sequence can be watched without clicking.
+if (Q.has('rm')) {
+  const n = +Q.get('rm') || 10;
+  rmStart([...document.querySelectorAll('.row')].slice(0, n).map(r=>+r.dataset.id), Q.get('del') !== '0');
+}
 </script>

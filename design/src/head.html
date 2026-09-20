@@ -220,6 +220,28 @@ body.resizing{cursor:col-resize;user-select:none}
 .sel-bar .btn.danger{color:var(--err)}
 .sel-bar .x{margin-left:2px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--accent)}
 .sel-bar .x:hover{background:rgba(217,119,87,.18)}
+/* Bulk removal progress. Status, not a control, so it stays neutral: no accent, and red
+   only if a torrent actually failed. The daemon blocks its whole RPC thread while it
+   unlinks, so nothing else on screen moves during a step -- the step counter ticking
+   between steps is the only honest liveness cue. The bar is stepped (width jumps per
+   finished torrent), which keeps the stylesheet free of its first @keyframes. */
+.rm-bar{display:flex;align-items:center;gap:8px;padding:0 4px 0 12px;height:34px;border-radius:999px;background:var(--surface-3);color:var(--ink-2);font-weight:500;font-size:12px;box-shadow:inset 0 0 0 1px var(--line)}
+.rm-bar .v{white-space:nowrap;color:var(--ink)}
+.rm-bar .who{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2);font-weight:400}
+.rm-bar .track{width:90px;height:4px;border-radius:999px;background:var(--surface-2);overflow:hidden;flex:none}
+.rm-bar .track i{display:block;height:100%;width:var(--p,0%);background:var(--ink-3);border-radius:999px;transition:width .2s}
+.rm-bar .btn{color:var(--ink);height:26px;padding:0 8px;gap:5px}
+.rm-bar .btn:hover{background:rgba(255,255,255,.06)}
+.rm-bar.done{color:var(--ink-2)}
+.rm-bar.done .track i{background:var(--ink-3)}
+.rm-bar.has-fail .track i{background:var(--err)}
+/* Rows on their way out: dimmed and inert, so it is obvious they are no longer live data
+   and cannot be clicked into a second remove. */
+.row.pending{opacity:.45;pointer-events:none}
+.row.pending .acts{display:none}
+.row.pending .rm-st{color:var(--ink-2)}
+.row.pending.failed{opacity:1}
+.row.pending.failed .rm-st{color:var(--err)}
 .row .chk{cursor:pointer}
 .row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23faf9f5' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");background-size:12px;background-position:center;background-repeat:no-repeat}
 .chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
