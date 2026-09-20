@@ -68,7 +68,8 @@ function seedLimit(d: TorrentDetail, session: Session | null) {
   const stop = (limit: number, scope: string) => <>Stop at ratio <span className="num">{limit.toFixed(2)}</span> <span className="faint">({scope})</span></>
   if (d.seed_ratio_mode === 2) return 'Unlimited'
   if (d.seed_ratio_mode === 1) return stop(d.seed_ratio_limit, 'this torrent')
-  if (!session?.seed_ratio_limited) return <>Unlimited <span className="faint">(global)</span></>
+  if (!session) return '—'   // session_get not back yet; don't claim either way
+  if (!session.seed_ratio_limited) return <>Unlimited <span className="faint">(global)</span></>
   return stop(session.seed_ratio_limit, 'global')
 }
 

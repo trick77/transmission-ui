@@ -449,6 +449,16 @@ describe('inspector', () => {
     expect(await seedLimitRow({ torrents: globalMode(), session: { seed_ratio_limited: false, seed_ratio_limit: 2 } })).toHaveTextContent('Unlimited (global)')
   })
 
+  it('seed limit says nothing in global mode until the session has loaded', async () => {
+    await mount({ torrents: globalMode() })
+    set({ session: null })   // session_get failed this pass; the retry is 15 ticks away
+    fireEvent.click(within(row('ratio-fixture')).getByText('ratio-fixture'))
+    const insp = await waitFor(() => { const el = document.querySelector('.inspector')!; expect(el.querySelector('.pieces i')).toBeTruthy(); return el as HTMLElement })
+    const dd = within(insp).getByText('Seed limit').nextElementSibling as HTMLElement
+    expect(dd).toHaveTextContent('—')
+    expect(dd).not.toHaveTextContent('Unlimited')
+  })
+
   it('seed limit shows the torrent ratio in custom mode', async () => {
     const torrents = [torrent({ id: 1, name: 'ratio-fixture', seed_ratio_mode: 1, seed_ratio_limit: 4.5 })]
     expect(await seedLimitRow({ torrents, session: { seed_ratio_limited: false } })).toHaveTextContent('Stop at ratio 4.50 (this torrent)')
