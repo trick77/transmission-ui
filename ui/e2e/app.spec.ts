@@ -48,22 +48,35 @@ test('the list sorts by name by default, errors no longer jump the queue', async
   await expect(page.locator('.cols .sort')).toHaveText(/Name/)
 })
 
-test('the Size head stays centred whether or not it is the sort column', async ({ page }) => {
-  // .sort makes the head inline-flex, which renders text-align inert, so sorting by
-  // Size used to snap the label left. Only a real browser computes this, which is why
+test('the Size head stays right-aligned whether or not it is the sort column', async ({ page }) => {
+  // .sort makes the head inline-flex, which renders text-align inert, so the alignment
+  // is stated as justify-content too. Only a real browser computes this, which is why
   // the check lives here and not in jsdom.
   const size = page.locator('.cols .r.hl')
-  const offset = async () => size.evaluate(el => {
+  // Right-aligned means the label's right edge sits on the cell's, bar rounding.
+  const rightGap = async () => size.evaluate(el => {
+    const cell = el.getBoundingClientRect()
+    const r = document.createRange(); r.selectNodeContents(el)
+    return Math.round(cell.right - r.getBoundingClientRect().right)
+  })
+  expect(await rightGap()).toBeLessThanOrEqual(2)
+  await size.click()
+  await expect(size).toHaveClass(/sort/)
+  expect(await rightGap()).toBeLessThanOrEqual(2)
+})
+
+test('the Progress head sits centred over its bar', async ({ page }) => {
+  const head = page.locator('.cols .hc')
+  const off = async () => head.evaluate(el => {
     const cell = el.getBoundingClientRect()
     const r = document.createRange(); r.selectNodeContents(el)
     const text = r.getBoundingClientRect()
     return Math.round(text.left - cell.left) - Math.round(cell.right - text.right)
   })
-  // Centred means equal gaps either side; allow a pixel of rounding.
-  expect(Math.abs(await offset())).toBeLessThanOrEqual(2)
-  await size.click()
-  await expect(size).toHaveClass(/sort/)
-  expect(Math.abs(await offset())).toBeLessThanOrEqual(2)
+  expect(Math.abs(await off())).toBeLessThanOrEqual(2)
+  await head.click()
+  await expect(head).toHaveClass(/sort/)
+  expect(Math.abs(await off())).toBeLessThanOrEqual(2)
 })
 
 test('the errored torrent still reads as an error, on the compact status dot', async ({ page }) => {
@@ -75,11 +88,22 @@ test('the errored torrent still reads as an error, on the compact status dot', a
 })
 
 test('sidebar filter narrows the list and updates the title', async ({ page }) => {
-  await page.locator('.sidebar [data-f="seed"]').click()
-  await expect(page.locator('#ftitle')).toHaveText('Seeding')
-  const n = Number(await page.locator('.sidebar [data-f="seed"] .cnt').textContent())
+  await page.locator('.sidebar [data-f="download"]').click()
+  await expect(page.locator('#ftitle')).toHaveText('Downloading')
+  const n = Number(await page.locator('.sidebar [data-f="download"] .cnt').textContent())
   await expect(page.locator('.row')).toHaveCount(n)
-  await expect(page).toHaveURL(/filter=seed/)
+  await expect(page).toHaveURL(/filter=download/)
+})
+
+test('the status list is the seven fixed entries, with Checking only while checking', async ({ page }) => {
+  const labels = await page.locator('.sidebar [data-f] .lbl').allTextContents()
+  // Checking is unpinned: present only when the daemon is actually checking something.
+  const expected = ['All torrents', 'Downloading', 'Active', 'Completed', 'Inactive', 'Stopped', 'Error']
+  expect(labels.filter(l => l !== 'Checking')).toEqual(expected)
+  expect(await page.locator('.sidebar [data-f="seed"]').count()).toBe(0)
+  if (await page.locator('.sidebar [data-f="queued"]').count()) {
+    expect(Number(await page.locator('.sidebar [data-f="queued"] .cnt').textContent())).toBeGreaterThan(0)
+  }
 })
 
 test('folder filter uses the download dir relative to the session dir', async ({ page }) => {

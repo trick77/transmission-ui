@@ -18,14 +18,14 @@ export function publishScrollbarWidth(pane: { offsetWidth: number; clientWidth: 
 }
 
 const COLS: { key: SortKey; label: string; cls?: string }[] = [
-  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r hl' }, { key: 'progress', label: 'Progress' },
+  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r hl' }, { key: 'progress', label: 'Progress', cls: 'hc' },
   { key: 'down', label: 'Down', cls: 'r' }, { key: 'up', label: 'Up', cls: 'r' }, { key: 'ratio', label: 'Ratio', cls: 'r' }, { key: 'eta', label: 'ETA', cls: 'r' },
 ]
 
 // One line per torrent: the second line carried the status text and the path, so the row
 // gets those as columns of their own. Down, Up and ETA make way.
 const COLS_ONE: { key: SortKey; label: string; cls?: string }[] = [
-  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r hl' }, { key: 'progress', label: 'Progress' },
+  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r hl' }, { key: 'progress', label: 'Progress', cls: 'hc' },
   { key: 'seeds', label: 'Seeds', cls: 'r' }, { key: 'ratio', label: 'Ratio', cls: 'r' }, { key: 'uploaded', label: 'Uploaded', cls: 'r' },
   { key: 'added', label: 'Added on', cls: 'r' }, { key: 'activity', label: 'Last active', cls: 'r' },
   { key: 'tracker', label: 'Tracker' }, { key: 'path', label: 'Path' },

@@ -23,7 +23,10 @@ export function statusView(t: TorrentSummary): StatusView {
 }
 
 export const isActive = (t: TorrentSummary) => t.rate_download > 0 || t.rate_upload > 0
-const isQueuedOrChecking = (t: TorrentSummary) => t.status === Status.Check || t.status === Status.CheckWait || t.status === Status.DownloadWait || t.status === Status.SeedWait
+// Verifying on disk (Check) or queued to verify (CheckWait). Deliberately NOT the
+// queue-wait states: DownloadWait/SeedWait are idle torrents awaiting their turn,
+// and counting them as "Checking" reported verification that was not happening.
+const isChecking = (t: TorrentSummary) => t.status === Status.Check || t.status === Status.CheckWait
 
 // ─── tracker health ───
 export type TrackerFailure = 'ok' | 'tracker' | 'torrent' | 'rejected'
@@ -140,9 +143,13 @@ export const FILTERS: Record<FilterKey, { label: string; f: (t: TorrentSummary) 
   download: { label: 'Downloading', f: t => t.status === Status.Download },
   seed: { label: 'Seeding', f: t => t.status === Status.Seed },
   active: { label: 'Active', f: isActive },
-  inactive: { label: 'Inactive', f: t => !isActive(t) && !isQueuedOrChecking(t) },
-  finished: { label: 'Finished', f: t => t.is_finished || (t.percent_done >= 1 && t.metadata_percent_complete >= 1) },
-  queued: { label: 'Queued / Checking', f: isQueuedOrChecking },
+  // Excludes only the checking ones, which have their own entry. A torrent waiting in
+  // the queue is idle, so it belongs here rather than in no filter at all.
+  inactive: { label: 'Inactive', f: t => !isActive(t) && !isChecking(t) },
+  finished: { label: 'Completed', f: t => t.is_finished || (t.percent_done >= 1 && t.metadata_percent_complete >= 1) },
+  // Checking means verifying, not waiting in the queue: a saturated download queue
+  // would otherwise report "Checking N" while the daemon verifies nothing.
+  queued: { label: 'Checking', f: isChecking },
   stopped: { label: 'Stopped', f: t => t.status === Status.Stopped && t.error === 0 },
   // A daemon error and a failing tracker are different conditions, but both mean
   // "this torrent needs looking at" and in practice the same torrents carry both,
@@ -150,7 +157,10 @@ export const FILTERS: Record<FilterKey, { label: string; f: (t: TorrentSummary) 
   // with both appears once.
   error: { label: 'Error', f: t => t.error !== 0 || hasTrackerProblem(t) },
 }
-export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'seed', 'active', 'inactive', 'finished', 'queued', 'stopped', 'error']
+// Sidebar list. 'queued' (Checking) is listed but not in Sidebar's PINNED set, so it
+// only appears while something is actually being verified. 'seed' keeps its FILTERS
+// entry though it has no entry here, so an existing ?filter=seed link still resolves.
+export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'active', 'finished', 'inactive', 'queued', 'stopped', 'error']
 
 /** A filter string is a FilterKey, `label:<name>`, `dir:<path>` (prefix) or `tracker:<host>`. */
 export function filterFn(filter: string, base: string): { label: string; f: (t: TorrentSummary) => boolean } {

@@ -142,14 +142,20 @@ describe('filters', () => {
     expect(count('download')).toBe(1)
     expect(count('seed')).toBe(3)
     expect(count('active')).toBe(2)
-    expect(count('inactive')).toBe(5)
+    // Queue-waiting torrents (DownloadWait/SeedWait) are idle, so they land here;
+    // only the genuinely verifying ones are excluded.
+    expect(count('inactive')).toBe(6)
     expect(count('finished')).toBe(8)
-    expect(count('queued')).toBe(2)
+    // Checking counts Check/CheckWait only -- not the queue-wait states.
+    expect(count('queued')).toBe(1)
     expect(count('stopped')).toBe(1)
     // One filter for both conditions: a daemon error (error: 3), a failing
     // tracker, and one torrent carrying both, which it counts once.
     expect(count('error')).toBe(3)
     expect(FILTER_ORDER).not.toContain('trackererr')
+    expect(FILTER_ORDER).not.toContain('seed')   // Seeding has no sidebar entry
+    // Checking is listed; Sidebar hides it while its count is 0.
+    expect(FILTER_ORDER).toContain('queued')
   })
   it('filterFn handles label:, dir:, tracker: and unknown keys', () => {
     const base = '/data/torrents'
@@ -173,6 +179,8 @@ describe('filters', () => {
     expect(trackerHealth(pair).find(h => h.host === 'x.example.net')?.count)
       .toBe(pair.filter(filterFn('tracker:x.example.net', base).f).length)
     expect(filterFn('trackererr', base).label).toBe('Error')   // folded in; old links still work
+    // Seeding is off the sidebar but keeps its key, so an old ?filter=seed link resolves.
+    expect(filterFn('seed', base).label).toBe('Seeding')
     expect(filterFn('bogus', base).label).toBe('All torrents')
     expect(filterFn('constructor', base).label).toBe('All torrents')   // prototype keys are not filters
     expect(filterFn('dir:/elsewhere', base).label).toBe('/elsewhere')

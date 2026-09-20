@@ -245,8 +245,12 @@ describe('sidebar', () => {
     const side = document.querySelector('.sidebar')!
     const shown = () => [...side.querySelectorAll('[data-f]')].map(b => b.getAttribute('data-f'))
     expect(shown()).toContain('all')
-    expect(shown()).toContain('seed')
+    // Seeding has no entry of its own: a finished, seeding torrent reads as Completed.
+    expect(shown()).not.toContain('seed')
+    expect(shown()).toContain('finished')
     expect(shown()).not.toContain('download')
+    // Checking only appears while something is actually checking.
+    expect(shown()).not.toContain('queued')
     // Active and Error are pinned: the sidebar keeps a stable shape, and an
     // empty Error is itself the answer to "is anything broken?".
     expect(shown()).toContain('active')
@@ -263,8 +267,9 @@ describe('sidebar', () => {
     await mount()
     const side = document.querySelector('.sidebar')!
     const cnt = (f: string) => side.querySelector(`[data-f="${f}"] .cnt`)!.textContent
-    expect(cnt('all')).toBe('8'); expect(cnt('download')).toBe('1'); expect(cnt('seed')).toBe('2'); expect(cnt('active')).toBe('2')
-    expect(cnt('finished')).toBe('4'); expect(cnt('queued')).toBe('3'); expect(cnt('stopped')).toBe('1'); expect(cnt('error')).toBe('2')   // one daemon error plus the failing-tracker torrents, deduped
+    expect(cnt('all')).toBe('8'); expect(cnt('download')).toBe('1'); expect(cnt('active')).toBe('2')
+    expect(side.querySelector('[data-f="seed"]')).toBeNull()   // Seeding is off the list
+    expect(cnt('finished')).toBe('4'); expect(cnt('queued')).toBe('1');   // Check only; the SeedWait/DownloadWait pair counts as Inactive expect(cnt('stopped')).toBe('1'); expect(cnt('error')).toBe('2')   // one daemon error plus the failing-tracker torrents, deduped
     expect(within(side as HTMLElement).getByText('blender')).toBeInTheDocument()
     expect(within(side as HTMLElement).getByText('radarr')).toBeInTheDocument()
     expect(within(side as HTMLElement).getByText('docs')).toBeInTheDocument()
@@ -325,10 +330,10 @@ describe('sidebar', () => {
   it('filters: status, label, folder, tracker; title and count follow; URL syncs', async () => {
     await mount()
     const side = document.querySelector('.sidebar') as HTMLElement
-    fireEvent.click(side.querySelector('[data-f="seed"]')!)
-    expect(screen.getByText('Seeding', { selector: '#ftitle' })).toBeInTheDocument()
-    expect(rows()).toHaveLength(2)
-    expect(location.search).toContain('filter=seed')
+    fireEvent.click(side.querySelector('[data-f="download"]')!)
+    expect(screen.getByText('Downloading', { selector: '#ftitle' })).toBeInTheDocument()
+    expect(rows()).toHaveLength(1)
+    expect(location.search).toContain('filter=download')
     fireEvent.click(within(side).getByText('linux'))
     expect(rows()).toHaveLength(3)
     fireEvent.click(within(side).getByText('radarr'))
