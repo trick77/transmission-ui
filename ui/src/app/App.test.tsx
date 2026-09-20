@@ -480,6 +480,48 @@ describe('inspector', () => {
     expect(document.querySelector('.inspector')).toBeNull()
   })
 
+  // One mount per test: RTL only unmounts between `it` blocks, so two mounts in one
+  // test leave two Apps in the DOM and every getByText finds duplicates.
+  const seedLimitRow = async (opts: Parameters<typeof mount>[0]) => {
+    await mount(opts)
+    fireEvent.click(within(row('ratio-fixture')).getByText('ratio-fixture'))
+    const insp = await waitFor(() => { const el = document.querySelector('.inspector')!; expect(el.querySelector('.pieces i')).toBeTruthy(); return el as HTMLElement })
+    return within(insp).getByText('Seed limit').nextElementSibling as HTMLElement
+  }
+  // seed_ratio_limit 9 on the torrent is the decoy: in global mode it is meaningless,
+  // the session's 2 is what actually stops the torrent.
+  const globalMode = () => [torrent({ id: 1, name: 'ratio-fixture', seed_ratio_mode: 0, seed_ratio_limit: 9 })]
+
+  it('seed limit reads the session ratio in global mode', async () => {
+    expect(await seedLimitRow({ torrents: globalMode(), session: { seed_ratio_limited: true, seed_ratio_limit: 2 } })).toHaveTextContent('Stop at ratio 2.00 (global)')
+  })
+
+  it('seed limit is unlimited in global mode when the global stopper is off', async () => {
+    expect(await seedLimitRow({ torrents: globalMode(), session: { seed_ratio_limited: false, seed_ratio_limit: 2 } })).toHaveTextContent('Unlimited (global)')
+  })
+
+  it('seed limit says nothing in global mode until the session has loaded', async () => {
+    await mount({ torrents: globalMode() })
+    set({ session: null })   // session_get failed this pass; the retry is 15 ticks away
+    fireEvent.click(within(row('ratio-fixture')).getByText('ratio-fixture'))
+    const insp = await waitFor(() => { const el = document.querySelector('.inspector')!; expect(el.querySelector('.pieces i')).toBeTruthy(); return el as HTMLElement })
+    const dd = within(insp).getByText('Seed limit').nextElementSibling as HTMLElement
+    expect(dd).toHaveTextContent('—')
+    expect(dd).not.toHaveTextContent('Unlimited')
+  })
+
+  it('seed limit shows the torrent ratio in custom mode', async () => {
+    const torrents = [torrent({ id: 1, name: 'ratio-fixture', seed_ratio_mode: 1, seed_ratio_limit: 4.5 })]
+    expect(await seedLimitRow({ torrents, session: { seed_ratio_limited: false } })).toHaveTextContent('Stop at ratio 4.50 (this torrent)')
+  })
+
+  it('seed limit is unlimited in unlimited mode, whatever the session says', async () => {
+    const torrents = [torrent({ id: 1, name: 'ratio-fixture', seed_ratio_mode: 2, seed_ratio_limit: 4.5 })]
+    const dd = await seedLimitRow({ torrents, session: { seed_ratio_limited: true, seed_ratio_limit: 2 } })
+    expect(dd).toHaveTextContent('Unlimited')
+    expect(dd).not.toHaveTextContent('Stop at ratio')
+  })
+
   it('files tab toggles wanted and cycles priority; peers and trackers tabs render', async () => {
     await mount()
     fireEvent.click(within(row('Cosmos Laundromat (2015)')).getByText('Cosmos Laundromat (2015)'))
