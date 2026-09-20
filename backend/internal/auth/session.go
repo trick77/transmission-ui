@@ -18,12 +18,15 @@ import (
 	"time"
 )
 
+// SessionCookieName is the name of the browser cookie carrying the session.
 const SessionCookieName = "tmui_session"
 
 // Enough to keep a useful group list for display without approaching the
 // per-cookie size limit.
 const maxCookieGroups = 16
 
+// ErrInvalidSession is returned when a session cookie is missing, malformed,
+// expired, or fails its signature check.
 var ErrInvalidSession = errors.New("invalid session")
 
 // sessionPayload is what the cookie carries, JSON then base64url. The claims
@@ -72,7 +75,7 @@ func (c *SessionCodec) Encode(claims Claims) (*http.Cookie, error) {
 	}
 	payload := base64.RawURLEncoding.EncodeToString(body)
 	value := payload + "." + c.sign(payload)
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // HttpOnly and SameSite are set below; Secure is config-driven so local development over plain HTTP still works
 		Name:     SessionCookieName,
 		Value:    value,
 		Path:     c.path,
@@ -113,7 +116,7 @@ func (c *SessionCodec) Decode(r *http.Request) (Claims, error) {
 
 // ClearCookie returns a cookie that removes the session.
 func (c *SessionCodec) ClearCookie() *http.Cookie {
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // HttpOnly and SameSite are set below; Secure is config-driven so local development over plain HTTP still works
 		Name:     SessionCookieName,
 		Value:    "",
 		Path:     c.path,

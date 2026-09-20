@@ -14,9 +14,12 @@ import (
 	"time"
 )
 
+// AuthMode selects how the app signs users in.
 type AuthMode string
 
+// The supported authentication modes.
 const (
+	// AuthModeOIDC delegates sign-in to an identity provider.
 	AuthModeOIDC AuthMode = "oidc"
 	// AuthModeForm is a login form checked against the daemon's own RPC
 	// credentials, for deployments with no identity provider. It is also what
@@ -25,6 +28,7 @@ const (
 	AuthModeForm AuthMode = "form"
 )
 
+// Config is the process configuration, read from the environment at startup.
 type Config struct {
 	Addr string
 	// PublicURL is where the app is reached from outside. When it carries a

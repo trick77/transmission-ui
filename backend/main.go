@@ -128,11 +128,11 @@ func healthcheck() int {
 			return http.ErrUseLastResponse
 		},
 	}
-	resp, err := client.Get("http://" + addr + base + "/")
+	resp, err := client.Get("http://" + addr + base + "/") //nolint:gosec // the container's own healthcheck, probing the address this process was configured to listen on
 	if err != nil {
 		return 1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// 2xx and 3xx are both healthy: signed-out form mode answers "/" with a
 	// redirect to the login page. A 4xx is not -- in particular a 404 means the
 	// app is not mounted where it thinks it is, which is the misrouting this

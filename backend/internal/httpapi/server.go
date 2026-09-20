@@ -24,6 +24,8 @@ type OIDC interface {
 	ClearTransientCookies(http.ResponseWriter)
 }
 
+// Server holds everything the HTTP routes need: configuration, the auth
+// pieces, the RPC proxy and the embedded UI.
 type Server struct {
 	cfg      config.Config
 	oidc     OIDC
@@ -33,10 +35,13 @@ type Server struct {
 	log      *slog.Logger
 }
 
+// New builds a Server from its dependencies.
 func New(cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fs.FS, log *slog.Logger) *Server {
 	return &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log}
 }
 
+// Handler returns the mux serving every route, mounted under the configured
+// base path.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	// The reverse proxy forwards the prefix rather than stripping it (the other
@@ -173,7 +178,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 // staticHandler serves the embedded bundle, falling back to index.html so the
 // SPA's client-side routes resolve.
 func (s *Server) staticHandler() http.Handler {
-	var files http.Handler = http.FileServer(http.FS(s.ui))
+	files := http.FileServer(http.FS(s.ui))
 	if s.cfg.BasePath != "" {
 		// FileServer resolves against the URL path, which still carries the
 		// prefix the proxy forwarded.
