@@ -140,11 +140,11 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .side-item .st.issues{border:1.5px solid var(--ink-3);width:6px;height:6px}
 .side-item .sub{font-size:11px;color:var(--ink-3);white-space:nowrap}
 .side-item .sub.down{color:var(--err)}
-.side-item.two{height:auto;padding:5px 8px;align-items:flex-start}
+.side-item.two{padding:5px 8px;align-items:flex-start}
 .side-item.two .col{flex:1;min-width:0;line-height:1.25}
-/* The two-line tracker rows set their own tighter leading; the 20px from
-   .side-item would space the host and its status line too far apart. */
-.side-item.two .col .lbl{display:block;line-height:1.3}
+/* The host sits on its own line above the status line. The leading comes from
+   .side-item.two .col above, which inherits here and overrides .side-item. */
+.side-item.two .col .lbl{display:block}
 /* tracker-down strip above the list */
 .notice{display:flex;align-items:center;gap:10px;margin:0 16px;padding:7px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:12px;color:var(--ink-2)}
 .notice .st{width:7px;height:7px;border-radius:50%;background:var(--err);flex:none}
