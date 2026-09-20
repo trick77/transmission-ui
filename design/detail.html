@@ -232,7 +232,9 @@ body.resizing{cursor:col-resize;user-select:none}
    scrollbar-gutter does not work here: .cols is not a scroll container. */
 .cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px calc(16px + var(--sbw, 0px)) 6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
 .cols .r{text-align:right}
-.cols .r.hl{text-align:left}
+/* Size heads a right-aligned column but its label sits centred over the numbers:
+   flush right it drifted away from the values it names. Cells stay .r. */
+.cols .r.hl{text-align:center}
 .cols .sort{color:var(--ink);display:inline-flex;align-items:center;gap:3px}
 .rows{overflow:auto;flex:1;padding-bottom:20px}
 .row{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
@@ -625,11 +627,13 @@ const LBL = {linux:"#3f8cd6", blender:"#e8712f", archive:"#9b6bd6", audiobook:"#
 
 // ── compact one-line row: derive its columns from the fields above, one dataset ──
 const pad = n => String(n).padStart(2,'0');
-const dstr = days => { const d = new Date(Date.now() - days*86400e3); return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`; };
-const idlestr = (d, id) => d === 0 ? `${(id * 7) % 50 + 5} s ago` : `${d}d 0h ago`;
+const plural = (n,u) => `${n} ${u}${n===1?'':'s'} ago`;
+const agostr = days => days < 1 ? '23h ago' : days < 7 ? plural(days,'day') : days < 30 ? plural(Math.floor(days/7),'week') : days < 365 ? plural(Math.floor(days/30),'month') : plural(Math.floor(days/365),'year');
+const dstr = days => agostr(days);
+const idlestr = (d, id) => d === 0 ? `${(id * 7) % 50 + 5}m ago` : agostr(d);
 const TRK = {iso:"bttracker.debian.org", radarr:"tracker.blender.org", buffer:"tracker.blender.org",
              audiobooks:"bt1.archive.org", "sonarr/docs":"bt1.archive.org"};
-const upl = t => { const [n,u] = t.size.split(' '); return `${(parseFloat(n)*parseFloat(t.ratio)).toFixed(2)} ${u}`; };
+const upl = t => { const [n,u] = t.size.split(' '); return `${(parseFloat(n)*parseFloat(t.ratio)).toFixed(1)} ${u}`; };
 const trk = t => TRK[rel(t.dir)] || 'tracker.opentrackr.org';
 const spd = (v, dir) => v === "0"
   ? `<span class="spd zero num">—</span>`
@@ -651,7 +655,7 @@ function row(t, sel){
     <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num"><span>${t.p}%</span>${t.swarm?`<span class="av" title="Seeds in swarm">${t.swarm} seeds</span>`:''}</span></div>
     ${spd(t.dl,'dl')}
     ${spd(t.ul,'ul')}
-    <span class="num r ${+t.ratio>=1?'':'muted'}">${t.ratio}</span>
+    <span class="num r ${+t.ratio<1?'':'muted'}">${t.ratio}</span>
     <span class="num r muted">${t.eta}</span>
   </div>`;
 }
@@ -675,7 +679,7 @@ function rowOne(t, sel){
     <span class="num r muted">${t.size}</span>
     <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num pv">${t.p}%</span></div>
     <span class="num r ${t.swarm?'':'faint'}">${t.swarm || '—'}</span>
-    <span class="num r ${+t.ratio>=1?'':'muted'}">${t.ratio}</span>
+    <span class="num r ${+t.ratio<1?'':'muted'}">${t.ratio}</span>
     <span class="num r muted">${upl(t)}</span>
     <span class="num r muted">${dstr(t.age)}</span>
     <span class="num r muted">${idlestr(t.idle, t.id)}</span>

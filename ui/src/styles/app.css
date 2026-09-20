@@ -229,7 +229,9 @@ body.resizing{cursor:col-resize;user-select:none}
    scrollbar-gutter does not work here: .cols is not a scroll container. */
 .cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px calc(16px + var(--sbw, 0px)) 6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
 .cols .r{text-align:right}
-.cols .r.hl{text-align:left}
+/* Size heads a right-aligned column but its label sits centred over the numbers:
+   flush right it drifted away from the values it names. Cells stay .r. */
+.cols .r.hl{text-align:center}
 .cols .sort{color:var(--ink);display:inline-flex;align-items:center;gap:3px}
 .rows{overflow:auto;flex:1;padding-bottom:20px}
 .row{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
