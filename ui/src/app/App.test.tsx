@@ -193,7 +193,7 @@ describe('shell', () => {
 })
 
 describe('sidebar', () => {
-  it('hides status filters that match nothing, keeping All and the active one', async () => {
+  it('hides status filters that match nothing, keeping All, Active, Error and the active one', async () => {
     // One seeding torrent: Downloading, Stopped, Error and friends all match zero.
     await mount({ torrents: [torrent({ id: 1, name: 'Solo', status: Status.Seed, percent_done: 1 })] })
     const side = document.querySelector('.sidebar')!
@@ -201,7 +201,11 @@ describe('sidebar', () => {
     expect(shown()).toContain('all')
     expect(shown()).toContain('seed')
     expect(shown()).not.toContain('download')
-    expect(shown()).not.toContain('error')
+    // Active and Error are pinned: the sidebar keeps a stable shape, and an
+    // empty Error is itself the answer to "is anything broken?".
+    expect(shown()).toContain('active')
+    expect(shown()).toContain('error')
+    expect(side.querySelector('[data-f="error"] .cnt')).toHaveTextContent('0')
 
     // The active filter stays visible even once it matches nothing, or picking it
     // would remove it from the sidebar and strand the user on an empty list.
