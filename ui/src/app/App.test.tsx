@@ -269,7 +269,7 @@ describe('sidebar', () => {
     const cnt = (f: string) => side.querySelector(`[data-f="${f}"] .cnt`)!.textContent
     expect(cnt('all')).toBe('8'); expect(cnt('download')).toBe('1'); expect(cnt('active')).toBe('2')
     expect(side.querySelector('[data-f="seed"]')).toBeNull()   // Seeding is off the list
-    expect(cnt('finished')).toBe('4'); expect(cnt('queued')).toBe('3'); expect(cnt('stopped')).toBe('1'); expect(cnt('error')).toBe('2')   // one daemon error plus the failing-tracker torrents, deduped
+    expect(cnt('finished')).toBe('4'); expect(cnt('queued')).toBe('1');   // Check only; the SeedWait/DownloadWait pair counts as Inactive expect(cnt('stopped')).toBe('1'); expect(cnt('error')).toBe('2')   // one daemon error plus the failing-tracker torrents, deduped
     expect(within(side as HTMLElement).getByText('blender')).toBeInTheDocument()
     expect(within(side as HTMLElement).getByText('radarr')).toBeInTheDocument()
     expect(within(side as HTMLElement).getByText('docs')).toBeInTheDocument()

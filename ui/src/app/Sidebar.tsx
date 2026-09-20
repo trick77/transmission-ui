@@ -1,6 +1,7 @@
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { FILTERS, FILTER_ORDER, folderTree, labelCounts, trackerHealth, relDir } from '../lib/model'
+import type { FilterKey } from '../lib/model'
 import { trackerName } from '../lib/trackers'
 import { set, syncUrl, useStore } from '../state/store'
 
@@ -22,7 +23,12 @@ export function Sidebar() {
   return (
     <nav className="sidebar">
       <div className="side-h">Status</div>
-      {FILTER_ORDER.map(k => {
+      {/* A filter that is off the list but is the one in force (an old ?filter=seed
+          bookmark) still gets a row, or the sidebar would show nothing as active while
+          the list is filtered and the title names it. */}
+      {(FILTER_ORDER.includes(filter as FilterKey) || !(filter in FILTERS)
+        ? FILTER_ORDER
+        : [filter as FilterKey, ...FILTER_ORDER]).map(k => {
         const n = torrents.filter(FILTERS[k].f).length
         // An empty filter is a dead end: hide it. 'all' anchors the list,
         // 'active'/'error' are pinned so the sidebar keeps a stable shape, and

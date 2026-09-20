@@ -142,9 +142,12 @@ describe('filters', () => {
     expect(count('download')).toBe(1)
     expect(count('seed')).toBe(3)
     expect(count('active')).toBe(2)
-    expect(count('inactive')).toBe(5)
+    // Queue-waiting torrents (DownloadWait/SeedWait) are idle, so they land here;
+    // only the genuinely verifying ones are excluded.
+    expect(count('inactive')).toBe(6)
     expect(count('finished')).toBe(8)
-    expect(count('queued')).toBe(2)
+    // Checking counts Check/CheckWait only -- not the queue-wait states.
+    expect(count('queued')).toBe(1)
     expect(count('stopped')).toBe(1)
     // One filter for both conditions: a daemon error (error: 3), a failing
     // tracker, and one torrent carrying both, which it counts once.
