@@ -377,7 +377,7 @@ body.resizing{cursor:col-resize;user-select:none}
    1600px the floor wins and the trailing columns run off the right edge, which is
    the intended trade: the name is what people read. */
 .cols.one,
-.row.one{grid-template-columns:24px 14px minmax(420px,1fr) 40px 84px 96px 56px 60px 80px 92px 88px 140px 160px}
+.row.one{grid-template-columns:16px 14px minmax(420px,1fr) 40px 84px 96px 56px 60px 80px 92px 88px 140px 160px}
 .cols.one>:nth-child(n+14),.row.one>:nth-child(n+14){display:none}
 /* locale month names ("19. Sept. 2026") are wider than en-US, so no cell may wrap */
 .cols.one>*,.row.one>*{white-space:nowrap;overflow:hidden}
@@ -386,7 +386,11 @@ body.resizing{cursor:col-resize;user-select:none}
 .row.one.is-err .name .t{color:var(--err)}
 /* The dot is a track, not a flex child of .name: as a child its neighbours set
    where the name starts, and on a pending row the removal text changes width
-   live, so the name's left edge crawled. 14px is the dot plus breathing room. */
+   live, so the name's left edge crawled. 14px is the dot plus breathing room.
+   The compact checkbox track is 16px, not the 24px the two-line row uses: .chk is
+   width:16px, so a 24px track leaves 8px of dead space on its right. Next to text
+   that reads as padding; next to a 6px dot it read as a gap between two unrelated
+   marks. At 16px the chk->dot distance is 4+14=18px, the same as dot->name. */
 .row.one .sdot{width:6px;height:6px;border-radius:50%;background:var(--ink-3);justify-self:center;align-self:center}
 .row.one .sdot.seed{background:var(--seed-dot)}
 .row.one .sdot.dl{background:var(--accent)}
@@ -405,7 +409,7 @@ body.resizing{cursor:col-resize;user-select:none}
 .row.one .chip.lbl{flex:none;max-width:110px;font-size:10px;line-height:1;padding:2px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* with the inspector docked the tail columns go first: Path, Tracker, Last active, Added on, Uploaded */
 .main.has-insp .cols.one,
-.main.has-insp .row.one{grid-template-columns:24px 14px minmax(160px,1fr) 40px 80px 92px 52px 56px}
+.main.has-insp .row.one{grid-template-columns:16px 14px minmax(160px,1fr) 40px 80px 92px 52px 56px}
 .main.has-insp .cols.one>:nth-child(n+9),
 .main.has-insp .row.one>:nth-child(n+9){display:none}
 
@@ -416,7 +420,7 @@ body.resizing{cursor:col-resize;user-select:none}
    gets their ~460px. The dropped values stay in the inspector. */
 @media (max-width:1200px){
   .cols.one,
-  .row.one{grid-template-columns:24px 14px minmax(180px,1fr) 40px 84px 96px 56px}
+  .row.one{grid-template-columns:16px 14px minmax(180px,1fr) 40px 84px 96px 56px}
   .cols.one>:nth-child(n+8),
   .row.one>:nth-child(n+8){display:none}
   /* Two-line rows overflow their track here too: drop Uploaded and Added on.
@@ -432,7 +436,7 @@ body.resizing{cursor:col-resize;user-select:none}
   .main.has-insp .cols:not(.one)>:nth-child(n+6),
   .main.has-insp .row:not(.one)>:nth-child(n+6){display:none}
   .main.has-insp .cols.one,
-  .main.has-insp .row.one{grid-template-columns:24px 14px minmax(180px,1fr) 40px 80px 92px}
+  .main.has-insp .row.one{grid-template-columns:16px 14px minmax(180px,1fr) 40px 80px 92px}
   .main.has-insp .cols.one>:nth-child(n+7),
   .main.has-insp .row.one>:nth-child(n+7){display:none}
 }
@@ -534,4 +538,3 @@ body.resizing{cursor:col-resize;user-select:none}
 .drop{border:1.5px dashed var(--line);border-radius:var(--r-lg);padding:26px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--ink-2);background:var(--bg)}
 .drop.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .drop .big{width:28px;height:28px}
-
