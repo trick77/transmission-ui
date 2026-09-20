@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/trick77/transmission-ui/backend/internal/auth"
+	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
 // The page is served before any bundle loads, so it cannot use the hashed asset
@@ -85,10 +86,15 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
   button:hover{filter:brightness(1.08)}
   .err{margin:0 0 14px;padding:8px 11px;border-radius:var(--r);font-size:12px;
        background:var(--err-soft);color:var(--err)}
+  /* oidc mode has no form: the single action is a link, painted as the button. */
+  .btn{display:block;width:100%;height:34px;line-height:34px;border-radius:var(--r);margin-top:4px;
+       text-align:center;text-decoration:none;font:inherit;font-weight:500;cursor:pointer;
+       background:var(--accent);color:#1f1512}
+  .btn:hover{filter:brightness(1.08)}
   @media (prefers-reduced-motion:no-preference){.card{animation:rise .18s ease-out}}
   @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
-<form class="card" method="post" action="{{.Base}}/login">
+{{if .OIDC}}<div class="card">{{else}}<form class="card" method="post" action="{{.Base}}/login">{{end}}
   <div class="brand">
     <svg class="logo" viewBox="3 3 18 18" aria-hidden="true">
       <linearGradient id="logo-grad" x1="0" y1="0" x2="0.72" y2="1">
@@ -105,6 +111,11 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
     <span class="name">transmission-ui</span>
   </div>
   <h1>Sign in</h1>
+{{if .OIDC}}
+  <p class="sub">This seedbox is behind single sign-on.</p>
+  {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+  <a class="btn" href="{{.Base}}/api/auth/login">Continue to sign in</a>
+{{else}}
   <p class="sub">Use the daemon's RPC username and password.</p>
   {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
   <label for="u">Username</label>
@@ -112,14 +123,18 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
   <label for="p">Password</label>
   <input id="p" name="password" type="password" autocomplete="current-password" required>
   <button type="submit">Sign in</button>
-</form>
+{{end}}
+{{if .OIDC}}</div>{{else}}</form>{{end}}
 </html>`))
 
 func (s *Server) renderLogin(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = loginPage.Execute(w, struct{ Error, Base string }{msg, s.cfg.BasePath})
+	_ = loginPage.Execute(w, struct {
+		Error, Base string
+		OIDC        bool
+	}{msg, s.cfg.BasePath, s.cfg.AuthMode == config.AuthModeOIDC})
 }
 
 // loginAssetHandler serves the page's embedded background and fonts. They are
@@ -143,6 +158,17 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderLogin(w, http.StatusOK, "")
+}
+
+// handleLoginSubmitGuard rejects a form POST when no form is on offer. The route
+// is registered in every mode so the assets and page resolve, but only form mode
+// has credentials to check.
+func (s *Server) handleLoginSubmitGuard(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.AuthMode != config.AuthModeForm {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	s.handleLoginSubmit(w, r)
 }
 
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {

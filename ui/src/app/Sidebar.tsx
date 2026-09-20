@@ -21,7 +21,9 @@ export function Sidebar() {
       <div className="side-h">Status</div>
       {FILTER_ORDER.map(k => {
         const n = torrents.filter(FILTERS[k].f).length
-        if (k === 'trackererr' && n === 0) return null
+        // An empty filter is a dead end: hide it. 'all' anchors the list and the
+        // active filter has to stay, or selecting it would remove it from view.
+        if (n === 0 && k !== 'all' && filter !== k) return null
         return (
           <button key={k} className={'side-item' + (filter === k ? ' on' : '')} onClick={() => pick(k)} data-f={k}>
             <span className="lbl">{FILTERS[k].label}</span><span className="cnt">{n}</span>

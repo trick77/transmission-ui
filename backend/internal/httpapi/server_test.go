@@ -36,6 +36,132 @@ func newTestServer(t *testing.T, mode config.AuthMode, group string, oidc OIDC) 
 	return New(cfg, oidc, sessions, rpc, ui, slog.New(slog.DiscardHandler)), sessions
 }
 
+// The bundle itself is privileged: serving it to an anonymous visitor renders the
+// whole shell and leaks the layout, with only the RPC refusing. oidc mode answers
+// the login card instead, and with 200, because the container healthcheck probes
+// this route and counts >= 400 as unhealthy.
+func TestAppShellHiddenWhenSignedOut(t *testing.T) {
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200 so the healthcheck stays green, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "tmui-base") {
+		t.Fatal("served the app bundle to an anonymous visitor")
+	}
+	if !strings.Contains(body, "Continue to sign in") {
+		t.Fatalf("want the form-less sign-in card, got %q", body)
+	}
+	if strings.Contains(body, "name=\"password\"") {
+		t.Fatal("oidc mode must not render the credential form")
+	}
+}
+
+// staticHandler rewrites every unknown extensionless path to index.html for the
+// SPA's client-side routes, so gating only "/" leaves the shell reachable at
+// /settings, /detail or any made-up path. Deep links are the regression this
+// guards: an earlier version of the gate passed the "/" tests while leaking here.
+func TestAppShellHiddenOnDeepLinks(t *testing.T) {
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	for _, path := range []string{"/", "/settings", "/detail", "/anything-at-all"} {
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if strings.Contains(rec.Body.String(), "tmui-base") {
+			t.Errorf("%s served the app bundle to an anonymous visitor", path)
+		}
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: want 200 so the healthcheck stays green, got %d", path, rec.Code)
+		}
+	}
+}
+
+func TestAppShellDeepLinksRedirectInFormMode(t *testing.T) {
+	srv, _ := newTestServer(t, config.AuthModeForm, "media", &fakeOIDC{})
+	for _, path := range []string{"/", "/settings", "/anything-at-all"} {
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusFound {
+			t.Errorf("%s: want 302, got %d", path, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "tmui-base") {
+			t.Errorf("%s served the app bundle to an anonymous visitor", path)
+		}
+	}
+}
+
+// A signed-in visitor still reaches the client-side routes.
+func TestAppShellDeepLinkServedWithSession(t *testing.T) {
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"media"}})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/settings", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatalf("signed-in deep link did not get the bundle: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// Form mode keeps its redirect to the page that has the form.
+func TestAppShellRedirectsToFormLogin(t *testing.T) {
+	srv, _ := newTestServer(t, config.AuthModeForm, "media", &fakeOIDC{})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusFound {
+		t.Fatalf("want 302, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/login" {
+		t.Fatalf("want /login, got %q", got)
+	}
+}
+
+// A valid session still gets the app.
+func TestAppShellServedWithSession(t *testing.T) {
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"media"}})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatalf("signed-in request did not get the bundle: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// A session without the required group is not a pass for the shell either.
+func TestAppShellHiddenWithoutGroup(t *testing.T) {
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"other"}})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatal("a session outside the allowed group got the bundle")
+	}
+}
+
+// The form POST exists in every mode now, so it has to refuse outside form mode.
+func TestFormPostRejectedInOIDCMode(t *testing.T) {
+	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/login", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d", rec.Code)
+	}
+}
+
 // The proxy must be unreachable without a valid session.
 func TestRPCRequiresSession(t *testing.T) {
 	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
@@ -142,9 +268,17 @@ func TestMeRejectsWrongGroup(t *testing.T) {
 }
 
 func TestStaticFallsBackToIndex(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	// The shell is gated, so this needs a session: without one the fallback is
+	// correct but answers the sign-in card, and this test is about routing.
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"media"}})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/some/spa/route", nil)
+	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/some/spa/route", nil))
+	srv.Handler().ServeHTTP(rec, req)
 	body, _ := io.ReadAll(rec.Body)
 	if rec.Code != http.StatusOK || !strings.Contains(string(body), "ui</html>") {
 		t.Fatalf("spa fallback failed: %d %q", rec.Code, body)

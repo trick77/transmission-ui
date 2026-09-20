@@ -35,20 +35,18 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, o
   if (compactRow) {
     const host = t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : ''
     // The second line is gone, so what it carried moves into tooltips: the status word and
-    // the peer counts onto the dot, the labels onto the name.
+    // the peer counts onto the dot. The labels stay on screen as chips.
     const why = t.error !== 0 ? (t.error_string || 'Error')
       : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
       : `${s.label} · ${peers}`
-    const nameTitle = t.error !== 0 ? why
-      : t.labels.length ? `${t.name}\n${t.labels.join(' · ')}`
-      : t.name
+    const nameTitle = t.error !== 0 ? why : t.name
     return (
       <div className={'row one' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + (t.error !== 0 ? ' is-err' : '')} data-id={t.id}>
         <span className="chk" role="checkbox" aria-checked={selected} />
         <div className="name">
           <span className={'sdot ' + s.kind} title={why} />
           <span className="t" title={nameTitle}>{t.name}</span>
-          {t.labels.length ? <span className="lbl-n" title={t.labels.join(' · ')}>{t.labels.length}</span> : null}
+          {t.labels.map(l => <span key={l} className="chip lbl">{l}</span>)}
           {acts}
         </div>
         <span className="num r muted">{bytes(t.size_when_done)}</span>

@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { App } from './App'
 import { get, refreshNow, set, startPolling, type Density } from '../state/store'
 import type { SortKey } from '../lib/model'
-import { installFakeDaemon, type FakeDaemon } from '../test/fakeDaemon'
+import { installFakeDaemon, torrent, type FakeDaemon } from '../test/fakeDaemon'
+import { Status } from '../rpc/types'
 
 let daemon: FakeDaemon
 
@@ -82,10 +83,10 @@ describe('shell', () => {
     // the header must carry the same layout class as the rows, or the two grids drift apart
     expect(document.querySelector('.cols')!.classList.contains('one')).toBe(true)
 
-    // labels have no chips on one line: a count with the names in its tooltip
-    const lbl = deb.querySelector('.lbl-n')!
-    expect(lbl).toHaveTextContent('1')
-    expect(lbl).toHaveAttribute('title', 'linux')
+    // labels read as names on one line too, not as a bare count
+    const chips = [...deb.querySelectorAll('.chip.lbl')].map(c => c.textContent)
+    expect(chips).toEqual(['linux'])
+    expect(deb.querySelector('.lbl-n')).toBeNull()
     // and the peer counts the dropped line carried are on the status dot
     expect(deb.querySelector('.sdot')!.getAttribute('title')).toMatch(/of 42 peers/)
   })
@@ -141,9 +142,9 @@ describe('shell', () => {
     expect(document.activeElement).toBe(input)
   })
 
-  it('shows a sign-in banner when there is no session', async () => {
+  it('shows a sign-in screen when there is no session', async () => {
     await mount({ unauthorized: true })
-    await screen.findByText(/Not signed in/, {}, { timeout: 4000 })
+    await screen.findByText(/Your session has ended/, {}, { timeout: 4000 })
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
@@ -154,6 +155,19 @@ describe('shell', () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'))
     await screen.findByText(/Can't reach the daemon/, {}, { timeout: 4000 })
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
+    // A daemon that is down is not an auth problem: the app stays on screen.
+    expect(document.querySelector('.signin')).toBeNull()
+    expect(document.querySelector('.sidebar')).toBeInTheDocument()
+  })
+
+  it('replaces the shell with a sign-in screen when the session is gone', async () => {
+    await mount({ unauthorized: true })
+    await screen.findByRole('button', { name: 'Sign in' }, { timeout: 4000 })
+    // The point of the screen is that none of the app is behind it.
+    expect(document.querySelector('.signin')).toBeInTheDocument()
+    expect(document.querySelector('.sidebar')).toBeNull()
+    expect(document.querySelector('.app')).toBeNull()
+    expect(document.querySelectorAll('.row').length).toBe(0)
   })
 
   it('sends the sign-in button to the login endpoint', async () => {
@@ -174,6 +188,22 @@ describe('shell', () => {
 })
 
 describe('sidebar', () => {
+  it('hides status filters that match nothing, keeping All and the active one', async () => {
+    // One seeding torrent: Downloading, Stopped, Error and friends all match zero.
+    await mount({ torrents: [torrent({ id: 1, name: 'Solo', status: Status.Seed, percent_done: 1 })] })
+    const side = document.querySelector('.sidebar')!
+    const shown = () => [...side.querySelectorAll('[data-f]')].map(b => b.getAttribute('data-f'))
+    expect(shown()).toContain('all')
+    expect(shown()).toContain('seed')
+    expect(shown()).not.toContain('download')
+    expect(shown()).not.toContain('error')
+
+    // The active filter stays visible even once it matches nothing, or picking it
+    // would remove it from the sidebar and strand the user on an empty list.
+    act(() => { set({ filter: 'stopped' }) })
+    expect(shown()).toContain('stopped')
+  })
+
   it('status counts, labels, folders, disk and tracker health', async () => {
     await mount()
     const side = document.querySelector('.sidebar')!
@@ -290,7 +320,7 @@ describe('list interactions', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Set location')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(within(selbar()).getByRole('button', { name: 'Remove' }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('Remove from list')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Remove and delete data')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(document.querySelector('#selbar [title="More"]')!)
     expect(document.querySelector('.cmenu')).toHaveTextContent('Verify local data')
@@ -347,6 +377,15 @@ describe('list interactions', () => {
     fireEvent.keyDown(document, { key: ' ' })
     await waitFor(() => expect(daemon.of('torrent_stop')[0]).toEqual({ ids: [2] }))
     fireEvent.keyDown(document, { key: 'Backspace' })
+    expect(screen.getByRole('dialog')).toHaveTextContent('Remove and delete data')
+    fireEvent.click(screen.getByRole('button', { name: /and data$/ }))
+    await waitFor(() => expect(daemon.of('torrent_remove')[0]).toEqual({ ids: [2], 'delete_local_data': true }))
+  })
+
+  it('keyboard: \u2318\u232b opts out of deleting the data', async () => {
+    await mount()
+    fireEvent.click(within(row('Big Buck Bunny (2008) 4K 60fps')).getByText('Big Buck Bunny (2008) 4K 60fps'))
+    fireEvent.keyDown(document, { key: 'Backspace', metaKey: true })
     expect(screen.getByRole('dialog')).toHaveTextContent('Remove from list')
     fireEvent.click(screen.getByRole('button', { name: /^Remove torrent/ }))
     await waitFor(() => expect(daemon.of('torrent_remove')[0]).toEqual({ ids: [2], 'delete_local_data': false }))

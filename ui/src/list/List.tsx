@@ -114,7 +114,7 @@ export function List() {
             <button className="btn sm ghost" onClick={() => void run('Pause', () => api.stop(selIds))}><Icon name="pause" />Pause</button>
             <button className="btn sm ghost" onClick={() => set({ dialog: { kind: 'labels', ids: selIds } })}><Icon name="tag" />Labels</button>
             <button className="btn sm ghost" onClick={() => set({ dialog: { kind: 'location', ids: selIds } })}><Icon name="folder" />Move</button>
-            <button className="btn sm ghost danger" onClick={() => set({ dialog: { kind: 'confirm-remove', ids: selIds, deleteData: false } })}><Icon name="trash" />Remove</button>
+            <button className="btn sm ghost danger" onClick={() => set({ dialog: { kind: 'confirm-remove', ids: selIds, deleteData: true } })}><Icon name="trash" />Remove</button>
             <button className="btn sm ghost icon" title="More" onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ x: r.right, y: r.bottom + 6, kind: 'sel', ids: selIds }) }}><Icon name="more" /></button>
             <button className="x" title="Clear selection" onClick={() => set({ selected: new Set() })}><Icon name="x" size={13} /></button>
           </div>
