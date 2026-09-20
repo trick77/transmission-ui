@@ -277,9 +277,13 @@ body.resizing{cursor:col-resize;user-select:none}
 .row.one{border-bottom:0;padding:5px 16px}
 /* 9 children, 9 tracks: the pair rule still needs its counterpart, or a tenth
    cell would auto-place into an implicit second row and double the height. */
-.cols:not(.one)>:nth-child(n+10),.row:not(.one)>:nth-child(n+10){display:none}
-/* the dot track is compact-only, so its (empty, unlabelled) header cell goes with it */
+.row:not(.one)>:nth-child(n+10){display:none}
+/* The dot track is compact-only, so its (empty, unlabelled) header cell goes with
+   it. nth-child counts that hidden cell, so the header's cut is one later than the
+   row's -- the mock serves one static header to both densities; the app renders
+   .dot-h only when compact and needs no such rule. */
 .cols:not(.one) .dot-h{display:none}
+.cols:not(.one)>:nth-child(n+11){display:none}
 .row.one:nth-child(odd){background:var(--zebra)}
 .row:hover,.row.one:hover{background:var(--surface)}
 .row.sel,.row.one.sel:nth-child(odd){background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
@@ -298,23 +302,25 @@ body.resizing{cursor:col-resize;user-select:none}
    hover, so it was unreachable outright.
    A track of its own fixes all three. Space is reserved at every width -- only
    the ink is hover-gated, so the glyph is always in the same x on every line.
-   opacity, not visibility: a visibility:hidden button leaves the tab order, and
-   these rows have no other focusable child to carry :focus-within, so the
-   trigger would be unreachable by keyboard too. opacity keeps both the slot and
-   the tab stop. */
+   opacity, not visibility: a visibility:hidden button leaves the tab order, so
+   it could not be tabbed to at all. opacity keeps both the slot and the tab
+   stop -- but opacity composes, so the gate has to lift on the .acts parent:
+   a focused button at opacity 1 inside a parent at 0 still renders invisible.
+   Hence :focus-within here and not :focus-visible on the button. */
 .acts{display:flex;justify-content:center;opacity:0;transition:opacity .08s}
-.row:hover .acts,.row.focus .acts,.row.menu-open .acts{opacity:1}
+.row:hover .acts,.row.focus .acts,.row.menu-open .acts,.row:focus-within .acts{opacity:1}
+.acts button{width:24px;height:22px;border-radius:6px;color:var(--ink-2);display:grid;place-items:center}
 .acts button.more{color:var(--ink-3)}
 .row:hover .acts button.more{color:var(--ink-2)}
 .row.menu-open .acts button.more{background:var(--surface-3);color:var(--ink)}
-.acts button.more:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:1px}
+.acts button.more:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
 /* The test is (hover:none), not (pointer:coarse): the problem is a device that
-   never fires hover at all. A hybrid laptop answers coarse and still hovers. */
+   never fires hover at all. A hybrid laptop answers coarse and still hovers.
+   After the base rule, or equal specificity would hand the size back to it. */
 @media (hover:none){
   .acts{opacity:1}
   .acts button{width:32px;height:32px}
 }
-.acts button{width:24px;height:22px;border-radius:6px;color:var(--ink-2);display:grid;place-items:center}
 .acts button:hover{background:var(--surface-3);color:var(--ink)}
 .acts button.on{background:var(--surface-3);color:var(--ink)}
 .cols .chk{cursor:pointer}

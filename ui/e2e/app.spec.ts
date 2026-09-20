@@ -124,6 +124,10 @@ test('on a touch screen every row shows its action trigger without interaction',
   const n = await acts.count()
   const opacities = await acts.evaluateAll(els => els.map(e => getComputedStyle(e).opacity))
   expect(opacities).toEqual(Array(n).fill('1'))
+  // The bigger tap target is the other half of the media query, and it only holds
+  // while the base .acts button rule stays above it: equal specificity, later wins.
+  const box = (await page.locator('.row').first().locator('.acts .more').boundingBox())!
+  expect({ w: Math.round(box.width), h: Math.round(box.height) }).toEqual({ w: 32, h: 32 })
   // Tap opens the menu with no hover anywhere in the sequence.
   await page.locator('.row').first().locator('.acts .more').tap()
   await expect(page.locator('.cmenu')).toBeVisible()

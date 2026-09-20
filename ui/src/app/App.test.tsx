@@ -119,6 +119,17 @@ describe('shell', () => {
     await waitFor(() => expect(row('Big Buck Bunny (2008) 4K 60fps')).not.toHaveClass('menu-open'))
   })
 
+  it('the action trigger is reachable by keyboard', async () => {
+    await mount({ density: 'compact', sort: 'name' })
+    const r = row('Big Buck Bunny (2008) 4K 60fps')
+    const btn = within(r).getByTitle('More')
+    btn.focus()
+    expect(document.activeElement).toBe(btn)
+    // opacity composes: the gate must lift on .acts, not on the button, or a focused
+    // button at opacity 1 inside a parent at 0 still renders invisible.
+    expect(r.matches(':focus-within')).toBe(true)
+  })
+
   it('two-line rows get the action column but no dot track', async () => {
     await mount()
     const cols = document.querySelector('.cols') as HTMLElement
