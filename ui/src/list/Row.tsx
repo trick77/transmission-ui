@@ -12,15 +12,23 @@ function Speed({ bps, dir }: { bps: number; dir: 'dl' | 'ul' }) {
   return <span className={'spd num ' + dir}><Icon name={dir === 'dl' ? 'down' : 'up'} className="arrow" />{n} {u}</span>
 }
 
-export const Row = memo(function Row({ t, selected, focused, base, compactRow, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; onMore: (e: React.MouseEvent) => void }) {
+/** A row's part in a bulk removal: queued behind others, being deleted now, or failed. */
+export type RowRemoval = { kind: 'queued' | 'active' | 'failed'; text: string } | null
+
+export const Row = memo(function Row({ t, selected, focused, base, compactRow, removal, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; removal?: RowRemoval; onMore: (e: React.MouseEvent) => void }) {
   const s = statusView(t)
   const { seeds, leechers } = swarmOf(t)
   const swarm = seeds + leechers
   const peers = t.peers_connected === 0 ? (swarm ? `No peers · ${compact(swarm)} in swarm` : 'No peers')
     : `${t.peers_sending_to_us + t.peers_getting_from_us} of ${t.peers_connected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ''}`
-  const sub = t.error !== 0 ? <span style={{ color: 'var(--err)' }}>{t.error_string || 'Error'}</span>
+  // A removal in progress outranks the usual status line: it is the only thing about this
+  // row that is still changing, and the row is on its way off screen.
+  const sub = removal ? <span className="rm-st">{removal.text}</span>
+    : t.error !== 0 ? <span style={{ color: 'var(--err)' }}>{t.error_string || 'Error'}</span>
     : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
     : peers
+  // `failed` keeps full opacity: it is the one state the user still has to act on.
+  const rmCls = removal ? ' pending' + (removal.kind === 'failed' ? ' failed' : '') : ''
   const dir = relDir(t.download_dir, base)
   const stopped = t.status === Status.Stopped
   const acts = (
@@ -39,13 +47,13 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, o
     const why = t.error !== 0 ? (t.error_string || 'Error')
       : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
       : `${s.label} · ${peers}`
-    const nameTitle = t.error !== 0 ? why : t.name
+    const nameTitle = removal ? removal.text : t.error !== 0 ? why : t.name
     return (
-      <div className={'row one' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + (t.error !== 0 ? ' is-err' : '')} data-id={t.id}>
+      <div className={'row one' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + (t.error !== 0 ? ' is-err' : '') + rmCls} data-id={t.id}>
         <span className="chk" role="checkbox" aria-checked={selected} />
         <div className="name">
-          <span className={'sdot ' + s.kind} title={why} />
-          <span className="t" title={nameTitle}>{t.name}</span>
+          <span className={'sdot ' + s.kind} title={removal ? removal.text : why} />
+          <span className="t" title={nameTitle}>{t.name}{removal ? <span className="rm-st"> · {removal.text}</span> : null}</span>
           {t.labels.map(l => <span key={l} className="chip lbl">{l}</span>)}
           {acts}
         </div>
@@ -66,7 +74,7 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, o
   }
 
   return (
-    <div className={'row' + (selected ? ' sel' : '') + (focused ? ' focus' : '')} data-id={t.id}>
+    <div className={'row' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + rmCls} data-id={t.id}>
       <span className="chk" role="checkbox" aria-checked={selected} />
       <div className="name">
         <div className="t">

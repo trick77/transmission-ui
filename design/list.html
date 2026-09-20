@@ -220,6 +220,30 @@ body.resizing{cursor:col-resize;user-select:none}
 .sel-bar .btn.danger{color:var(--err)}
 .sel-bar .x{margin-left:2px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--accent)}
 .sel-bar .x:hover{background:rgba(217,119,87,.18)}
+/* Bulk removal progress. Status, not a control, so it stays neutral: no accent, and red
+   only if a torrent actually failed. The daemon blocks its whole RPC thread while it
+   unlinks, so nothing else on screen moves during a step -- the step counter ticking
+   between steps is the only honest liveness cue. The bar is stepped (width jumps per
+   finished torrent), which keeps the stylesheet free of its first @keyframes. */
+.rm-bar{display:flex;align-items:center;gap:8px;padding:0 4px 0 12px;height:34px;border-radius:999px;background:var(--surface-3);color:var(--ink-2);font-weight:500;font-size:12px;box-shadow:inset 0 0 0 1px var(--line)}
+.rm-bar .v{white-space:nowrap;color:var(--ink)}
+.rm-bar .who{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2);font-weight:400}
+.rm-bar .track{width:90px;height:4px;border-radius:999px;background:var(--surface-2);overflow:hidden;flex:none}
+.rm-bar .track i{display:block;height:100%;width:var(--p,0%);background:var(--ink-3);border-radius:999px;transition:width .2s}
+.rm-bar .btn{color:var(--ink);height:26px;padding:0 8px;gap:5px}
+.rm-bar .btn:hover{background:rgba(255,255,255,.06)}
+.rm-bar.done{color:var(--ink-2)}
+.rm-bar.done .track i{background:var(--ink-3)}
+.rm-bar.has-fail .track i{background:var(--err)}
+/* Rows on their way out: dimmed and inert, so it is obvious they are no longer live data
+   and cannot be clicked into a second remove. */
+.row.pending{opacity:.45;pointer-events:none}
+.row.pending .acts{display:none}
+.row.pending .rm-st{color:var(--ink-2)}
+/* A failed removal is the one pending state the user still has to act on, so it keeps
+   full opacity and stays clickable. */
+.row.pending.failed{opacity:1;pointer-events:auto}
+.row.pending.failed .rm-st{color:var(--err)}
 .row .chk{cursor:pointer}
 .row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23faf9f5' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");background-size:12px;background-position:center;background-repeat:no-repeat}
 .chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
@@ -577,6 +601,12 @@ body.resizing{cursor:col-resize;user-select:none}
           <button class="btn sm ghost icon" title="More: verify, re-announce, queue, limits"><svg class="i"><use href="#i-more"/></svg></button>
           <button class="x" id="selclear" title="Clear selection"><svg class="i" style="width:13px;height:13px"><use href="#i-x"/></svg></button>
         </div>
+        <div class="rm-bar" id="rmbar" hidden>
+          <span class="v" id="rmcount">Removing 1 of 10</span>
+          <span class="who" id="rmwho">debian-13.1.0-amd64-netinst.iso</span>
+          <span class="track"><i id="rmfill" style="--p:0%"></i></span>
+          <button class="btn sm ghost" id="rmstop">Stop</button>
+        </div>
         <button class="btn ghost sm" id="fbtn"><svg class="i" style="width:14px;height:14px"><use href="#i-search"/></svg>Filter<span class="badge" id="fbadge" hidden>0</span></button>
         <button class="btn ghost sm" title="Sort"><svg class="i" style="width:14px;height:14px"><use href="#i-sort"/></svg>Name</button>
         <div class="fpop" id="fpop" hidden>
@@ -597,7 +627,7 @@ body.resizing{cursor:col-resize;user-select:none}
     </section>
 <script>
 // Sample session — mixed states so every status colour appears.
-const T = [
+let T = [
   {id:1, name:"debian-13.1.0-amd64-DVD-1.iso", st:"download", p:63, size:"4.71 GB", dl:"12.4 MB/s", ul:"1.21 MB/s", ratio:"0.18", eta:"3m 12s", peers:"42 · 18", swarm:"1.2k", av:"3.4", lbl:["linux"], age:0, idle:0, dir:"/data/torrents/iso"},
   {id:2, name:"Cosmos Laundromat (2015) 2160p Blender Open Movie", st:"download", p:91, size:"3.02 GB", dl:"3.14 MB/s", ul:"612 kB/s", ratio:"0.44", eta:"1m 28s", peers:"27 · 11", swarm:"318", av:"9.1", lbl:["blender"], age:1, idle:0, dir:"/data/torrents/buffer"},
   {id:3, name:"enwiki-20260801-pages-articles-multistream.xml.bz2", st:"download", p:34, size:"24.1 GB", dl:"88 kB/s", ul:"0", ratio:"0.02", eta:"2d 4h", peers:"3 · 1", swarm:"4", av:"0.9", lbl:["archive"], age:12, idle:0, dir:"/data/torrents/buffer"},
@@ -640,12 +670,14 @@ function row(t, sel){
   const sub = t.err ? `<span style="color:var(--err)">${t.err}</span>`
     : s.label === "Verifying" ? `Verifying local data`
     : conn === "0" ? `No peers` : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
-  return `<div class="row${sel?' sel':''}" data-id="${t.id}">
+  const rm = RM.state[t.id];
+  const subText = rm ? `<span class="rm-st">${rm}</span>` : sub;
+  return `<div class="row${sel?' sel':''}${rm?' pending':''}${rm&&rm.startsWith('Failed')?' failed':''}" data-id="${t.id}">
     <span class="chk"></span>
     <div class="name">
       <div class="t"><span>${t.name}</span>${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
         <span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span></div>
-      <div class="m"><span class="chip ${s.cls}"><span class="dot"></span>${s.label}</span><span class="sep"></span><span>${sub}</span><span class="sep"></span><span>${rel(t.dir)}/</span></div>
+      <div class="m"><span class="chip ${s.cls}"><span class="dot"></span>${s.label}</span><span class="sep"></span><span>${subText}</span><span class="sep"></span><span>${rel(t.dir)}/</span></div>
     </div>
     <span class="num r muted">${t.size}</span>
     <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num"><span>${t.p}%</span>${t.swarm?`<span class="av" title="Seeds in swarm">${t.swarm} seeds</span>`:''}</span></div>
@@ -664,11 +696,12 @@ function rowOne(t, sel){
   const peers = conn === "0" ? 'No peers' : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
   const why = t.err ? t.err : s.label === 'Verifying' ? 'Verifying local data' : `${s.label} · ${peers}`;
   const acts = `<span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span>`;
-  return `<div class="row one${sel?' sel':''}${t.err?' is-err':''}" data-id="${t.id}">
+  const rm = RM.state[t.id];
+  return `<div class="row one${sel?' sel':''}${t.err?' is-err':''}${rm?' pending':''}${rm&&rm.startsWith('Failed')?' failed':''}" data-id="${t.id}">
     <span class="chk"></span>
     <div class="name">
       <span class="sdot ${s.cls}" title="${why}"></span>
-      <span class="t" title="${t.err ? why : t.name}">${t.name}</span>
+      <span class="t" title="${rm ? rm : t.err ? why : t.name}">${t.name}${rm?` <span class="rm-st">· ${rm}</span>`:''}</span>
       ${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
       ${acts}
     </div>
@@ -707,8 +740,9 @@ const ADV_LABEL = {size:{lt1:"< 1 GB","1to10":"1–10 GB",gt10:"> 10 GB"}, age:{
 let adv = {};
 const BASE = "/data/torrents";
 const rel = d => d.startsWith(BASE + "/") ? d.slice(BASE.length + 1) : d;
+const RM = { state:{}, ids:[], done:0, fails:0, stopped:false, timer:null, del:true, filter:null };
 const gb = s => s.endsWith("MB") ? parseFloat(s)/1024 : parseFloat(s);
-function renderRows(selId, filter){
+function renderRows(selId, filter){ RM.filter = filter;
   const F = filter && filter.startsWith('dir:') ? {label: rel(filter.slice(4)), f: t => t.dir === filter.slice(4) || t.dir.startsWith(filter.slice(4) + '/')} : FILTERS[filter || 'all'];
   T.forEach(t => { t.trk = t.id===1 || t.id===12; });
   const list = T.filter(F.f).filter(t => Object.entries(adv).every(([k,v]) => !v || v==='any' || ADV[k][v](t))).sort((a,b) => a.name.localeCompare(b.name));
@@ -728,7 +762,7 @@ function renderRows(selId, filter){
   document.getElementById('rows').innerHTML = list.length ? list.map(t=>(one?rowOne:row)(t, t.id===selId)).join('')
     : `<div class="empty"><div class="t">Nothing matches</div>${Object.values(adv).some(v=>v&&v!=='any') ? 'Try loosening a filter · <a href="#" id="eclear" style="color:var(--accent)">clear all</a>' : 'No torrents in this view'}</div>`;
   const ec = document.getElementById('eclear'); if (ec) ec.onclick = e => { e.preventDefault(); adv = {}; syncAdv(); renderRows(null, filter); };
-  const sb = document.getElementById('selbar'); if (sb) sb.hidden = !selId;
+  const sb = document.getElementById('selbar'); if (sb) sb.hidden = !selId || RM.ids.length > 0;
   const ft = document.getElementById('ftitle'), fc = document.getElementById('fcount');
   if (ft) ft.textContent = F.label;
   if (fc) fc.textContent = (list.length===T.length ? `${T.length}` : `${list.length} of ${T.length}`) + ` · ${list.reduce((a,t)=>a+gb(t.size),0).toFixed(1)} GB`;
@@ -749,9 +783,81 @@ function contextMenu(rowEl){
     it('trash','Remove and delete data…','⌫','danger') + it('x','Remove from list','⌘⌫','danger');
   document.body.appendChild(m);
 }
+// ───────── Bulk removal, mocked ─────────
+// The daemon deletes serially and blocks its RPC thread for each torrent, so there is no
+// server-side progress to read. The client makes it by issuing one torrent-remove per
+// torrent and counting the responses: every reply means that one's files are really gone.
+// This mock fakes the reply timing (file count, not size, drives the real duration).
+function rmRender(){
+  const bar = document.getElementById('rmbar'); if (!bar) return;
+  const total = RM.ids.length;
+  bar.hidden = !total;
+  if (!total) return;
+  const fill = document.getElementById('rmfill');
+  fill.style.setProperty('--p', Math.round(RM.done/total*100) + '%');
+  bar.classList.toggle('has-fail', RM.fails > 0);
+  const cur = RM.ids[RM.done];
+  const finished = RM.done >= total || RM.stopped;
+  bar.classList.toggle('done', finished);
+  const verb = RM.del ? 'Deleting' : 'Removing';
+  document.getElementById('rmcount').textContent = finished
+    ? (RM.fails ? `Removed ${RM.done - RM.fails} of ${total}, ${RM.fails} failed` : `Removed ${RM.done} torrents`)
+    : `${verb} ${RM.done + 1} of ${total}`;
+  const who = document.getElementById('rmwho');
+  who.textContent = finished ? '' : (T.find(t=>t.id===cur)?.name || '');
+  const sbtn = document.getElementById('rmstop');
+  sbtn.hidden = finished && !RM.fails;
+  sbtn.textContent = finished ? 'Dismiss' : 'Stop';
+  sbtn.onclick = finished ? rmDismiss : rmHalt;
+}
+function rmStep(){
+  if (RM.stopped) { rmRender(); return; }
+  const total = RM.ids.length;
+  if (RM.done >= total) { rmRender(); RM.timer = setTimeout(rmEnd, 2200); return; }
+  const id = RM.ids[RM.done];
+  // one torrent in the batch fails, so the mock shows the partial-failure wording too
+  const fail = RM.done === 6;
+  RM.state[id] = RM.del ? 'Deleting files…' : 'Removing…';
+  renderRows(null, RM.filter); rmRender();
+  RM.timer = setTimeout(() => {
+    if (fail) { RM.state[id] = 'Failed: permission denied'; RM.fails++; }
+    else { delete RM.state[id]; T = T.filter(t=>t.id!==id); }
+    RM.done++;
+    renderRows(null, RM.filter); rmStep();
+  }, 700 + (RM.done % 3) * 500);
+}
+function rmEnd(){
+  // A torrent that failed to go keeps its marker and its row: the whole point of this
+  // feature is that nothing disappears silently, and that includes failures. Only the
+  // successful ones are cleared. The pill sticks around too when something failed, so
+  // the summary has to be dismissed rather than blinking past.
+  if (RM.fails) { rmRender(); return; }
+  Object.keys(RM.state).forEach(k=>delete RM.state[k]);
+  RM.ids = []; RM.done = 0; RM.fails = 0; RM.stopped = false;
+  renderRows(null, RM.filter); rmRender();
+}
+function rmDismiss(){
+  Object.keys(RM.state).forEach(k=>delete RM.state[k]);
+  RM.ids = []; RM.done = 0; RM.fails = 0; RM.stopped = false;
+  renderRows(null, RM.filter); rmRender();
+}
+function rmStart(ids, del){
+  clearTimeout(RM.timer);
+  RM.ids = ids.slice(); RM.done = 0; RM.fails = 0; RM.stopped = false; RM.del = del !== false;
+  RM.ids.forEach(id => { RM.state[id] = 'Queued for removal'; });
+  document.querySelectorAll('.row').forEach(r=>r.classList.remove('sel'));
+  syncSel();
+  renderRows(null, RM.filter); rmStep();
+}
+function rmHalt(){
+  RM.stopped = true;
+  Object.keys(RM.state).forEach(k=>{ if (RM.state[k]==='Queued for removal') delete RM.state[k]; });
+  renderRows(null, RM.filter); rmRender();
+  RM.timer = setTimeout(rmEnd, 2200);
+}
 function syncSel(){
   const rows = [...document.querySelectorAll('.row')], sel = rows.filter(r=>r.classList.contains('sel'));
-  const sb = document.getElementById('selbar'); if (!sb) return; sb.hidden = !sel.length;
+  const sb = document.getElementById('selbar'); if (!sb) return; sb.hidden = !sel.length || RM.ids.length > 0;
   document.getElementById('selcount').textContent = sel.length + ' selected';
   const a = document.getElementById('selall'); a.classList.toggle('on', sel.length && sel.length===rows.length); a.classList.toggle('some', sel.length && sel.length<rows.length);
 }
@@ -804,4 +910,14 @@ document.getElementById('selclear').onclick = () => { document.querySelectorAll(
 document.getElementById('tmenu').onclick = e => { document.querySelectorAll('.cmenu').forEach(x=>x.remove()); toolbarMenu(e.currentTarget); e.stopPropagation(); };
 if (Q.get('sel')) selectIds(Q.get('sel').split(',').map(Number));
 if (Q.has('tmenu')) toolbarMenu(document.getElementById('tmenu'));
+// Bulk removal: the sel-bar's Remove hands its ids to the sequence and steps aside.
+document.querySelector('#selbar .btn.danger').onclick = () => {
+  const ids = [...document.querySelectorAll('.row.sel')].map(r=>+r.dataset.id);
+  if (ids.length) rmStart(ids, true);
+};
+// ?rm=10 removes the first N rows in view, so the sequence can be watched without clicking.
+if (Q.has('rm')) {
+  const n = +Q.get('rm') || 10;
+  rmStart([...document.querySelectorAll('.row')].slice(0, n).map(r=>+r.dataset.id), Q.get('del') !== '0');
+}
 </script>

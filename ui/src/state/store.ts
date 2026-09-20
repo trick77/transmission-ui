@@ -38,8 +38,28 @@ export interface Snapshot {
   dialog: Dialog
   dismissed: Set<string>   // tracker-down notices dismissed, "host@since"
   toast: string
+  removing: Removing | null   // bulk removal in flight, see removeSequence()
   density: Density
   sidebarW: number         // the user's preferred sidebar width in px, before the CSS clamp
+}
+
+/**
+ * A bulk remove+delete in progress. The daemon gives us nothing to render: torrent-remove
+ * is a sync handler on the session thread, so it answers no other request while it unlinks
+ * and its 200 is a completion signal rather than an ack. So the client makes the progress
+ * itself, one torrent-remove per torrent, and this is the tally.
+ *
+ * `failed` outlives the run: a removal that did not happen has to stay on screen, or the
+ * silence this feature exists to fix comes back in a worse form.
+ */
+export interface Removing {
+  token: number                              // identifies this run; see removeSequence()
+  ids: number[]                              // the whole batch, in visible list order
+  done: number                               // responses received, successes and failures
+  active: number | null                      // the id the daemon is deleting right now
+  failed: { id: number; msg: string }[]
+  deleteData: boolean
+  stopped: boolean
 }
 
 export type Density = 'compact' | 'comfortable'
@@ -77,6 +97,7 @@ let snap: Snapshot = {
   dialog: { kind: 'none' },
   dismissed: new Set(readLocal<string[]>('tm.dismissed', [])),
   toast: '',
+  removing: null,
   density: initialDensity(),
   sidebarW: initialSidebarW(),
 }
@@ -204,6 +225,125 @@ export function toast(msg: string) {
 
 export async function run(label: string, fn: () => Promise<unknown>) {
   try { await fn(); refreshNow() } catch (e) { toast(`${label} failed: ${e instanceof Error ? e.message : e}`) }
+}
+
+const errMsg = (e: unknown) => e instanceof Error ? e.message : String(e)
+
+/**
+ * Remove torrents with visible progress.
+ *
+ * Deleting the data is the slow case: the daemon unlinks file by file on its session
+ * thread and answers nothing meanwhile, so one RPC carrying ten ids is a single opaque
+ * stall with the rows still sitting there. We therefore send one torrent-remove per
+ * torrent and count the replies -- each one means that torrent's files are really gone.
+ * This is the documented exception to "bulk actions = one RPC with an id array"; the
+ * price is that the loop lives in the browser, so closing the tab mid-run leaves the
+ * rest of the batch in place.
+ *
+ * Remove-from-list does not touch the disk and returns immediately, so it stays one call.
+ */
+/**
+ * The ids the list is currently showing, in the order it shows them. List.tsx owns the
+ * sorting and filtering, so it publishes the result here rather than the store trying to
+ * recompute a view it does not own.
+ */
+let viewOrder: number[] = []
+export function setViewOrder(ids: number[]) { viewOrder = ids }
+
+let removalToken = 0
+
+export async function removeSequence(ids: number[], deleteData: boolean) {
+  if (!ids.length) return
+  // A finished run hangs around so its failures stay readable, so "already removing" has
+  // to mean actually in flight. Otherwise retrying the torrent that just failed would be
+  // dropped on the floor without a word -- the silence this whole feature exists to kill.
+  const prev = snap.removing
+  if (prev && !prev.stopped && prev.done < prev.ids.length) {
+    toast('A removal is already running')
+    return
+  }
+  // Progress should walk down the screen, so the batch follows the order the rows are
+  // displayed in. The caller passes that order (it holds the sorted, filtered list);
+  // store order is the fallback, since `selected` is a Set and carries no order at all.
+  const order = (viewOrder.length ? viewOrder : snap.torrents.map(t => t.id)).filter(id => ids.includes(id))
+  const batch = order.length === ids.length ? order : [...new Set([...order, ...ids])]
+  // The rows are on their way out: drop them from the selection so the sel-bar cannot
+  // fire a second remove at torrents that are already going.
+  const sel = new Set(snap.selected)
+  for (const id of batch) sel.delete(id)
+  // A stopped or dismissed run can still have a request in flight, and it lands after the
+  // next run has started. Every update is therefore stamped with this run's token and
+  // dropped if the store has moved on -- otherwise a late reply would be counted against
+  // somebody else's tally, and this loop would read the new run's stopped:false and carry
+  // on deleting past the Stop the user pressed.
+  const token = ++removalToken
+  const mine = () => { const r = get().removing; return r && r.token === token ? r : null }
+  const patch = (f: (r: Removing) => Partial<Removing>) => { const r = mine(); if (r) set({ removing: { ...r, ...f(r) } }) }
+  set({ selected: sel, removing: { token, ids: batch, done: 0, active: null, failed: [], deleteData, stopped: false } })
+
+  if (!deleteData) {
+    try {
+      await api.remove(batch, false)
+      patch(() => ({ done: batch.length, active: null }))
+    } catch (e) {
+      // One call, one failure: the batch never reached the daemon, so this is reported as
+      // a plain toast rather than marking every row as individually failed. The run ends
+      // here, without the success toast finishRemoval would otherwise write over it.
+      patch(() => ({ done: batch.length, active: null }))
+      if (mine()) set({ removing: null })
+      refreshNow()
+      toast(`Remove failed: ${errMsg(e)}`)
+      return
+    }
+    return finishRemoval(token)
+  }
+
+  for (const id of batch) {
+    const cur = mine()
+    if (!cur || cur.stopped) break
+    patch(() => ({ active: id }))
+    try {
+      await api.remove([id], true)
+      // The 200 means the files are gone, so drop the row now instead of waiting for the
+      // next poll. mergeTorrents() deleting the same id later is a harmless no-op.
+      const byId = new Map(get().byId)
+      byId.delete(id)
+      set({ torrents: [...byId.values()], byId })
+      // The inspector cannot be left showing a torrent whose files are gone: the poll that
+      // would normally notice cannot run until the whole batch is done.
+      if (get().focusId === id) set({ focusId: null, detail: null })
+      patch(r => ({ done: r.done + 1, active: null }))
+    } catch (e) {
+      patch(r => ({ done: r.done + 1, active: null, failed: [...r.failed, { id, msg: errMsg(e) }] }))
+    }
+  }
+  return finishRemoval(token)
+}
+
+/**
+ * A clean run clears itself; a run with failures does not. Those rows stay marked until
+ * the user dismisses them, because a removal that silently did not happen is exactly the
+ * thing this feature exists to make impossible.
+ */
+function finishRemoval(token: number) {
+  refreshNow()
+  const r = get().removing
+  // Somebody else's run is on screen now: leave it alone.
+  if (!r || r.token !== token) return
+  if (r.failed.length) return
+  const n = r.done
+  set({ removing: null })
+  if (n) toast(r.deleteData ? `Removed ${n === 1 ? '1 torrent' : `${n} torrents`} and data` : `Removed ${n === 1 ? '1 torrent' : `${n} torrents`}`)
+}
+
+/** Stop issuing further removes. The one in flight cannot be aborted: the daemon is mid-unlink. */
+export function stopRemoval() {
+  set(s => s.removing ? { removing: { ...s.removing, stopped: true } } : {})
+}
+
+/** Clear a finished run's summary and its failed-row markers. */
+export function dismissRemoval() {
+  set({ removing: null })
 }
 
 export function dismissNotice(key: string) {

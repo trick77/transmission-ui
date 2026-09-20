@@ -80,6 +80,12 @@
           <button class="btn sm ghost icon" title="More: verify, re-announce, queue, limits"><svg class="i"><use href="#i-more"/></svg></button>
           <button class="x" id="selclear" title="Clear selection"><svg class="i" style="width:13px;height:13px"><use href="#i-x"/></svg></button>
         </div>
+        <div class="rm-bar" id="rmbar" hidden>
+          <span class="v" id="rmcount">Removing 1 of 10</span>
+          <span class="who" id="rmwho">debian-13.1.0-amd64-netinst.iso</span>
+          <span class="track"><i id="rmfill" style="--p:0%"></i></span>
+          <button class="btn sm ghost" id="rmstop">Stop</button>
+        </div>
         <button class="btn ghost sm" id="fbtn"><svg class="i" style="width:14px;height:14px"><use href="#i-search"/></svg>Filter<span class="badge" id="fbadge" hidden>0</span></button>
         <button class="btn ghost sm" title="Sort"><svg class="i" style="width:14px;height:14px"><use href="#i-sort"/></svg>Name</button>
         <div class="fpop" id="fpop" hidden>

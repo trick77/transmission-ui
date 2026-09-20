@@ -2,6 +2,7 @@
 //
 //   node ui/sim/server.ts            # :9092, then point TM_RPC_TARGET at it
 //   TM_SIM_SPEED=30 node ui/sim/server.ts
+//   TM_SIM_REMOVE_MS=1500 node ui/sim/server.ts   # make deletes stall the whole sim
 //
 // Needs Node >= 23.6 for built-in TypeScript type stripping. No build step, no dependencies.
 
@@ -27,6 +28,22 @@ const PORT = knob('TM_SIM_PORT', 9092, 1)
 const SEED = knob('TM_SIM_SEED', 1)
 const COUNT = knob('TM_SIM_COUNT', 1, 1)
 const SPEED = knob('TM_SIM_SPEED', 1)
+// Milliseconds the sim pretends to spend unlinking one torrent's files. 0 (the default)
+// keeps the sim snappy; set it to see what the real daemon does to the UI.
+const REMOVE_MS = knob('TM_SIM_REMOVE_MS', 0)
+
+/**
+ * The daemon deletes local data on its session thread, and its RPC server runs on that
+ * same event loop, so while it unlinks it answers nothing at all -- polls included. That
+ * whole-daemon stall is the thing the UI has to survive, so the sim reproduces it with one
+ * gate every request waits behind, not just a delay on the remove itself.
+ */
+let gate: Promise<void> = Promise.resolve()
+function blockFor(ms: number) {
+  const until = gate.then(() => new Promise<void>(r => setTimeout(r, ms)))
+  gate = until.catch(() => {})
+  return until
+}
 
 const state = createState({ seed: SEED, count: COUNT, speed: SPEED })
 // The daemon hands out one session id and rejects requests without it, which is what makes
@@ -75,6 +92,13 @@ const server = createServer(async (req, res) => {
   const now = Math.floor(nowMs / 1000)
 
   try {
+    // Every request queues behind an in-flight delete, and a delete adds its own stall.
+    if (REMOVE_MS > 0) {
+      const n = method === 'torrent_remove' && args.delete_local_data
+        ? (Array.isArray(args.ids) ? args.ids.length : 1)
+        : 0
+      await (n > 0 ? blockFor(REMOVE_MS * n) : gate)
+    }
     const result = handle(state, method, args, now)
     send(res, 200, { jsonrpc: '2.0', id, result })
   } catch (e) {
