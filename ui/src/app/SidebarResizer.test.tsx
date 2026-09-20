@@ -203,8 +203,10 @@ describe('SidebarResizer', () => {
     // Chrome throws NotFoundError from releasePointerCapture once the pointer is gone,
     // which is the pointercancel case. Guarding on hasPointerCapture avoids the throw;
     // committing first means even a throw could not cost us the drag.
-    h.hasPointerCapture = () => false
-    h.releasePointerCapture = () => { order.push('release') }
+    // Chrome can throw NotFoundError here on pointercancel. The commit must already
+    // have happened, and the throw must not escape.
+    h.hasPointerCapture = () => true
+    h.releasePointerCapture = () => { order.push('release'); throw new DOMException('gone', 'NotFoundError') }
     // test-setup.ts swaps in its own storage object, so spy on the instance.
     vi.spyOn(localStorage, 'setItem')
     const seen = vi.mocked(localStorage.setItem)
@@ -214,8 +216,8 @@ describe('SidebarResizer', () => {
     fireEvent.pointerCancel(h, { pointerId: 1 })
 
     expect(get().sidebarW).toBe(300)
-    expect(seen).toHaveBeenCalledWith('tm.sidebar-w', '300')   // committed
-    expect(order).toEqual([])                                   // release skipped, so it cannot throw
+    expect(seen).toHaveBeenCalledWith('tm.sidebar-w', '300')   // committed despite the throw
+    expect(order).toEqual(['release'])                          // and the throw was swallowed
   })
 
   // Review finding: a completed drag used to arm the double-tap window, so re-grabbing

@@ -5,6 +5,13 @@ const STEP = 16          // px per arrow key
 const DOUBLE_TAP_MS = 350
 const DRAG_SLOP = 3       // px of travel before a tap counts as a drag
 
+/** The sidebar's on-screen width, which the CSS clamp may hold below the preference. */
+function renderedWidth(fallback: number): number {
+  const el = document.querySelector('.sidebar')
+  const w = el?.getBoundingClientRect().width ?? 0
+  return w > 0 ? w : fallback          // jsdom lays nothing out
+}
+
 /** Write the width to the DOM only. The CSS clamp on --sidebar-w does the viewport cap. */
 function paint(w: number) {
   document.documentElement.style.setProperty('--sidebar-pref', w + 'px')
@@ -53,7 +60,10 @@ export function SidebarResizer() {
     }
     lastDown.current = now
     active.current = e.pointerId
-    start.current = { x: e.clientX, w: live.current }
+    // Seed from the RENDERED width, not the preference: --sidebar-w is clamped to
+    // 40vw, so on any viewport under 1050px (every iPad) the two diverge and an
+    // offset drag would spend that difference moving nothing.
+    start.current = { x: e.clientX, w: renderedWidth(live.current) }
     moved.current = false
     e.preventDefault()
     // preventDefault suppresses the compatibility mousedown, and with it the focus it
@@ -90,9 +100,11 @@ export function SidebarResizer() {
     // A completed drag must not arm the double-tap window either: re-grabbing the
     // handle within 350ms to fine-tune would snap the width back to the default.
     if (moved.current) { lastDown.current = -Infinity; commit(live.current) }
-    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    }
+    // The spec releases capture AFTER dispatching pointercancel, and NotFoundError
+    // keys on whether the pointer is still active rather than on capture state, so
+    // hasPointerCapture is not a reliable guard. Capture is released implicitly
+    // anyway; this is belt and braces.
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch { /* already gone */ }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
