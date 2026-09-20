@@ -69,7 +69,7 @@ func New(cfg Config) (http.Handler, error) {
 					log.Printf("transmission rejected our RPC credentials (401); check TM_USER/TM_PASS")
 				}
 				resp.Header.Del("WWW-Authenticate")
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				resp.StatusCode = http.StatusBadGateway
 				resp.Status = "502 Bad Gateway"
 				resp.Body = io.NopCloser(strings.NewReader("upstream refused the request"))
@@ -79,7 +79,7 @@ func New(cfg Config) (http.Handler, error) {
 			}
 			return nil
 		},
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		},
 	}

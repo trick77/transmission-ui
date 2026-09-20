@@ -12,6 +12,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+      # main.go embeds the bundle (//go:embed all:dist) and backend/dist is
+      # gitignored, so the UI has to be built before the linter can typecheck
+      # the package, exactly as the backend job does.
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
+      - run: cp -R ui/dist/. backend/dist/
+      # Pinned: v2.11 runs a G706 log-injection check that v2.13 dropped, so an
+      # unpinned bump makes the repo pass locally and fail here.
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13
+          working-directory: backend
+
   backend:
     name: Backend (vet + test)
     runs-on: ubuntu-latest
