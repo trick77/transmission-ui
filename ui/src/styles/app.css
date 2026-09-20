@@ -237,7 +237,9 @@ body.resizing{cursor:col-resize;user-select:none}
 .row.pending{opacity:.45;pointer-events:none}
 .row.pending .acts{display:none}
 .row.pending .rm-st{color:var(--ink-2)}
-.row.pending.failed{opacity:1}
+/* A failed removal is the one pending state the user still has to act on, so it keeps
+   full opacity and stays clickable. */
+.row.pending.failed{opacity:1;pointer-events:auto}
 .row.pending.failed .rm-st{color:var(--err)}
 .row .chk{cursor:pointer}
 .row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23faf9f5' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");background-size:12px;background-position:center;background-repeat:no-repeat}

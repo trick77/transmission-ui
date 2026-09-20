@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { removalOf } from './List'
 import type { Removing } from '../state/store'
 
-const base: Removing = { ids: [1, 2, 3], done: 0, active: null, failed: [], deleteData: true, stopped: false }
+const base: Removing = { token: 1, ids: [1, 2, 3], done: 0, active: null, failed: [], deleteData: true, stopped: false }
 
 describe('removalOf', () => {
   it('says nothing when no removal is running', () => {

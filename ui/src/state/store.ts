@@ -53,6 +53,7 @@ export interface Snapshot {
  * silence this feature exists to fix comes back in a worse form.
  */
 export interface Removing {
+  token: number                              // identifies this run; see removeSequence()
   ids: number[]                              // the whole batch, in visible list order
   done: number                               // responses received, successes and failures
   active: number | null                      // the id the daemon is deleting right now
@@ -241,34 +242,66 @@ const errMsg = (e: unknown) => e instanceof Error ? e.message : String(e)
  *
  * Remove-from-list does not touch the disk and returns immediately, so it stays one call.
  */
+/**
+ * The ids the list is currently showing, in the order it shows them. List.tsx owns the
+ * sorting and filtering, so it publishes the result here rather than the store trying to
+ * recompute a view it does not own.
+ */
+let viewOrder: number[] = []
+export function setViewOrder(ids: number[]) { viewOrder = ids }
+
+let removalToken = 0
+
 export async function removeSequence(ids: number[], deleteData: boolean) {
-  if (!ids.length || snap.removing) return
-  // Visible list order, so progress walks down the screen rather than following the
-  // order the user happened to click in (`selected` is a Set).
-  const order = snap.torrents.map(t => t.id).filter(id => ids.includes(id))
+  if (!ids.length) return
+  // A finished run hangs around so its failures stay readable, so "already removing" has
+  // to mean actually in flight. Otherwise retrying the torrent that just failed would be
+  // dropped on the floor without a word -- the silence this whole feature exists to kill.
+  const prev = snap.removing
+  if (prev && !prev.stopped && prev.done < prev.ids.length) {
+    toast('A removal is already running')
+    return
+  }
+  // Progress should walk down the screen, so the batch follows the order the rows are
+  // displayed in. The caller passes that order (it holds the sorted, filtered list);
+  // store order is the fallback, since `selected` is a Set and carries no order at all.
+  const order = (viewOrder.length ? viewOrder : snap.torrents.map(t => t.id)).filter(id => ids.includes(id))
   const batch = order.length === ids.length ? order : [...new Set([...order, ...ids])]
   // The rows are on their way out: drop them from the selection so the sel-bar cannot
   // fire a second remove at torrents that are already going.
   const sel = new Set(snap.selected)
   for (const id of batch) sel.delete(id)
-  set({ selected: sel, removing: { ids: batch, done: 0, active: null, failed: [], deleteData, stopped: false } })
+  // A stopped or dismissed run can still have a request in flight, and it lands after the
+  // next run has started. Every update is therefore stamped with this run's token and
+  // dropped if the store has moved on -- otherwise a late reply would be counted against
+  // somebody else's tally, and this loop would read the new run's stopped:false and carry
+  // on deleting past the Stop the user pressed.
+  const token = ++removalToken
+  const mine = () => { const r = get().removing; return r && r.token === token ? r : null }
+  const patch = (f: (r: Removing) => Partial<Removing>) => { const r = mine(); if (r) set({ removing: { ...r, ...f(r) } }) }
+  set({ selected: sel, removing: { token, ids: batch, done: 0, active: null, failed: [], deleteData, stopped: false } })
 
   if (!deleteData) {
     try {
       await api.remove(batch, false)
-      set(s => s.removing ? { removing: { ...s.removing, done: batch.length, active: null } } : {})
+      patch(() => ({ done: batch.length, active: null }))
     } catch (e) {
-      set(s => s.removing ? { removing: { ...s.removing, done: batch.length, active: null, failed: batch.map(id => ({ id, msg: errMsg(e) })) } } : {})
+      // One call, one failure: the batch never reached the daemon, so this is reported as
+      // a plain toast rather than marking every row as individually failed. The run ends
+      // here, without the success toast finishRemoval would otherwise write over it.
+      patch(() => ({ done: batch.length, active: null }))
+      if (mine()) set({ removing: null })
+      refreshNow()
+      toast(`Remove failed: ${errMsg(e)}`)
+      return
     }
-    return finishRemoval()
+    return finishRemoval(token)
   }
 
   for (const id of batch) {
-    // Re-read through get(): `snap` is reassigned by set(), so a narrowing from before
-    // the await no longer describes it.
-    const cur = get().removing
+    const cur = mine()
     if (!cur || cur.stopped) break
-    set(s => s.removing ? { removing: { ...s.removing, active: id } } : {})
+    patch(() => ({ active: id }))
     try {
       await api.remove([id], true)
       // The 200 means the files are gone, so drop the row now instead of waiting for the
@@ -276,12 +309,15 @@ export async function removeSequence(ids: number[], deleteData: boolean) {
       const byId = new Map(get().byId)
       byId.delete(id)
       set({ torrents: [...byId.values()], byId })
-      set(s => s.removing ? { removing: { ...s.removing, done: s.removing.done + 1, active: null } } : {})
+      // The inspector cannot be left showing a torrent whose files are gone: the poll that
+      // would normally notice cannot run until the whole batch is done.
+      if (get().focusId === id) set({ focusId: null, detail: null })
+      patch(r => ({ done: r.done + 1, active: null }))
     } catch (e) {
-      set(s => s.removing ? { removing: { ...s.removing, done: s.removing.done + 1, active: null, failed: [...s.removing.failed, { id, msg: errMsg(e) }] } } : {})
+      patch(r => ({ done: r.done + 1, active: null, failed: [...r.failed, { id, msg: errMsg(e) }] }))
     }
   }
-  return finishRemoval()
+  return finishRemoval(token)
 }
 
 /**
@@ -289,10 +325,11 @@ export async function removeSequence(ids: number[], deleteData: boolean) {
  * the user dismisses them, because a removal that silently did not happen is exactly the
  * thing this feature exists to make impossible.
  */
-function finishRemoval() {
+function finishRemoval(token: number) {
   refreshNow()
   const r = get().removing
-  if (!r) return
+  // Somebody else's run is on screen now: leave it alone.
+  if (!r || r.token !== token) return
   if (r.failed.length) return
   const n = r.done
   set({ removing: null })

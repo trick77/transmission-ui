@@ -39,7 +39,7 @@ describe('removeSequence with delete-data', () => {
     expect(calls.every(c => c.delete_local_data === true)).toBe(true)
   })
 
-  it('walks the batch in visible list order, not selection order', async () => {
+  it('walks the batch in store order when the list has published none', async () => {
     d = installFakeDaemon({ torrents: three() })
     const { removeSequence, set } = await freshStore()
     set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])) })
@@ -48,6 +48,18 @@ describe('removeSequence with delete-data', () => {
     await removeSequence([3, 1, 2], true)
 
     expect(d.of('torrent_remove').map(c => c.ids)).toEqual([[1], [2], [3]])
+  })
+
+  it('follows the order the rows are displayed in, not the store or the click order', async () => {
+    d = installFakeDaemon({ torrents: three() })
+    const { removeSequence, setViewOrder, set } = await freshStore()
+    set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])) })
+    // what List.tsx shows: sorted descending, so progress should walk 3, 2, 1
+    setViewOrder([3, 2, 1])
+
+    await removeSequence([1, 2, 3], true)
+
+    expect(d.of('torrent_remove').map(c => c.ids)).toEqual([[3], [2], [1]])
   })
 
   it('drops each row as its own response lands, rather than waiting for a poll', async () => {
@@ -149,6 +161,41 @@ describe('partial failure', () => {
     expect(get().toast).toContain('3 torrents')
   })
 
+  it('lets the user retry the torrent that just failed, instead of swallowing it', async () => {
+    let fail = true
+    d = installFakeDaemon({ torrents: three(), onRemove: () => { if (fail) throw new Error('permission denied') } })
+    const { removeSequence, set, get } = await freshStore()
+    set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])) })
+
+    await removeSequence([1], true)
+    expect(get().removing?.failed).toHaveLength(1)   // summary still on screen
+
+    // user fixes the permissions and tries again: this must start a new run, not be dropped
+    fail = false
+    await removeSequence([1], true)
+
+    expect(d.of('torrent_remove')).toHaveLength(2)
+    expect(get().removing).toBeNull()
+  })
+
+  it('refuses a second run while one is actually in flight, and says so', async () => {
+    const gates: (() => void)[] = []
+    d = installFakeDaemon({ torrents: three(), onRemove: () => new Promise<void>(r => { gates.push(r) }) })
+    const { removeSequence, set, get } = await freshStore()
+    set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])) })
+
+    const done = removeSequence([1, 2], true)
+    await settle()
+    await removeSequence([3], true)
+
+    expect(get().toast).toContain('already running')
+    expect(d.of('torrent_remove').map(c => c.ids)).toEqual([[1]])   // torrent 3 was not sent
+
+    gates.shift()?.(); await settle()
+    gates.shift()?.(); await settle()
+    await done
+  })
+
   it('dismissRemoval clears a finished run with failures', async () => {
     d = installFakeDaemon({ torrents: three(), onRemove: ids => { if (ids[0] === 1) throw new Error('nope') } })
     const { removeSequence, dismissRemoval, set, get } = await freshStore()
@@ -173,6 +220,79 @@ describe('remove from list', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].ids).toEqual([1, 2, 3])
     expect(calls[0].delete_local_data).toBe(false)
+  })
+
+  it('toasts a transport error instead of blaming every row in the batch', async () => {
+    d = installFakeDaemon({ torrents: three(), onRemove: () => { throw new Error('HTTP 502') } })
+    const { removeSequence, set, get } = await freshStore()
+    set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])) })
+
+    await removeSequence([1, 2, 3], false)
+
+    // the batch never reached the daemon, so no individual torrent failed
+    expect(get().toast).toContain('502')
+    expect(get().removing).toBeNull()
+  })
+})
+
+describe('a run that outlives its own stop', () => {
+  it('does not keep deleting after Stop, even once a later run has started', async () => {
+    const gates: (() => void)[] = []
+    d = installFakeDaemon({ torrents: three(), onRemove: () => new Promise<void>(r => { gates.push(r) }) })
+    const { removeSequence, stopRemoval, dismissRemoval, set } = await freshStore()
+    set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])) })
+
+    const first = removeSequence([1, 2, 3], true)
+    await settle()
+    stopRemoval()
+    dismissRemoval()              // user clears the bar while torrent 1 is still unlinking
+
+    // a fresh run starts before the old one's reply lands
+    const second = removeSequence([3], true)
+    await settle()
+    gates.shift()?.()             // torrent 1 finally comes back, inside the stopped loop
+    await settle()
+    gates.shift()?.()
+    await settle()
+    await Promise.all([first, second])
+
+    // torrent 2 must never have been asked for: the user pressed Stop
+    expect(d.of('torrent_remove').map(c => c.ids)).toEqual([[1], [3]])
+  })
+
+  it('does not count a stale reply against the run now on screen', async () => {
+    const gates: (() => void)[] = []
+    d = installFakeDaemon({ torrents: three(), onRemove: () => new Promise<void>(r => { gates.push(r) }) })
+    const { removeSequence, stopRemoval, dismissRemoval, set, get } = await freshStore()
+    set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])) })
+
+    const first = removeSequence([1, 2], true)
+    await settle()
+    stopRemoval(); dismissRemoval()
+
+    const second = removeSequence([3], true)
+    await settle()
+    gates.shift()?.()             // the old run's reply
+    await settle()
+    // the new run has one torrent and has not had its own reply yet
+    expect(get().removing?.done).toBe(0)
+
+    gates.shift()?.(); await settle()
+    await Promise.all([first, second])
+  })
+})
+
+describe('the inspector', () => {
+  it('closes when the torrent it is showing is deleted', async () => {
+    d = installFakeDaemon({ torrents: three() })
+    const { removeSequence, set, get } = await freshStore()
+    set({ torrents: three(), byId: new Map(three().map(t => [t.id, t])), focusId: 2 })
+
+    await removeSequence([2], true)
+
+    // the poll that would normally notice cannot run while the daemon is unlinking
+    expect(get().focusId).toBeNull()
+    expect(get().detail).toBeNull()
   })
 })
 

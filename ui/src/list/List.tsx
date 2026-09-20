@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, hostOf, type SortKey } from '../lib/model'
-import { dismissNotice, dismissRemoval, focus, run, set, stopRemoval, syncUrl, useStore, type Removing } from '../state/store'
+import { dismissNotice, dismissRemoval, focus, run, set, setViewOrder, stopRemoval, syncUrl, useStore, type Removing } from '../state/store'
 import * as api from '../rpc/methods'
 import { Menu, Seg, useDismiss } from '../app/ui'
 import { Row, type RowRemoval } from './Row'
@@ -57,6 +57,9 @@ export function List() {
     return torrents.filter(F.f).filter(advFn(adv)).filter(t => !q || t.name.toLowerCase().includes(q)).sort(sortFn(sort, sortDir, base))
   }, [torrents, F, adv, search, sort, sortDir, base])
   const ids = useMemo(() => list.map(t => t.id), [list])
+  // A removal walks the batch in the order the rows are on screen, and the store cannot
+  // work that out: the sorting and filtering live here.
+  useEffect(() => { setViewOrder(ids) }, [ids])
   const total = list.reduce((a, t) => a + t.size_when_done, 0)
   const on = advActive(adv)
 
@@ -225,7 +228,10 @@ function RemoveBar() {
   const byId = useStore(s => s.byId)
   if (!r) return null
   const total = r.ids.length
-  const finished = r.done >= total || r.stopped
+  // Stop cannot abort the torrent already being unlinked, so a stopped run is only
+  // finished once that one comes back. Otherwise the bar would claim "Removed 1 torrent"
+  // while still naming the torrent it is deleting.
+  const finished = (r.done >= total || r.stopped) && r.active == null
   const ok = r.done - r.failed.length
   const pct = total ? Math.round(r.done / total * 100) : 0
   const label = finished
