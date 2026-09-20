@@ -50,3 +50,26 @@ describe('initial density', () => {
     expect(get().density).toBe('compact')
   })
 })
+
+describe('initial sidebar width', () => {
+  it('defaults to 224 with nothing stored', async () => {
+    const { get } = await freshStore()
+    expect(get().sidebarW).toBe(224)
+  })
+
+  it('restores a stored width', async () => {
+    const { get } = await freshStore('/', { 'tm.sidebar-w': '320' })
+    expect(get().sidebarW).toBe(320)
+  })
+
+  it('clamps a stored width that is out of range', async () => {
+    const { get } = await freshStore('/', { 'tm.sidebar-w': '9999' })
+    expect(get().sidebarW).toBe(420)
+  })
+
+  // A hand-edited or half-written value must not collapse the shell.
+  it('falls back to the default on junk', async () => {
+    const { get } = await freshStore('/', { 'tm.sidebar-w': '"wide"' })
+    expect(get().sidebarW).toBe(224)
+  })
+})

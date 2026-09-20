@@ -1,5 +1,4 @@
 /* Ported verbatim from design/src/head.html. Edit the mock first, then re-run scratch port. */
-
 /* ───────── Tokens: warm editorial dark (ported from ../peeq ui/src/index.css) ───────── */
 @font-face{font-family:"Anthropic Sans";src:url("../assets/fonts/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
 @font-face{font-family:"Anthropic Serif";src:url("../assets/fonts/SerifWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
@@ -37,7 +36,13 @@
   --font: "Anthropic Sans", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --serif: "Anthropic Serif", Georgia, "Times New Roman", Times, serif;
   --mono: ui-monospace, "SF Mono", "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
-  --sidebar-w: 224px; --inspector-w: 400px; --header-h: 52px;
+  /* The sidebar is user-resizable: JS writes only --sidebar-pref, the clamp keeps
+     the result sane without a resize listener. A listener that re-clamped and wrote
+     back would destroy the preference on an iPad rotation. 40vw keeps the torrent
+     list the majority of a 1024px tablet. */
+  --sidebar-pref: 224px;
+  --sidebar-w: clamp(180px, var(--sidebar-pref), min(420px, 40vw));
+  --inspector-w: 400px; --header-h: 52px;
 }
 
 /* ───────── Base ───────── */
@@ -55,8 +60,22 @@ button{cursor:pointer;border:0;background:none;padding:0}
 kbd{font:11px var(--mono);color:var(--ink-3);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--surface)}
 svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
 
+/* ───────── Scrollbars ───────── */
+/* Firefox and Chrome 121+ use the standard scrollbar-* properties and ignore the
+   pseudo-elements below once those are set; the pseudo-elements are what Safari
+   honours. So the pill radius shows in Safari only — that is the standard property
+   doing its job, not a bug to chase. */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.10) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.10);border-radius:9999px}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(255,255,255,.18)}
+::-webkit-scrollbar-corner{background:transparent}
+
 /* ───────── App shell ───────── */
-.app{display:grid;grid-template-rows:var(--header-h) 1fr;grid-template-columns:var(--sidebar-w) 1fr;height:100%}
+/* position:relative so .side-resizer can pin against the shell. It cannot live
+   inside .sidebar, which scrolls. */
+.app{display:grid;grid-template-rows:var(--header-h) 1fr;grid-template-columns:var(--sidebar-w) 1fr;height:100%;position:relative}
 .header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface)}
 .brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em;width:calc(var(--sidebar-w) - 14px)}
 /* The mark, drawn as the favicon draws it: a filled gradient chip with the glyph
@@ -107,6 +126,21 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 
 /* ───────── Sidebar ───────── */
 .sidebar{border-right:1px solid var(--line);padding:14px 10px;overflow:auto;background:var(--bg)}
+/* Drag handle for the sidebar width. A hairline that only lights up on hover or
+   focus, with a hit area wider than the line. touch-action:none is required: without
+   it iPad Safari claims the gesture as a scroll and pointermove never arrives.
+   Coarse pointers get 24px, pushed into the sidebar's own 10px padding — centring it
+   would drop 12px onto the row checkboxes (.cols starts with a 24px column). */
+.side-resizer{position:absolute;top:var(--header-h);bottom:0;left:calc(var(--sidebar-w) - 6px);width:12px;z-index:5;cursor:col-resize;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.side-resizer::after{content:"";position:absolute;inset:0 5px;background:transparent;transition:background .12s}
+.side-resizer:hover::after,.side-resizer:focus-visible::after{background:var(--accent)}
+.side-resizer:focus-visible{outline:none}
+@media (pointer: coarse){
+  .side-resizer{width:24px;left:calc(var(--sidebar-w) - 18px)}
+  .side-resizer::after{inset:0 11px}
+}
+body.resizing{cursor:col-resize;user-select:none}
+body.resizing .side-resizer::after{background:var(--accent)}
 /* Signed-out screen. The server keeps the bundle away from anonymous visitors,
    so this is for a session that expires while the tab is open: same card as the
    backend's login page, so the two do not read as different applications. */
