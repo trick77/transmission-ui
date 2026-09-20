@@ -30,6 +30,7 @@ export function SidebarResizer() {
   // would snap the sidebar back to its pre-drag width.
   const live = useRef(w)
   const moved = useRef(false)
+  const active = useRef<number | null>(null)   // the pointer that owns the drag
 
   function commit(next: number) {
     live.current = next
@@ -41,6 +42,7 @@ export function SidebarResizer() {
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
+    if (active.current !== null) return        // a drag is already running; ignore a second finger
     const now = performance.now()
     if (now - lastDown.current < DOUBLE_TAP_MS) {
       lastDown.current = -Infinity
@@ -48,14 +50,19 @@ export function SidebarResizer() {
       return
     }
     lastDown.current = now
+    active.current = e.pointerId
     moved.current = false
     e.preventDefault()
+    // preventDefault suppresses the compatibility mousedown, and with it the focus it
+    // would have given us. Focus explicitly, or the arrow keys do nothing until the
+    // user tabs to the handle — and App's global keydown would claim them instead.
+    e.currentTarget.focus()
     e.currentTarget.setPointerCapture?.(e.pointerId)   // jsdom has no pointer capture
     document.body.classList.add('resizing')
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!document.body.classList.contains('resizing')) return
+    if (active.current !== e.pointerId) return
     const next = clampSidebar(e.clientX)
     moved.current = true
     live.current = next
@@ -64,10 +71,13 @@ export function SidebarResizer() {
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (!document.body.classList.contains('resizing')) return
+    if (active.current !== e.pointerId) return
+    active.current = null
     document.body.classList.remove('resizing')
     e.currentTarget.releasePointerCapture?.(e.pointerId)
-    if (moved.current) commit(live.current)   // a tap that never moved leaves the width alone
+    // A completed drag must not arm the double-tap window: re-grabbing the handle
+    // within 350ms to fine-tune would otherwise snap the width back to the default.
+    if (moved.current) { lastDown.current = -Infinity; commit(live.current) }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {

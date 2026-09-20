@@ -158,6 +158,51 @@ describe('SidebarResizer', () => {
     expect(pref()).toBe('')
   })
 
+  // Review finding: a completed drag used to arm the double-tap window, so re-grabbing
+  // the handle within 350ms to fine-tune snapped the sidebar back to the default.
+  it('does not treat a re-grab right after a drag as a double tap', () => {
+    const clock = vi.spyOn(performance, 'now')
+    render(<SidebarResizer />)
+    const h = handle()
+    clock.mockReturnValue(1000)
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 300 })
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    expect(get().sidebarW).toBe(300)
+
+    clock.mockReturnValue(1100)                 // 100ms later: inside the tap window
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 316 })
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    expect(get().sidebarW).toBe(316)            // fine-tuned, not reset to 224
+  })
+
+  // Review finding: a second finger landing mid-drag used to hijack the drag state and
+  // leave the painted width out of step with the store.
+  it('ignores a second pointer during a drag', () => {
+    render(<SidebarResizer />)
+    const h = handle()
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'touch' })
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 320 })
+    fireEvent.pointerDown(h, { pointerId: 2, pointerType: 'touch' })
+    fireEvent.pointerMove(h, { pointerId: 2, clientX: 200 })
+    fireEvent.pointerUp(h, { pointerId: 2 })
+    expect(pref()).toBe('320px')                // finger 2 moved nothing
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 340 })
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    expect(get().sidebarW).toBe(340)
+    expect(stored()).toBe(340)
+    expect(pref()).toBe('340px')
+  })
+
+  // preventDefault on pointerdown kills the compatibility mousedown, and with it focus.
+  it('focuses the handle on grab, so the arrow keys work straight after', () => {
+    render(<SidebarResizer />)
+    const h = handle()
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    expect(document.activeElement).toBe(h)
+  })
+
   // The tablet's only way back to the default: no context menu, no dblclick to rely on.
   it('resets on a double tap', () => {
     const clock = vi.spyOn(performance, 'now')
