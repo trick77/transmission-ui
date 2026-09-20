@@ -4,6 +4,8 @@ import { FILTERS, FILTER_ORDER, folderTree, labelCounts, trackerHealth, relDir }
 import { trackerName } from '../lib/trackers'
 import { set, syncUrl, useStore } from '../state/store'
 
+const PINNED = new Set<string>(['all', 'active', 'error'])
+
 function pick(filter: string) { set({ filter, selected: new Set() }); syncUrl() }
 
 export function Sidebar() {
@@ -22,9 +24,10 @@ export function Sidebar() {
       <div className="side-h">Status</div>
       {FILTER_ORDER.map(k => {
         const n = torrents.filter(FILTERS[k].f).length
-        // An empty filter is a dead end: hide it. 'all' anchors the list and the
-        // active filter has to stay, or selecting it would remove it from view.
-        if (n === 0 && k !== 'all' && filter !== k) return null
+        // An empty filter is a dead end: hide it. 'all' anchors the list,
+        // 'active'/'error' are pinned so the sidebar keeps a stable shape, and
+        // the active filter has to stay, or selecting it would remove it from view.
+        if (n === 0 && !PINNED.has(k) && filter !== k) return null
         return (
           <button key={k} className={'side-item' + (filter === k ? ' on' : '')} onClick={() => pick(k)} data-f={k}>
             <span className="lbl">{FILTERS[k].label}</span><span className="cnt">{n}</span>
