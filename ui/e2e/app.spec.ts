@@ -102,13 +102,32 @@ test('pause and resume flip the daemon status', async ({ page }) => {
   const seeding = (await torrents()).find(t => t.status === 6)!
   const row = page.locator(`.row[data-id="${seeding.id}"]`)
   // Pause lives in the row menu now; the trigger keeps its slot, so no hover first.
+  // The entry carries its ␣ shortcut hint, so match the label, not the whole cell.
   await row.locator('.acts .more').click()
-  await page.locator('.cmenu').getByText('Pause', { exact: true }).click()
+  await page.locator('.cmenu .it', { hasText: 'Pause' }).click()
   await expect.poll(async () => (await torrents()).find(t => t.id === seeding.id)!.status, { timeout: 8000 }).toBe(0)
   await expect(row.locator('.sdot.stop')).toBeVisible({ timeout: 8000 })
   await row.locator('.acts .more').click()
-  await page.locator('.cmenu').getByText('Resume', { exact: true }).click()
+  await page.locator('.cmenu .it', { hasText: 'Resume' }).click()
   await expect.poll(async () => (await torrents()).find(t => t.id === seeding.id)!.status, { timeout: 8000 }).not.toBe(0)
+})
+
+// The reason the column exists: a touch screen never fires hover, so a hover-gated
+// trigger is unreachable outright. Needs its own context -- hasTouch is per-context.
+test('on a touch screen every row shows its action trigger without interaction', async ({ browser }) => {
+  const ctx = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 1194, height: 834 }, colorScheme: 'dark' })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  await page.locator('.row').first().waitFor()
+  expect(await page.evaluate(() => matchMedia('(hover: none)').matches)).toBe(true)
+  const acts = page.locator('.row .acts')
+  const n = await acts.count()
+  const opacities = await acts.evaluateAll(els => els.map(e => getComputedStyle(e).opacity))
+  expect(opacities).toEqual(Array(n).fill('1'))
+  // Tap opens the menu with no hover anywhere in the sequence.
+  await page.locator('.row').first().locator('.acts .more').tap()
+  await expect(page.locator('.cmenu')).toBeVisible()
+  await ctx.close()
 })
 
 test('multi-select, selection bar and view menu', async ({ page }) => {
