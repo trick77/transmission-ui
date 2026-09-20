@@ -150,11 +150,12 @@ body.resizing .side-resizer::after{background:var(--accent)}
 .signin .btn{width:100%;justify-content:center}
 .signin .logo{width:34px;height:34px}
 
-/* Sidebar headings read as words, not as tracked-out caps: loom's scale
-   (14px / 400 / 20px line-height), sentence case, no letter-spacing. */
-.side-h{font-size:14px;font-weight:400;line-height:20px;color:var(--ink-3);padding:0 8px;margin:13px 0 4px}
+/* Sidebar headings read as words, not as tracked-out caps. They sit a step below
+   the entries so they label the group instead of competing with it. */
+.side-h{font-size:12px;font-weight:500;color:var(--ink-3);padding:0 8px;margin:13px 0 4px}
 .side-h:first-child{margin-top:0}
-.side-item{display:flex;align-items:center;gap:9px;height:25px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left}
+/* Entries carry loom's .ui-sidebar-text scale: 14px / 400 / 20px line-height. */
+.side-item{display:flex;align-items:center;gap:9px;min-height:28px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left;font-size:14px;font-weight:400;line-height:20px}
 .side-item:hover{background:var(--surface-2);color:var(--ink)}
 .side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:500;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
 .side-item .dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -171,8 +172,10 @@ body.resizing .side-resizer::after{background:var(--accent)}
 .side-item .st.issues{border:1.5px solid var(--ink-3);width:6px;height:6px}
 .side-item .sub{font-size:11px;color:var(--ink-3);white-space:nowrap}
 .side-item .sub.down{color:var(--err)}
-.side-item.two{height:auto;padding:5px 8px;align-items:flex-start}
+.side-item.two{padding:5px 8px;align-items:flex-start}
 .side-item.two .col{flex:1;min-width:0;line-height:1.25}
+/* The host sits on its own line above the status line. The leading comes from
+   .side-item.two .col above, which inherits here and overrides .side-item. */
 .side-item.two .col .lbl{display:block}
 /* tracker-down strip above the list */
 .notice{display:flex;align-items:center;gap:10px;margin:0 16px;padding:7px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:12px;color:var(--ink-2)}
@@ -222,8 +225,14 @@ body.resizing .side-resizer::after{background:var(--accent)}
 .chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
 
 /* ───────── Torrent rows ───────── */
-.cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
+/* The rows pane scrolls and the header does not, so whatever the scrollbar takes
+   out of the row grid has to be reserved here too, or every column sits a few px
+   left of its header. --sbw is measured at runtime (List.tsx): it is 10px with
+   classic scrollbars and 0 with overlay ones, so it cannot be hardcoded.
+   scrollbar-gutter does not work here: .cols is not a scroll container. */
+.cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px calc(16px + var(--sbw, 0px)) 6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
 .cols .r{text-align:right}
+.cols .r.hl{text-align:left}
 .cols .sort{color:var(--ink);display:inline-flex;align-items:center;gap:3px}
 .rows{overflow:auto;flex:1;padding-bottom:20px}
 .row{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}

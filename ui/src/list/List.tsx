@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, hostOf, type SortKey } from '../lib/model'
@@ -8,15 +8,23 @@ import { Menu, Seg, useDismiss } from '../app/ui'
 import { Row } from './Row'
 import { torrentMenu, viewMenu } from './actions'
 
+/** Reserve on the header whatever the scrolling rows pane loses to its scrollbar:
+ *  10px with classic scrollbars, 0 with overlay ones, so it cannot be hardcoded. */
+export function publishScrollbarWidth(pane: { offsetWidth: number; clientWidth: number }) {
+  const w = pane.offsetWidth - pane.clientWidth
+  document.documentElement.style.setProperty('--sbw', `${w}px`)
+  return w
+}
+
 const COLS: { key: SortKey; label: string; cls?: string }[] = [
-  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r' }, { key: 'progress', label: 'Progress' },
+  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r hl' }, { key: 'progress', label: 'Progress' },
   { key: 'down', label: 'Down', cls: 'r' }, { key: 'up', label: 'Up', cls: 'r' }, { key: 'ratio', label: 'Ratio', cls: 'r' }, { key: 'eta', label: 'ETA', cls: 'r' },
 ]
 
 // One line per torrent: the second line carried the status text and the path, so the row
 // gets those as columns of their own. Down, Up and ETA make way.
 const COLS_ONE: { key: SortKey; label: string; cls?: string }[] = [
-  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r' }, { key: 'progress', label: 'Progress' },
+  { key: 'name', label: 'Name' }, { key: 'size', label: 'Size', cls: 'r hl' }, { key: 'progress', label: 'Progress' },
   { key: 'seeds', label: 'Seeds', cls: 'r' }, { key: 'ratio', label: 'Ratio', cls: 'r' }, { key: 'uploaded', label: 'Uploaded', cls: 'r' },
   { key: 'added', label: 'Added on', cls: 'r' }, { key: 'activity', label: 'Last active', cls: 'r' },
   { key: 'tracker', label: 'Tracker' }, { key: 'path', label: 'Path' },
@@ -60,6 +68,22 @@ export function List() {
     set(s => ({ selected: ids.every(id => s.selected.has(id)) && ids.length ? new Set() : new Set(ids) }))
   }, [ids])
   useEffect(() => { document.addEventListener('tm:select-all', selectAll); return () => document.removeEventListener('tm:select-all', selectAll) }, [selectAll])
+
+  // The header is not a scroll container, so scrollbar-gutter cannot align it
+  // with the rows. Publish the pane's real scrollbar width instead. The observer
+  // watches the content box, which shrinks the moment a scrollbar appears, so
+  // gaining or losing one re-fires it. Layout effect, or the header paints one
+  // frame at the old width.
+  const rowsRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = rowsRef.current
+    if (!el) return
+    const sync = () => publishScrollbarWidth(el)
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const onRowClick = (e: React.MouseEvent) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('.row')
@@ -163,7 +187,7 @@ export function List() {
         ))}
       </div>
 
-      <div className="rows" id="rows" onClick={onRowClick} onContextMenu={onContext}>
+      <div className="rows" id="rows" ref={rowsRef} onClick={onRowClick} onContextMenu={onContext}>
         {list.length ? list.map(t => (
           <Row key={t.id} t={t} base={base} compactRow={one} selected={selected.has(t.id)} focused={focusId === t.id}
             onMore={e => { const target = selected.has(t.id) ? [...selected] : [t.id]; setMenu({ x: e.clientX, y: e.clientY, kind: 'row', ids: target }) }} />
