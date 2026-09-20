@@ -124,21 +124,20 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 
 /* ───────── Sidebar ───────── */
 .sidebar{border-right:1px solid var(--line);padding:14px 10px;overflow:auto;background:var(--bg)}
-/* Drag handle for the sidebar width. A hairline that only lights up on hover or
-   focus, with a hit area wider than the line. touch-action:none is required: without
-   it iPad Safari claims the gesture as a scroll and pointermove never arrives.
+/* Drag handle for the sidebar width. Invisible by design: the sidebar border is the
+   line, and the col-resize cursor is the only cue. It draws nothing of its own, so
+   there is no lit state to get stuck after a drag. touch-action:none is required:
+   without it iPad Safari claims the gesture as a scroll and pointermove never arrives.
    Coarse pointers get 24px, pushed into the sidebar's own 10px padding — centring it
-   would drop 12px onto the row checkboxes (.cols starts with a 24px column). */
-.side-resizer{position:absolute;top:var(--header-h);bottom:0;left:calc(var(--sidebar-w) - 6px);width:12px;z-index:5;cursor:col-resize;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.side-resizer::after{content:"";position:absolute;inset:0 5px;background:transparent;transition:background .12s}
-.side-resizer:hover::after,.side-resizer:focus-visible::after{background:var(--accent)}
+   would drop 12px onto the row checkboxes (.cols starts with a 24px column). The
+   handle also clears the sidebar's 8px scrollbar, which a classic (non-overlay)
+   scrollbar puts just inside the border: overlapping it would steal the drag. */
+.side-resizer{position:absolute;top:var(--header-h);bottom:0;left:calc(var(--sidebar-w) - 2px);width:10px;z-index:5;cursor:col-resize;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .side-resizer:focus-visible{outline:none}
 @media (pointer: coarse){
-  .side-resizer{width:24px;left:calc(var(--sidebar-w) - 18px)}
-  .side-resizer::after{inset:0 11px}
+  .side-resizer{width:20px;left:calc(var(--sidebar-w) - 4px)}
 }
 body.resizing{cursor:col-resize;user-select:none}
-body.resizing .side-resizer::after{background:var(--accent)}
 /* Signed-out screen. The server keeps the bundle away from anonymous visitors,
    so this is for a session that expires while the tab is open: same card as the
    backend's login page, so the two do not read as different applications. */

@@ -3,6 +3,7 @@ import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebar, get, set, writ
 
 const STEP = 16          // px per arrow key
 const DOUBLE_TAP_MS = 350
+const DRAG_SLOP = 3       // px of travel before a tap counts as a drag
 
 /** Write the width to the DOM only. The CSS clamp on --sidebar-w does the viewport cap. */
 function paint(w: number) {
@@ -31,6 +32,7 @@ export function SidebarResizer() {
   const live = useRef(w)
   const moved = useRef(false)
   const active = useRef<number | null>(null)   // the pointer that owns the drag
+  const start = useRef({ x: 0, w: 0 })         // grab point, so the edge does not jump to the finger
 
   function commit(next: number) {
     live.current = next
@@ -51,6 +53,7 @@ export function SidebarResizer() {
     }
     lastDown.current = now
     active.current = e.pointerId
+    start.current = { x: e.clientX, w: live.current }
     moved.current = false
     e.preventDefault()
     // preventDefault suppresses the compatibility mousedown, and with it the focus it
@@ -63,8 +66,15 @@ export function SidebarResizer() {
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (active.current !== e.pointerId) return
-    const next = clampSidebar(e.clientX)
+    // Below the slop this is still a tap: iPad Safari emits a pixel of jitter during
+    // one, and treating that as a drag both nudged the edge and disarmed the
+    // double-tap reset — the only way a finger has back to the default width.
+    const dx = e.clientX - start.current.x
+    if (!moved.current && Math.abs(dx) < DRAG_SLOP) return
     moved.current = true
+    // Offset from the grab point, not the raw clientX: grabbing the handle off-centre
+    // would otherwise snap the border to the pointer by up to half the hit area.
+    const next = clampSidebar(start.current.w + dx)
     live.current = next
     setW(next)
     paint(next)
@@ -74,10 +84,15 @@ export function SidebarResizer() {
     if (active.current !== e.pointerId) return
     active.current = null
     document.body.classList.remove('resizing')
-    e.currentTarget.releasePointerCapture?.(e.pointerId)
-    // A completed drag must not arm the double-tap window: re-grabbing the handle
-    // within 350ms to fine-tune would otherwise snap the width back to the default.
+    // Commit before releasing capture: releasePointerCapture throws NotFoundError when
+    // the pointer is already gone, which is exactly the pointercancel case, and the
+    // throw would skip the commit and lose the drag.
+    // A completed drag must not arm the double-tap window either: re-grabbing the
+    // handle within 350ms to fine-tune would snap the width back to the default.
     if (moved.current) { lastDown.current = -Infinity; commit(live.current) }
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
