@@ -4,8 +4,6 @@ import { ago, bytes, compact, date, eta, percent, rateParts, ratio, ratioOwed } 
 import { hostOf, relDir, statusView, swarmOf } from '../lib/model'
 import { trackerName } from '../lib/trackers'
 import { Status, type TorrentSummary } from '../rpc/types'
-import * as api from '../rpc/methods'
-import { run } from '../state/store'
 
 function Speed({ bps, dir }: { bps: number; dir: 'dl' | 'ul' }) {
   if (bps <= 0) return <span className="spd zero num">—</span>
@@ -16,7 +14,7 @@ function Speed({ bps, dir }: { bps: number; dir: 'dl' | 'ul' }) {
 /** A row's part in a bulk removal: queued behind others, being deleted now, or failed. */
 export type RowRemoval = { kind: 'queued' | 'active' | 'failed'; text: string } | null
 
-export const Row = memo(function Row({ t, selected, focused, base, compactRow, removal, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; removal?: RowRemoval; onMore: (e: React.MouseEvent) => void }) {
+export const Row = memo(function Row({ t, selected, focused, base, compactRow, removal, menuOpen, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; removal?: RowRemoval; menuOpen: boolean; onMore: (e: React.MouseEvent) => void }) {
   const s = statusView(t)
   const { seeds, leechers } = swarmOf(t)
   const swarm = seeds + leechers
@@ -31,15 +29,14 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
   // `failed` keeps full opacity: it is the one state the user still has to act on.
   const rmCls = removal ? ' pending' + (removal.kind === 'failed' ? ' failed' : '') : ''
   const dir = relDir(t.download_dir, base)
-  const stopped = t.status === Status.Stopped
+  // Pause moved into the context menu, where it is the first entry: the column holds one
+  // trigger and keeps a fixed width, so it lands in the same place on every row.
   const acts = (
     <span className="acts">
-      <button title={stopped ? 'Resume' : 'Pause'} onClick={e => { e.stopPropagation(); void run(stopped ? 'Resume' : 'Pause', () => stopped ? api.start([t.id]) : api.stop([t.id])) }}>
-        <Icon name={stopped ? 'play' : 'pause'} size={13} />
-      </button>
       <button className="more" title="More" onClick={e => { e.stopPropagation(); onMore(e) }}><Icon name="more" size={13} /></button>
     </span>
   )
+  const rowCls = (selected ? ' sel' : '') + (focused ? ' focus' : '') + (menuOpen ? ' menu-open' : '') + rmCls
 
   if (compactRow) {
     const host = t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : ''
@@ -52,14 +49,16 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
       : `${s.label} · ${peers}`
     const nameTitle = removal ? removal.text : t.error !== 0 ? why : t.name
     return (
-      <div className={'row one' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + (t.error !== 0 ? ' is-err' : '') + rmCls} data-id={t.id}>
+      <div className={'row one' + rowCls + (t.error !== 0 ? ' is-err' : '')} data-id={t.id}>
         <span className="chk" role="checkbox" aria-checked={selected} />
+        {/* Its own track: as a child of .name the name's left edge moved with whatever sat
+            beside it, and on a pending row the removal text changes width live. */}
+        <span className={'sdot ' + s.kind} title={removal ? removal.text : why} />
         <div className="name">
-          <span className={'sdot ' + s.kind} title={removal ? removal.text : why} />
           <span className="t" title={nameTitle}>{t.name}{removal ? <span className="rm-st"> · {removal.text}</span> : null}</span>
           {t.labels.map(l => <span key={l} className="chip lbl">{l}</span>)}
-          {acts}
         </div>
+        {acts}
         <span className="num r muted">{bytes(t.size_when_done)}</span>
         <div className="prog">
           <div className={'bar ' + s.bar} style={{ ['--p' as string]: percent(t.percent_done, 1) }}><i /></div>
@@ -80,13 +79,12 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
   }
 
   return (
-    <div className={'row' + (selected ? ' sel' : '') + (focused ? ' focus' : '') + rmCls} data-id={t.id}>
+    <div className={'row' + rowCls} data-id={t.id}>
       <span className="chk" role="checkbox" aria-checked={selected} />
       <div className="name">
         <div className="t">
           <span>{t.name}</span>
           {t.labels.map(l => <span key={l} className="chip lbl">{l}</span>)}
-          {acts}
         </div>
         <div className="m">
           <span className={'chip ' + s.kind}><span className="dot" />{s.label}</span>
@@ -94,6 +92,7 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
           {dir ? <><span className="sep" /><span>{dir}/</span></> : null}
         </div>
       </div>
+      {acts}
       <span className="num r muted">{bytes(t.size_when_done)}</span>
       <div className="prog">
         <div className={'bar ' + s.bar} style={{ ['--p' as string]: percent(t.percent_done, 1) }}><i /></div>

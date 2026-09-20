@@ -52,13 +52,15 @@ function row(t, sel){
     : conn === "0" ? `No peers` : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
   const rm = RM.state[t.id];
   const subText = rm ? `<span class="rm-st">${rm}</span>` : sub;
+  // Pause moved into the context menu: the column holds one trigger, nothing else.
+  const acts = `<span class="acts"><button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span>`;
   return `<div class="row${sel?' sel':''}${rm?' pending':''}${rm&&rm.startsWith('Failed')?' failed':''}" data-id="${t.id}">
     <span class="chk"></span>
     <div class="name">
-      <div class="t"><span>${t.name}</span>${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
-        <span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span></div>
+      <div class="t"><span>${t.name}</span>${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}</div>
       <div class="m"><span class="chip ${s.cls}"><span class="dot"></span>${s.label}</span><span class="sep"></span><span>${subText}</span><span class="sep"></span><span>${rel(t.dir)}/</span></div>
     </div>
+    ${acts}
     <span class="num r muted">${t.size}</span>
     <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num"><span>${t.p}%</span>${t.swarm?`<span class="av" title="Seeds in swarm">${t.swarm} seeds</span>`:''}</span></div>
     ${spd(t.dl,'dl')}
@@ -75,16 +77,16 @@ function rowOne(t, sel){
   const [conn, act] = t.peers.split(' · ');
   const peers = conn === "0" ? 'No peers' : `${act} of ${conn} peers${t.swarm ? ' · ' + t.swarm + ' in swarm' : ''}`;
   const why = t.err ? t.err : s.label === 'Verifying' ? 'Verifying local data' : `${s.label} · ${peers}`;
-  const acts = `<span class="acts">${t.st==='stopped'||t.st==='error'?`<button title="Start"><svg class="i" style="width:13px;height:13px"><use href="#i-play"/></svg></button>`:`<button title="Pause"><svg class="i" style="width:13px;height:13px"><use href="#i-pause"/></svg></button>`}<button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span>`;
+  const acts = `<span class="acts"><button class="more" title="More"><svg class="i" style="width:13px;height:13px"><use href="#i-more"/></svg></button></span>`;
   const rm = RM.state[t.id];
   return `<div class="row one${sel?' sel':''}${t.err?' is-err':''}${rm?' pending':''}${rm&&rm.startsWith('Failed')?' failed':''}" data-id="${t.id}">
     <span class="chk"></span>
+    <span class="sdot ${s.cls}" title="${why}"></span>
     <div class="name">
-      <span class="sdot ${s.cls}" title="${why}"></span>
       <span class="t" title="${rm ? rm : t.err ? why : t.name}">${t.name}${rm?` <span class="rm-st">· ${rm}</span>`:''}</span>
       ${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
-      ${acts}
     </div>
+    ${acts}
     <span class="num r muted">${t.size}</span>
     <div class="prog"><div class="bar ${s.bar}" style="--p:${t.p}%"><i></i></div><span class="num pv">${t.p}%</span></div>
     <span class="num r ${t.swarm?'':'faint'}">${t.swarm || '—'}</span>

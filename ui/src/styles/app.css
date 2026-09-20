@@ -243,7 +243,9 @@ body.resizing{cursor:col-resize;user-select:none}
 /* Rows on their way out: dimmed and inert, so it is obvious they are no longer live data
    and cannot be clicked into a second remove. */
 .row.pending{opacity:.45;pointer-events:none}
-.row.pending .acts{display:none}
+/* not display:none -- the cell must keep its track, or grid auto-placement
+   pulls every later cell one column left on a pending row. */
+.row.pending .acts{visibility:hidden}
 .row.pending .rm-st{color:var(--ink-2)}
 /* A failed removal is the one pending state the user still has to act on, so it keeps
    full opacity and stays clickable. */
@@ -259,7 +261,7 @@ body.resizing{cursor:col-resize;user-select:none}
    left of its header. --sbw is measured at runtime (List.tsx): it is 10px with
    classic scrollbars and 0 with overlay ones, so it cannot be hardcoded.
    scrollbar-gutter does not work here: .cols is not a scroll container. */
-.cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px calc(16px + var(--sbw, 0px)) 6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
+.cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 40px 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px calc(16px + var(--sbw, 0px)) 6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
 .cols .r{text-align:right}
 /* Size heads a right-aligned column but its label sits centred over the numbers:
    flush right it drifted away from the values it names. Cells stay .r.
@@ -269,10 +271,15 @@ body.resizing{cursor:col-resize;user-select:none}
 .cols .r.hl{text-align:center;justify-content:center}
 .cols .sort{color:var(--ink);display:inline-flex;align-items:center;gap:3px}
 .rows{overflow:auto;flex:1;padding-bottom:20px}
-.row{display:grid;grid-template-columns:24px minmax(260px,1fr) 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
+.row{display:grid;grid-template-columns:24px minmax(260px,1fr) 40px 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
 /* Zebra: alternating bands carry the eye across a wide row, so the one-line layout drops
    the per-row rule that would otherwise fight them. Hover and selection stay on top. */
 .row.one{border-bottom:0;padding:5px 16px}
+/* 9 children, 9 tracks: the pair rule still needs its counterpart, or a tenth
+   cell would auto-place into an implicit second row and double the height. */
+.cols:not(.one)>:nth-child(n+10),.row:not(.one)>:nth-child(n+10){display:none}
+/* the dot track is compact-only, so its (empty, unlabelled) header cell goes with it */
+.cols:not(.one) .dot-h{display:none}
 .row.one:nth-child(odd){background:var(--zebra)}
 .row:hover,.row.one:hover{background:var(--surface)}
 .row.sel,.row.one.sel:nth-child(odd){background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
@@ -283,8 +290,30 @@ body.resizing{cursor:col-resize;user-select:none}
 .name .t{font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:8px;min-width:0}
 .name .t>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .name .t .chip{flex:none}
-.name .t .acts{margin-left:auto;display:flex;gap:2px;opacity:0;flex:none}
-.row:hover .name .t .acts,.row.menu-open .name .t .acts{opacity:1}
+/* ── Row actions live in a column of their own ────────────────────────
+   They used to sit inside .name: absolutely positioned on the compact row, over
+   a gradient that masked Path. Three things broke. The trigger sat at the row's
+   right edge while the menu opened at the pointer, so it was never twice in the
+   same place; it hid the content it overlapped; and a touch screen never fires
+   hover, so it was unreachable outright.
+   A track of its own fixes all three. Space is reserved at every width -- only
+   the ink is hover-gated, so the glyph is always in the same x on every line.
+   opacity, not visibility: a visibility:hidden button leaves the tab order, and
+   these rows have no other focusable child to carry :focus-within, so the
+   trigger would be unreachable by keyboard too. opacity keeps both the slot and
+   the tab stop. */
+.acts{display:flex;justify-content:center;opacity:0;transition:opacity .08s}
+.row:hover .acts,.row.focus .acts,.row.menu-open .acts{opacity:1}
+.acts button.more{color:var(--ink-3)}
+.row:hover .acts button.more{color:var(--ink-2)}
+.row.menu-open .acts button.more{background:var(--surface-3);color:var(--ink)}
+.acts button.more:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:1px}
+/* The test is (hover:none), not (pointer:coarse): the problem is a device that
+   never fires hover at all. A hybrid laptop answers coarse and still hovers. */
+@media (hover:none){
+  .acts{opacity:1}
+  .acts button{width:32px;height:32px}
+}
 .acts button{width:24px;height:22px;border-radius:6px;color:var(--ink-2);display:grid;place-items:center}
 .acts button:hover{background:var(--surface-3);color:var(--ink)}
 .acts button.on{background:var(--surface-3);color:var(--ink)}
@@ -315,8 +344,8 @@ body.resizing{cursor:col-resize;user-select:none}
 .spd.dl{color:var(--accent)} .spd.ul{color:var(--ink-2)} .spd.ul .arrow{color:var(--ink-3)} .spd.zero{color:var(--ink-3)}
 
 /* with inspector docked: drop Ratio + ETA, keep the list readable */
-.main.has-insp .cols:not(.one),.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 80px 88px 100px 100px}
-.main.has-insp .cols:not(.one)>:nth-child(n+7),.main.has-insp .row:not(.one)>:nth-child(n+7){display:none}
+.main.has-insp .cols:not(.one),.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 40px 80px 88px 100px 100px}
+.main.has-insp .cols:not(.one)>:nth-child(n+8),.main.has-insp .row:not(.one)>:nth-child(n+8){display:none}
 
 .empty{padding:60px 20px;text-align:center;color:var(--ink-3)}
 .empty .t{font-family:var(--serif);font-size:18px;color:var(--ink-2);margin-bottom:6px}
@@ -342,22 +371,22 @@ body.resizing{cursor:col-resize;user-select:none}
    1600px the floor wins and the trailing columns run off the right edge, which is
    the intended trade: the name is what people read. */
 .cols.one,
-.row.one{grid-template-columns:24px minmax(420px,1fr) 84px 96px 56px 60px 80px 92px 88px 140px 160px}
+.row.one{grid-template-columns:24px 14px minmax(420px,1fr) 40px 84px 96px 56px 60px 80px 92px 88px 140px 160px}
+.cols.one>:nth-child(n+14),.row.one>:nth-child(n+14){display:none}
 /* locale month names ("19. Sept. 2026") are wider than en-US, so no cell may wrap */
 .cols.one>*,.row.one>*{white-space:nowrap;overflow:hidden}
-.row.one .name{display:flex;align-items:center;gap:7px;position:relative}
+.row.one .name{display:flex;align-items:center;gap:7px}
 .row.one .name .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:block}
 .row.one.is-err .name .t{color:var(--err)}
-.row.one .sdot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--ink-3)}
+/* The dot is a track, not a flex child of .name: as a child its neighbours set
+   where the name starts, and on a pending row the removal text changes width
+   live, so the name's left edge crawled. 14px is the dot plus breathing room. */
+.row.one .sdot{width:6px;height:6px;border-radius:50%;background:var(--ink-3);justify-self:center;align-self:center}
 .row.one .sdot.seed{background:var(--seed-dot)}
 .row.one .sdot.dl{background:var(--accent)}
 .row.one .sdot.wait{background:var(--wait)}
 .row.one .sdot.stop{background:var(--stop)}
 .row.one .sdot.err{background:var(--err)}
-.row.one .acts{position:absolute;right:0;top:50%;transform:translateY(-50%);margin:0;padding-left:26px;display:flex;gap:2px;opacity:0;background:linear-gradient(90deg,transparent,var(--bg) 22%)}
-.row.one:hover .acts,.row.one.menu-open .acts{opacity:1}
-.row.one:hover .acts{background:linear-gradient(90deg,transparent,var(--surface) 22%)}
-.row.one.sel .acts{background:linear-gradient(90deg,transparent,#2e2521 22%)}
 .row.one .prog{flex-direction:row;align-items:center;gap:7px}
 .row.one .prog .bar{flex:1;min-width:24px}
 .row.one .prog .pv{flex:none;font-size:11px;color:var(--ink-2);display:block}
@@ -370,9 +399,9 @@ body.resizing{cursor:col-resize;user-select:none}
 .row.one .chip.lbl{flex:none;max-width:110px;font-size:10px;line-height:1;padding:2px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* with the inspector docked the tail columns go first: Path, Tracker, Last active, Added on, Uploaded */
 .main.has-insp .cols.one,
-.main.has-insp .row.one{grid-template-columns:24px minmax(160px,1fr) 80px 92px 52px 56px}
-.main.has-insp .cols.one>:nth-child(n+7),
-.main.has-insp .row.one>:nth-child(n+7){display:none}
+.main.has-insp .row.one{grid-template-columns:24px 14px minmax(160px,1fr) 40px 80px 92px 52px 56px}
+.main.has-insp .cols.one>:nth-child(n+9),
+.main.has-insp .row.one>:nth-child(n+9){display:none}
 
 /* ───────── Tablet (iPad landscape ≈ 1194px) ─────────
    Measured at 1194px with the inspector closed: all 11 compact columns fit only by
@@ -381,25 +410,25 @@ body.resizing{cursor:col-resize;user-select:none}
    gets their ~460px. The dropped values stay in the inspector. */
 @media (max-width:1200px){
   .cols.one,
-  .row.one{grid-template-columns:24px minmax(180px,1fr) 84px 96px 56px 60px}
-  .cols.one>:nth-child(n+7),
-  .row.one>:nth-child(n+7){display:none}
+  .row.one{grid-template-columns:24px 14px minmax(180px,1fr) 40px 84px 96px 56px}
+  .cols.one>:nth-child(n+8),
+  .row.one>:nth-child(n+8){display:none}
   /* Two-line rows overflow their track here too: drop Uploaded and Added on.
      The hide rule is not optional: 8 children in a 6-track grid would otherwise
      auto-place the tail into an implicit second row and double the row height. */
   .cols:not(.one),
-  .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 84px 92px 104px 104px}
-  .cols:not(.one)>:nth-child(n+7),
-  .row:not(.one)>:nth-child(n+7){display:none}
+  .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 40px 84px 92px 104px 104px}
+  .cols:not(.one)>:nth-child(n+8),
+  .row:not(.one)>:nth-child(n+8){display:none}
   /* With the inspector docked there is no room to spare: name only. */
   .main.has-insp .cols:not(.one),
-  .main.has-insp .row:not(.one){grid-template-columns:24px minmax(200px,1fr) 80px 88px}
-  .main.has-insp .cols:not(.one)>:nth-child(n+5),
-  .main.has-insp .row:not(.one)>:nth-child(n+5){display:none}
+  .main.has-insp .row:not(.one){grid-template-columns:24px minmax(200px,1fr) 40px 80px 88px}
+  .main.has-insp .cols:not(.one)>:nth-child(n+6),
+  .main.has-insp .row:not(.one)>:nth-child(n+6){display:none}
   .main.has-insp .cols.one,
-  .main.has-insp .row.one{grid-template-columns:24px minmax(180px,1fr) 80px 92px}
-  .main.has-insp .cols.one>:nth-child(n+5),
-  .main.has-insp .row.one>:nth-child(n+5){display:none}
+  .main.has-insp .row.one{grid-template-columns:24px 14px minmax(180px,1fr) 40px 80px 92px}
+  .main.has-insp .cols.one>:nth-child(n+7),
+  .main.has-insp .row.one>:nth-child(n+7){display:none}
 }
 
 /* comfortable density (Interface setting) */

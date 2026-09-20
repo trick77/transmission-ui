@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, usesTracker, type SortKey } from '../lib/model'
@@ -64,7 +64,7 @@ export function List() {
   const total = list.reduce((a, t) => a + t.size_when_done, 0)
   const on = advActive(adv)
 
-  const [menu, setMenu] = useState<{ x: number; y: number; kind: 'row' | 'view' | 'sel'; ids: number[] } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; kind: 'row' | 'view' | 'sel'; ids: number[]; rowId?: number; atPointer?: boolean } | null>(null)
   const [fpop, setFpop] = useState(false)
   const closeF = useCallback(() => setFpop(false), [])
   const fref = useDismiss(closeF, fpop)
@@ -110,7 +110,7 @@ export function List() {
     e.preventDefault()
     const id = Number(el.dataset.id)
     const target = selected.has(id) ? [...selected] : [id]
-    setMenu({ x: e.clientX, y: e.clientY, kind: 'row', ids: target })
+    setMenu({ x: e.clientX, y: e.clientY, kind: 'row', ids: target, rowId: id, atPointer: true })
   }
 
   // tracker-down notices
@@ -184,21 +184,33 @@ export function List() {
         </div>
       ))}
 
+      {/* The dot and action tracks carry no header. They are plain spans, never COLS
+          entries: everything in that list becomes a clickable sort trigger. */}
       <div className={'cols' + (one ? ' one' : '')}>
         <span className={'chk' + (allSel ? ' on' : someSel ? ' some' : '')} id="selall" title="Select all" onClick={selectAll} />
+        {one ? <span className="dot-h" /> : null}
         {cols.map(c => (
-          <span key={c.key} className={(c.cls ?? '') + (sort === c.key ? ' sort' : '')} style={{ cursor: 'pointer' }}
-            onClick={() => { set(s => ({ sort: c.key, sortDir: s.sort === c.key ? (s.sortDir === 1 ? -1 : 1) : (TEXT_COLS.includes(c.key) ? 1 : -1) })); syncUrl() }}>
-            {c.label}{sort === c.key ? <Icon name={sortDir === -1 ? 'chevd' : 'up'} size={12} /> : null}
-          </span>
+          <Fragment key={c.key}>
+            <span className={(c.cls ?? '') + (sort === c.key ? ' sort' : '')} style={{ cursor: 'pointer' }}
+              onClick={() => { set(s => ({ sort: c.key, sortDir: s.sort === c.key ? (s.sortDir === 1 ? -1 : 1) : (TEXT_COLS.includes(c.key) ? 1 : -1) })); syncUrl() }}>
+              {c.label}{sort === c.key ? <Icon name={sortDir === -1 ? 'chevd' : 'up'} size={12} /> : null}
+            </span>
+            {c.key === 'name' ? <span /> : null}
+          </Fragment>
         ))}
       </div>
 
       <div className="rows" id="rows" ref={rowsRef} onClick={onRowClick} onContextMenu={onContext}>
         {list.length ? list.map(t => (
           <Row key={t.id} t={t} base={base} compactRow={one} selected={selected.has(t.id)} focused={focusId === t.id}
-            removal={removalOf(removing, t.id)}
-            onMore={e => { const target = selected.has(t.id) ? [...selected] : [t.id]; setMenu({ x: e.clientX, y: e.clientY, kind: 'row', ids: target }) }} />
+            removal={removalOf(removing, t.id)} menuOpen={menu?.rowId === t.id}
+            onMore={e => {
+              const target = selected.has(t.id) ? [...selected] : [t.id]
+              // Anchored to the trigger, not the pointer: the menu then opens in the same
+              // place for every row, which the pointer-anchored version never did.
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+              setMenu({ x: r.right, y: r.bottom + 4, kind: 'row', ids: target, rowId: t.id })
+            }} />
         )) : (
           <div className="empty">
             <div className="t">{connection === 'connecting' ? 'Connecting…' : torrents.length ? 'Nothing matches' : 'No torrents yet'}</div>
@@ -208,8 +220,10 @@ export function List() {
         )}
       </div>
 
+      {/* A menu opened from the trigger hangs off its right edge; a right-click one
+          opens at the pointer and reads left-to-right from there. */}
       {menu ? (
-        <Menu x={menu.x} y={menu.y} alignRight={menu.kind !== 'row'} onClose={() => setMenu(null)}
+        <Menu x={menu.x} y={menu.y} alignRight={!menu.atPointer} onClose={() => setMenu(null)}
           items={menu.kind === 'view' ? viewMenu(menu.ids, selectAll) : torrentMenu(menu.ids)} />
       ) : null}
     </section>

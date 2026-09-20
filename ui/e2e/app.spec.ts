@@ -101,12 +101,13 @@ test('attribute filter chips and empty state', async ({ page }) => {
 test('pause and resume flip the daemon status', async ({ page }) => {
   const seeding = (await torrents()).find(t => t.status === 6)!
   const row = page.locator(`.row[data-id="${seeding.id}"]`)
-  await row.hover()
-  await row.locator('.acts button').first().click()
+  // Pause lives in the row menu now; the trigger keeps its slot, so no hover first.
+  await row.locator('.acts .more').click()
+  await page.locator('.cmenu').getByText('Pause', { exact: true }).click()
   await expect.poll(async () => (await torrents()).find(t => t.id === seeding.id)!.status, { timeout: 8000 }).toBe(0)
   await expect(row.locator('.sdot.stop')).toBeVisible({ timeout: 8000 })
-  await row.hover()
-  await row.locator('.acts button').first().click()
+  await row.locator('.acts .more').click()
+  await page.locator('.cmenu').getByText('Resume', { exact: true }).click()
   await expect.poll(async () => (await torrents()).find(t => t.id === seeding.id)!.status, { timeout: 8000 }).not.toBe(0)
 })
 
