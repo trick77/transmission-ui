@@ -80,12 +80,7 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
    inside .sidebar, which scrolls. */
 .app{display:grid;grid-template-rows:var(--header-h) 1fr;grid-template-columns:var(--sidebar-w) 1fr;height:100%;position:relative}
 .header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface)}
-.brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em;width:calc(var(--sidebar-w) - 14px)}
-/* The mark, drawn as the favicon draws it: a filled gradient chip with the glyph
-   painted through it in the app ground. Geometry mirrors ui/icons/icon.svg —
-   change one and change the other. The chip is the ink, so there is no CSS
-   background here and no stroked glyph inside. */
-.brand .logo{width:22px;height:22px;display:block;flex:none}
+.brand{display:flex;align-items:center;font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em;width:calc(var(--sidebar-w) - 14px)}
 .search{flex:0 1 380px;display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-3)}
 .search input{flex:1;border:0;background:none;outline:none;color:var(--ink)}
 .search input::placeholder{color:var(--ink-3)}
