@@ -39,9 +39,26 @@ export interface Snapshot {
   dismissed: Set<string>   // tracker-down notices dismissed, "host@since"
   toast: string
   density: Density
+  sidebarW: number         // the user's preferred sidebar width in px, before the CSS clamp
 }
 
 export type Density = 'compact' | 'comfortable'
+
+export const SIDEBAR_MIN = 180, SIDEBAR_MAX = 420, SIDEBAR_DEFAULT = 224
+
+/**
+ * Bounds only. The viewport cap lives in the CSS clamp on --sidebar-w, so that a
+ * narrow window never rewrites the stored preference: clamping here and writing the
+ * result back would lose the user's number the first time an iPad rotates.
+ */
+export function clampSidebar(w: number): number {
+  return Math.min(Math.max(Math.round(w), SIDEBAR_MIN), SIDEBAR_MAX)
+}
+
+function initialSidebarW(): number {
+  const v = readLocal<number>('tm.sidebar-w', SIDEBAR_DEFAULT)
+  return typeof v === 'number' && Number.isFinite(v) ? clampSidebar(v) : SIDEBAR_DEFAULT
+}
 
 /** Row density drives the column set, so it is store state and not only a CSS attribute. */
 function initialDensity(): Density {
@@ -61,6 +78,7 @@ let snap: Snapshot = {
   dismissed: new Set(readLocal<string[]>('tm.dismissed', [])),
   toast: '',
   density: initialDensity(),
+  sidebarW: initialSidebarW(),
 }
 const listeners = new Set<() => void>()
 function emit() { for (const l of listeners) l() }

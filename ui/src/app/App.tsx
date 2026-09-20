@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Header } from './Header'
 import { BrandMark } from '../icons/BrandMark'
 import { Sidebar } from './Sidebar'
+import { SidebarResizer } from './SidebarResizer'
 import { List } from '../list/List'
 import { Inspector } from '../inspector/Inspector'
 import { Dialogs } from '../dialogs/Dialogs'
@@ -47,9 +48,10 @@ export function App() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  // drop .torrent files anywhere → Add dialog; saved density
+  // drop .torrent files anywhere → Add dialog; saved density and sidebar width
   useEffect(() => {
     document.documentElement.dataset.density = get().density
+    document.documentElement.style.setProperty('--sidebar-pref', get().sidebarW + 'px')
     const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault() }
     const drop = (e: DragEvent) => {
       if (!e.dataTransfer?.files.length || get().dialog.kind === 'add') return
@@ -69,6 +71,7 @@ export function App() {
     <div className="app">
       <Header />
       <Sidebar />
+      <SidebarResizer />
       <div className={'main' + (focusId != null ? ' has-insp' : '')}>
         <List />
         {focusId != null ? <Inspector /> : null}

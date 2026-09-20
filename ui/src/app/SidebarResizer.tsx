@@ -1,0 +1,108 @@
+import { useRef, useState } from 'react'
+import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebar, get, set, writeLocal } from '../state/store'
+
+const STEP = 16          // px per arrow key
+const DOUBLE_TAP_MS = 350
+
+/** Write the width to the DOM only. The CSS clamp on --sidebar-w does the viewport cap. */
+function paint(w: number) {
+  document.documentElement.style.setProperty('--sidebar-pref', w + 'px')
+}
+
+/**
+ * Drag handle on the sidebar's right edge.
+ *
+ * Pointer Events throughout, so mouse, trackpad, Apple Pencil and finger all take one
+ * code path. During a drag only the CSS variable and local state move: the store's
+ * useSnap subscribers read the whole snapshot, so a set() per pointermove would
+ * re-render the row list on every frame. The store and localStorage are written once,
+ * on release.
+ *
+ * Reset is a double-tap, detected from pointer timestamps rather than onDoubleClick:
+ * Safari only synthesises dblclick from a double-tap under conditions we would rather
+ * not depend on, and on a tablet this is the only way back to the default width.
+ */
+export function SidebarResizer() {
+  const [w, setW] = useState(() => get().sidebarW)
+  const lastDown = useRef(-Infinity)
+  // The live width during a drag. State alone is not enough: the pointerup handler
+  // closes over the w of the render that ran when the drag began, so committing that
+  // would snap the sidebar back to its pre-drag width.
+  const live = useRef(w)
+  const moved = useRef(false)
+  const active = useRef<number | null>(null)   // the pointer that owns the drag
+
+  function commit(next: number) {
+    live.current = next
+    setW(next)
+    paint(next)
+    set({ sidebarW: next })
+    writeLocal('tm.sidebar-w', next)
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    if (active.current !== null) return        // a drag is already running; ignore a second finger
+    const now = performance.now()
+    if (now - lastDown.current < DOUBLE_TAP_MS) {
+      lastDown.current = -Infinity
+      commit(SIDEBAR_DEFAULT)
+      return
+    }
+    lastDown.current = now
+    active.current = e.pointerId
+    moved.current = false
+    e.preventDefault()
+    // preventDefault suppresses the compatibility mousedown, and with it the focus it
+    // would have given us. Focus explicitly, or the arrow keys do nothing until the
+    // user tabs to the handle — and App's global keydown would claim them instead.
+    e.currentTarget.focus()
+    e.currentTarget.setPointerCapture?.(e.pointerId)   // jsdom has no pointer capture
+    document.body.classList.add('resizing')
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (active.current !== e.pointerId) return
+    const next = clampSidebar(e.clientX)
+    moved.current = true
+    live.current = next
+    setW(next)
+    paint(next)
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (active.current !== e.pointerId) return
+    active.current = null
+    document.body.classList.remove('resizing')
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    // A completed drag must not arm the double-tap window: re-grabbing the handle
+    // within 350ms to fine-tune would otherwise snap the width back to the default.
+    if (moved.current) { lastDown.current = -Infinity; commit(live.current) }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'ArrowLeft') commit(clampSidebar(live.current - STEP))
+    else if (e.key === 'ArrowRight') commit(clampSidebar(live.current + STEP))
+    else if (e.key === 'Home') commit(SIDEBAR_DEFAULT)
+    else return
+    e.preventDefault()
+  }
+
+  return (
+    <div
+      className="side-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize sidebar"
+      aria-valuenow={w}
+      aria-valuemin={SIDEBAR_MIN}
+      aria-valuemax={SIDEBAR_MAX}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onKeyDown={onKeyDown}
+    />
+  )
+}

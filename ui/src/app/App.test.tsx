@@ -12,7 +12,7 @@ let daemon: FakeDaemon
 // chip and the peer line mount in it; the compact one-liner has tests of its own below.
 function resetStore(density: Density = 'comfortable', sort: SortKey = 'state') {
   set({ torrents: [], byId: new Map(), detail: null, session: null, stats: null, history: [], freeSpace: new Map(), connection: 'connecting', lastError: '',
-    filter: 'all', adv: {}, search: '', sort, sortDir: 1, selected: new Set(), focusId: null, inspectorTab: 'overview', dialog: { kind: 'none' }, dismissed: new Set(), toast: '', density })
+    filter: 'all', adv: {}, search: '', sort, sortDir: 1, selected: new Set(), focusId: null, inspectorTab: 'overview', dialog: { kind: 'none' }, dismissed: new Set(), toast: '', density, sidebarW: 224 })
 }
 
 async function mount(opts: Parameters<typeof installFakeDaemon>[0] & { density?: Density; sort?: SortKey } = {}) {
