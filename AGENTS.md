@@ -33,6 +33,6 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - Bulk actions = one RPC with an id array. Remove vs remove+delete are always two separate, differently worded actions. Remove+delete is the default (⌫, sel-bar button, first menu entry); remove-only is ⌘⌫. Do not "fix" that inversion.
 - Colour rules: accent only for active download + controls, red only for errors, everything else neutral.
 - Row grids come in pairs: a `grid-template-columns` change needs the matching `>:nth-child(n+N){display:none}`, or leftover cells auto-place into an implicit second row and double the row height. Two-line rows have 8 children, compact 11. Below 1200px the tail columns drop (at 1194px Name was at its 180px floor, 24 of 29 names clipped).
-- Sidebar headings: sentence case, 14px/400, no tracking. `.side-h` is shared with Settings.
+- No `text-transform:uppercase` anywhere: headings and table headers are sentence case, no tracking (`.side-h` 14px/400, `.cols`/`.tbl th`/`.pop th` 12px/500, `.sec` 13px/500). Label strings are already written in sentence case; the CSS was shouting them. `.side-h` and `.sec` are shared with Settings and Add.
 - Node ≥ 22 ships a fake `localStorage` global: `ui/src/test-setup.ts` replaces it; don't remove that.
 - `compose.yaml` / `Containerfile` naming; default branch `master`; remote `trick77/transmission-ui` — CI on PRs, image + release on master push.
