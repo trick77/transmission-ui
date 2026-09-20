@@ -251,6 +251,25 @@ describe('sidebar', () => {
     expect(cell('Big Buck Bunny (2008) 4K 60fps', '3.42')).toHaveClass('muted')
   })
 
+  it('both row layouts ink the ratio the same way', async () => {
+    // The two-line row has a ratio column of its own; it drifted from the compact
+    // one once already, so pin the pair together.
+    await mount()
+    const cell = (name: string, value: string) =>
+      [...row(name).querySelectorAll('span.num.r')].find(s => s.textContent === value)!
+    expect(cell('Tears of Steel (2012) 4K', '0.98')).not.toHaveClass('muted')
+    expect(cell('Big Buck Bunny (2008) 4K 60fps', '3.42')).toHaveClass('muted')
+  })
+
+  it('an unknown ratio stays quiet: "—" is not a debt', async () => {
+    // ratioValue flattens the -1 sentinel to 0, so a naive "< 1" would render the
+    // torrent that has transferred nothing as loudly as one that owes the swarm.
+    await mount({ torrents: [torrent({ id: 1, name: 'Fresh', upload_ratio: -1 })] })
+    const na = [...row('Fresh').querySelectorAll('span.num.r')].find(s => s.textContent === '—')!
+    expect(na).toBeInTheDocument()
+    expect(na).toHaveClass('muted')
+  })
+
   it('filters: status, label, folder, tracker; title and count follow; URL syncs', async () => {
     await mount()
     const side = document.querySelector('.sidebar') as HTMLElement

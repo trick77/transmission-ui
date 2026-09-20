@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioValue } from './format'
+import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioOwed, ratioValue, RATIO_INF, RATIO_NA } from './format'
 
 describe('bytes', () => {
   it('formats SI units with sensible digits', () => {
@@ -33,6 +33,16 @@ describe('ratio / eta / duration', () => {
   it('ratio handles the daemon sentinels: -1 n/a, -2 infinite', () => {
     expect(ratio(-1)).toBe('—'); expect(ratio(-2)).toBe('∞'); expect(ratio(3.4167)).toBe('3.42')
     expect(ratioValue(-1)).toBe(0); expect(ratioValue(-2)).toBe(Infinity); expect(ratioValue(1.5)).toBe(1.5)
+  })
+  it('only a real debt is owed: the sentinels are not', () => {
+    expect(ratioOwed(0.98)).toBe(true)
+    expect(ratioOwed(0)).toBe(true)
+    expect(ratioOwed(1)).toBe(false)
+    expect(ratioOwed(3.42)).toBe(false)
+    // ratioValue flattens n/a to 0, which would otherwise ink an unknown ratio
+    // as loudly as a genuine debt. Infinite owes nothing either.
+    expect(ratioOwed(RATIO_NA)).toBe(false)
+    expect(ratioOwed(RATIO_INF)).toBe(false)
   })
   it('eta', () => { expect(eta(-1)).toBe('—'); expect(eta(10, true)).toBe('∞'); expect(eta(192)).toBe('3m 12s') })
   it('duration', () => {
@@ -74,6 +84,14 @@ describe('ratio / eta / duration', () => {
     expect(ago(now - 59 * 60)).toBe('59m ago')
     expect(ago(now - 60 * 60)).toBe('1h ago')
     expect(ago(now - 24 * H)).toBe('1 day ago')
+  })
+  it('ago keeps seconds: activity_date ticks constantly on a busy list', () => {
+    const now = Date.now() / 1000
+    expect(ago(now - 5)).toBe('5s ago')
+    expect(ago(now - 59)).toBe('59s ago')
+    expect(ago(now - 60)).toBe('1m ago')
+    // A clock running ahead of the daemon must not produce a negative reading.
+    expect(ago(now + 30)).toBe('0s ago')
   })
 })
 
