@@ -4,6 +4,9 @@ import { SidebarResizer } from './SidebarResizer'
 import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebar, get, set } from '../state/store'
 
 const handle = () => document.querySelector('.side-resizer') as HTMLElement
+/** Press on the handle at the current border, so a move to x yields a width of x. */
+const grab = (h: HTMLElement, pointerId = 1, pointerType = 'mouse') =>
+  fireEvent.pointerDown(h, { pointerId, pointerType, button: 0, clientX: get().sidebarW })
 const pref = () => document.documentElement.style.getPropertyValue('--sidebar-pref')
 const stored = () => JSON.parse(localStorage.getItem('tm.sidebar-w') || 'null')
 
@@ -83,7 +86,7 @@ describe('SidebarResizer', () => {
   it('resizes on a pointer drag and stores once, on release', () => {
     render(<SidebarResizer />)
     const h = handle()
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0, timeStamp: 1000 })
+    grab(h)
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 300 })
     expect(pref()).toBe('300px')
     expect(localStorage.getItem('tm.sidebar-w')).toBeNull()   // nothing written mid-drag
@@ -97,7 +100,7 @@ describe('SidebarResizer', () => {
   it('clamps a drag past the edges', () => {
     render(<SidebarResizer />)
     const h = handle()
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0, timeStamp: 1000 })
+    grab(h)
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 20 })
     expect(pref()).toBe(SIDEBAR_MIN + 'px')
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 5000 })
@@ -113,7 +116,7 @@ describe('SidebarResizer', () => {
     vi.spyOn(performance, 'now').mockReturnValue(120)   // 120ms after load
     render(<SidebarResizer />)
     const h = handle()
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'touch' })
+    grab(h, 1, 'touch')
     expect(document.body.classList.contains('resizing')).toBe(true)
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 300 })
     fireEvent.pointerUp(h, { pointerId: 1 })
@@ -125,7 +128,7 @@ describe('SidebarResizer', () => {
   it('commits the last dragged width, not the width at pointerdown', () => {
     render(<SidebarResizer />)
     const h = handle()
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    grab(h)
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 300 })
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 360 })
     fireEvent.pointerUp(h, { pointerId: 1 })
@@ -143,7 +146,7 @@ describe('SidebarResizer', () => {
   it('treats pointercancel like a release', () => {
     render(<SidebarResizer />)
     const h = handle()
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0, timeStamp: 1000 })
+    grab(h)
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 320 })
     fireEvent.pointerCancel(h, { pointerId: 1 })
     expect(stored()).toBe(320)
@@ -158,6 +161,65 @@ describe('SidebarResizer', () => {
     expect(pref()).toBe('')
   })
 
+  // Review finding: the drag used the raw clientX, so grabbing the handle off-centre
+  // snapped the border to the pointer — up to 18px on the coarse hit area.
+  it('moves by the grab offset, not to the pointer', () => {
+    render(<SidebarResizer />)
+    const h = handle()
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 230 })  // 6px right of the border
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 260 })   // travelled +30
+    expect(pref()).toBe('254px')                                // 224 + 30, not 260
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    expect(get().sidebarW).toBe(254)
+  })
+
+  // Review finding: iPad Safari emits a pixel of jitter during a plain tap. Treating
+  // that as a drag nudged the edge and disarmed the double-tap reset, which is the
+  // only way a finger has back to the default width.
+  it('ignores tap jitter, so a jittery double tap still resets', () => {
+    const clock = vi.spyOn(performance, 'now')
+    set({ sidebarW: 400 })
+    render(<SidebarResizer />)
+    const h = handle()
+
+    clock.mockReturnValue(1000)
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'touch', clientX: 400 })
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 401 })   // 1px of jitter
+    fireEvent.pointerUp(h, { pointerId: 1 })
+    expect(get().sidebarW).toBe(400)                            // the tap moved nothing
+    expect(localStorage.getItem('tm.sidebar-w')).toBeNull()
+
+    clock.mockReturnValue(1150)
+    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'touch', clientX: 400 })
+    expect(get().sidebarW).toBe(SIDEBAR_DEFAULT)                // the reset still fires
+  })
+
+  // Review finding: releasePointerCapture throws NotFoundError once the pointer is
+  // gone, which is the pointercancel case, and the throw skipped the commit.
+  it('commits before it releases capture, and skips the release once it is gone', () => {
+    render(<SidebarResizer />)
+    const h = handle()
+    const order: string[] = []
+    // Chrome throws NotFoundError from releasePointerCapture once the pointer is gone,
+    // which is the pointercancel case. Guarding on hasPointerCapture avoids the throw;
+    // committing first means even a throw could not cost us the drag.
+    // Chrome can throw NotFoundError here on pointercancel. The commit must already
+    // have happened, and the throw must not escape.
+    h.hasPointerCapture = () => true
+    h.releasePointerCapture = () => { order.push('release'); throw new DOMException('gone', 'NotFoundError') }
+    // test-setup.ts swaps in its own storage object, so spy on the instance.
+    vi.spyOn(localStorage, 'setItem')
+    const seen = vi.mocked(localStorage.setItem)
+
+    grab(h)
+    fireEvent.pointerMove(h, { pointerId: 1, clientX: 300 })
+    fireEvent.pointerCancel(h, { pointerId: 1 })
+
+    expect(get().sidebarW).toBe(300)
+    expect(seen).toHaveBeenCalledWith('tm.sidebar-w', '300')   // committed despite the throw
+    expect(order).toEqual(['release'])                          // and the throw was swallowed
+  })
+
   // Review finding: a completed drag used to arm the double-tap window, so re-grabbing
   // the handle within 350ms to fine-tune snapped the sidebar back to the default.
   it('does not treat a re-grab right after a drag as a double tap', () => {
@@ -165,13 +227,13 @@ describe('SidebarResizer', () => {
     render(<SidebarResizer />)
     const h = handle()
     clock.mockReturnValue(1000)
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    grab(h)
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 300 })
     fireEvent.pointerUp(h, { pointerId: 1 })
     expect(get().sidebarW).toBe(300)
 
     clock.mockReturnValue(1100)                 // 100ms later: inside the tap window
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'mouse', button: 0 })
+    grab(h)
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 316 })
     fireEvent.pointerUp(h, { pointerId: 1 })
     expect(get().sidebarW).toBe(316)            // fine-tuned, not reset to 224
@@ -182,9 +244,9 @@ describe('SidebarResizer', () => {
   it('ignores a second pointer during a drag', () => {
     render(<SidebarResizer />)
     const h = handle()
-    fireEvent.pointerDown(h, { pointerId: 1, pointerType: 'touch' })
+    grab(h, 1, 'touch')
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 320 })
-    fireEvent.pointerDown(h, { pointerId: 2, pointerType: 'touch' })
+    fireEvent.pointerDown(h, { pointerId: 2, pointerType: 'touch', clientX: 320 })
     fireEvent.pointerMove(h, { pointerId: 2, clientX: 200 })
     fireEvent.pointerUp(h, { pointerId: 2 })
     expect(pref()).toBe('320px')                // finger 2 moved nothing

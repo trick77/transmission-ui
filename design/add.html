@@ -124,21 +124,21 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 
 /* ───────── Sidebar ───────── */
 .sidebar{border-right:1px solid var(--line);padding:14px 10px;overflow:auto;background:var(--bg)}
-/* Drag handle for the sidebar width. A hairline that only lights up on hover or
-   focus, with a hit area wider than the line. touch-action:none is required: without
-   it iPad Safari claims the gesture as a scroll and pointermove never arrives.
-   Coarse pointers get 24px, pushed into the sidebar's own 10px padding — centring it
-   would drop 12px onto the row checkboxes (.cols starts with a 24px column). */
-.side-resizer{position:absolute;top:var(--header-h);bottom:0;left:calc(var(--sidebar-w) - 6px);width:12px;z-index:5;cursor:col-resize;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.side-resizer::after{content:"";position:absolute;inset:0 5px;background:transparent;transition:background .12s}
-.side-resizer:hover::after,.side-resizer:focus-visible::after{background:var(--accent)}
+/* Drag handle for the sidebar width. Invisible by design: the sidebar border is the
+   line, and the col-resize cursor is the only cue. It draws nothing of its own, so
+   there is no lit state to get stuck after a drag. touch-action:none is required:
+   without it iPad Safari claims the gesture as a scroll and pointermove never arrives.
+   The strip stays inside the sidebar and straddles the border by only a few pixels:
+   it is full height with touch-action:none, so any part of it lying over the list
+   would kill a scroll gesture started there and swallow taps meant for the row
+   checkbox (.row pads 16px, then a 24px checkbox). Coarse pointers get 20px, which
+   fits the sidebar's own 10px padding plus a 4px reach past the border. */
+.side-resizer{position:absolute;top:var(--header-h);bottom:0;left:calc(var(--sidebar-w) - 7px);width:10px;z-index:5;cursor:col-resize;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .side-resizer:focus-visible{outline:none}
 @media (pointer: coarse){
-  .side-resizer{width:24px;left:calc(var(--sidebar-w) - 18px)}
-  .side-resizer::after{inset:0 11px}
+  .side-resizer{width:20px;left:calc(var(--sidebar-w) - 16px)}
 }
 body.resizing{cursor:col-resize;user-select:none}
-body.resizing .side-resizer::after{background:var(--accent)}
 /* Signed-out screen. The server keeps the bundle away from anonymous visitors,
    so this is for a session that expires while the tab is open: same card as the
    backend's login page, so the two do not read as different applications. */
@@ -301,9 +301,14 @@ body.resizing .side-resizer::after{background:var(--accent)}
 
 /* ───────── Compact density: one line per torrent ─────────
    Size, Seeds, Ratio, Uploaded, Added on and Last active are one right-aligned
-   numeric block; Name, Tracker and Path are the left-aligned text bookends. */
+   numeric block; Name, Tracker and Path are the left-aligned text bookends.
+   The name is the only flexible column and has a 420px floor: Tracker and Path used
+   to be 1fr each, so the three split the surplus and a long name stayed cut while
+   those two ran to 260px of mostly-empty cell. They are capped now. Below roughly
+   1600px the floor wins and the trailing columns run off the right edge, which is
+   the intended trade: the name is what people read. */
 .cols.one,
-.row.one{grid-template-columns:24px minmax(180px,1.6fr) 84px 96px 56px 60px 80px 92px 88px minmax(96px,1fr) minmax(104px,1fr)}
+.row.one{grid-template-columns:24px minmax(420px,1fr) 84px 96px 56px 60px 80px 92px 88px 140px 160px}
 /* locale month names ("19. Sept. 2026") are wider than en-US, so no cell may wrap */
 .cols.one>*,.row.one>*{white-space:nowrap;overflow:hidden}
 .row.one .name{display:flex;align-items:center;gap:7px;position:relative}
@@ -461,8 +466,6 @@ body.resizing .side-resizer::after{background:var(--accent)}
 .drop.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .drop .big{width:28px;height:28px}
 
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:99px;border:3px solid transparent;background-clip:padding-box}
 </style>
 <svg width="0" height="0" style="position:absolute">
   <defs>
