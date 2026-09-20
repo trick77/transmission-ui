@@ -2,10 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, hostOf, type SortKey } from '../lib/model'
-import { dismissNotice, focus, run, set, syncUrl, useStore } from '../state/store'
+import { dismissNotice, dismissRemoval, focus, run, set, stopRemoval, syncUrl, useStore, type Removing } from '../state/store'
 import * as api from '../rpc/methods'
 import { Menu, Seg, useDismiss } from '../app/ui'
-import { Row } from './Row'
+import { Row, type RowRemoval } from './Row'
 import { torrentMenu, viewMenu } from './actions'
 
 /** Reserve on the header whatever the scrolling rows pane loses to its scrollbar:
@@ -44,6 +44,7 @@ export function List() {
   const focusId = useStore(s => s.focusId)
   const session = useStore(s => s.session)
   const dismissed = useStore(s => s.dismissed)
+  const removing = useStore(s => s.removing)
   const connection = useStore(s => s.connection)
   const density = useStore(s => s.density)
   const one = density === 'compact'
@@ -131,7 +132,8 @@ export function List() {
           </span>
         ) : null}
         <div className="spacer" />
-        {selIds.length ? (
+        {removing ? <RemoveBar /> : null}
+        {selIds.length && !removing ? (
           <div className="sel-bar" id="selbar">
             <span className="v">{selIds.length} selected</span>
             <button className="btn sm ghost" onClick={() => void run('Resume', () => api.start(selIds))}><Icon name="play" />Resume</button>
@@ -190,6 +192,7 @@ export function List() {
       <div className="rows" id="rows" ref={rowsRef} onClick={onRowClick} onContextMenu={onContext}>
         {list.length ? list.map(t => (
           <Row key={t.id} t={t} base={base} compactRow={one} selected={selected.has(t.id)} focused={focusId === t.id}
+            removal={removalOf(removing, t.id)}
             onMore={e => { const target = selected.has(t.id) ? [...selected] : [t.id]; setMenu({ x: e.clientX, y: e.clientY, kind: 'row', ids: target }) }} />
         )) : (
           <div className="empty">
@@ -206,4 +209,53 @@ export function List() {
       ) : null}
     </section>
   )
+}
+
+/**
+ * Bulk removal progress, in the sel-bar's slot.
+ *
+ * Neutral, not accent: this reports what the daemon is doing, it is not a control. Red
+ * appears only once a torrent has actually failed to go. While a single torrent is being
+ * unlinked the daemon answers nothing at all, so every other number on screen is frozen --
+ * the step counter moving between torrents is the honest liveness cue, and the reason the
+ * bar is stepped rather than animated.
+ */
+function RemoveBar() {
+  const r = useStore(s => s.removing)
+  const byId = useStore(s => s.byId)
+  if (!r) return null
+  const total = r.ids.length
+  const finished = r.done >= total || r.stopped
+  const ok = r.done - r.failed.length
+  const pct = total ? Math.round(r.done / total * 100) : 0
+  const label = finished
+    ? r.failed.length ? `Removed ${ok} of ${total}, ${r.failed.length} failed` : `Removed ${ok === 1 ? '1 torrent' : `${ok} torrents`}`
+    : `${r.deleteData ? 'Deleting' : 'Removing'} ${Math.min(r.done + 1, total)} of ${total}`
+  const who = r.active != null ? byId.get(r.active)?.name ?? '' : ''
+  return (
+    <div className={'rm-bar' + (finished ? ' done' : '') + (r.failed.length ? ' has-fail' : '')} id="rmbar" role="status" aria-live="polite">
+      <span className="v">{label}</span>
+      {who ? <span className="who" title={who}>{who}</span> : null}
+      <span className="track"><i style={{ ['--p' as string]: `${pct}%` }} /></span>
+      {finished
+        ? r.failed.length ? <button className="btn sm ghost" onClick={dismissRemoval}>Dismiss</button> : null
+        : <button className="btn sm ghost" onClick={stopRemoval} disabled={r.stopped}>Stop</button>}
+    </div>
+  )
+}
+
+/**
+ * What a row should say about its own removal, or null when it is not in the batch.
+ * The three states are the whole point: queued, being deleted right now, and failed --
+ * a torrent that did not go stays on screen with the reason.
+ */
+export function removalOf(r: Removing | null, id: number): RowRemoval {
+  if (!r) return null
+  const failed = r.failed.find(f => f.id === id)
+  if (failed) return { kind: 'failed', text: `Failed: ${failed.msg}` }
+  if (!r.ids.includes(id)) return null
+  if (r.active === id) return { kind: 'active', text: r.deleteData ? 'Deleting files…' : 'Removing…' }
+  // A stopped run leaves the not-yet-attempted rows alone: they are still there and still live.
+  if (r.stopped) return null
+  return { kind: 'queued', text: 'Queued for removal' }
 }

@@ -78,7 +78,12 @@ export interface FakeDaemon {
   restore(): void
 }
 
-export function installFakeDaemon(opts: { torrents?: TorrentDetail[]; session?: Partial<Session>; unauthorized?: boolean } = {}): FakeDaemon {
+/**
+ * `onRemove` lets a test hold a torrent-remove open or reject it. The real daemon deletes
+ * files synchronously and answers nothing meanwhile, so a remove that resolves instantly
+ * cannot exercise the queued / deleting / failed states at all.
+ */
+export function installFakeDaemon(opts: { torrents?: TorrentDetail[]; session?: Partial<Session>; unauthorized?: boolean; onRemove?: (ids: number[]) => Promise<void> | void } = {}): FakeDaemon {
   const d: FakeDaemon = {
     torrents: opts.torrents ?? defaultTorrents(),
     session: { ...defaultSession(), ...opts.session },
@@ -130,7 +135,15 @@ export function installFakeDaemon(opts: { torrents?: TorrentDetail[]; session?: 
     if (!handshake && !headers['X-Transmission-Session-Id']) { handshake = true; return new Response('', { status: 409, headers: { 'X-Transmission-Session-Id': 'fake' } }) }
     const body = JSON.parse(String(init?.body)) as { jsonrpc: '2.0'; method: string; params: Record<string, unknown>; id: number }
     d.calls.push({ method: body.method, args: body.params })
-    try { return Response.json({ jsonrpc: '2.0', id: body.id, result: handle(body.method, body.params) }) }
+    try {
+      // Stands in for the daemon's synchronous unlink: the call is recorded, then the test
+      // decides when (or whether) it comes back.
+      if (body.method === 'torrent_remove' && opts.onRemove) {
+        const ids = body.params.ids
+        await opts.onRemove(Array.isArray(ids) ? ids as number[] : [])
+      }
+      return Response.json({ jsonrpc: '2.0', id: body.id, result: handle(body.method, body.params) })
+    }
     catch (e) { return Response.json({ jsonrpc: '2.0', id: body.id, error: { code: -32603, message: (e as Error).message } }) }
   })
   return d

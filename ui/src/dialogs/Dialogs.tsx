@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Icon } from '../icons/Icon'
-import { get, refreshNow, run, set, useStore } from '../state/store'
+import { get, refreshNow, removeSequence, run, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
 import { relDir, labelCounts, folderTree } from '../lib/model'
 import { Add } from './Add'
@@ -45,7 +45,7 @@ function ConfirmRemove({ ids, deleteData, onClose }: { ids: number[]; deleteData
   return (
     <Modal title={del ? 'Remove and delete data' : 'Remove from list'} width={520} onClose={onClose}
       footer={<><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
-        <button className={'btn ' + (del ? 'primary' : '')} style={del ? { background: 'var(--err)' } : undefined} onClick={() => { onClose(); void run('Remove', () => api.remove(ids, del)) }}>{del ? `Delete ${ids.length > 1 ? ids.length + ' torrents' : 'torrent'} and data` : `Remove ${ids.length > 1 ? ids.length + ' torrents' : 'torrent'}`}</button></>}>
+        <button className={'btn ' + (del ? 'primary' : '')} style={del ? { background: 'var(--err)' } : undefined} onClick={() => { onClose(); void removeSequence(ids, del) }}>{del ? `Delete ${ids.length > 1 ? ids.length + ' torrents' : 'torrent'} and data` : `Remove ${ids.length > 1 ? ids.length + ' torrents' : 'torrent'}`}</button></>}>
       <div style={{ display: 'grid', gap: 12 }}>
         <div>{n.length === 1 ? <b>{n[0]}</b> : <><b>{n.length} torrents</b><div className="hint" style={{ marginTop: 4 }}>{n.slice(0, 5).join(' · ')}{n.length > 5 ? ` · +${n.length - 5} more` : ''}</div></>}</div>
         <Opt label="Also delete downloaded data" desc={del ? <span style={{ color: 'var(--err)' }}>Files under {dirs.join(', ')} are deleted. This cannot be undone.</span> : 'The files stay on disk; only the torrent is forgotten.'}><Toggle on={del} onChange={setDel} /></Opt>
