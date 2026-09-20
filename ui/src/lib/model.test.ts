@@ -101,6 +101,27 @@ describe('trackerHealth', () => {
     expect(hostOf('udp://tracker.opentrackr.org:1337/announce')).toBe('tracker.opentrackr.org')
     expect(hostOf('not a url')).toBe('not a url')
   })
+  it('skips a backup tracker the daemon never needed', () => {
+    const t = tor({ tracker_stats: [
+      ts({ announce: 'http://live.example.org/announce' }),
+      ts({ announce: 'http://backup.example.net/announce', has_announced: false, last_announce_succeeded: false, last_announce_result: '', last_announce_time: 0, has_scraped: false, tier: 1 }),
+    ] })
+    expect(trackerHealth([t]).map(h => h.host)).toEqual(['live.example.org'])
+  })
+  it('keeps every tracker on a torrent that announced to none of them', () => {
+    // Stopped torrents never announce; dropping them would empty the sidebar after a daemon restart.
+    const idle = ts({ has_announced: false, last_announce_succeeded: false, last_announce_result: '', last_announce_time: 0, has_scraped: false })
+    const t = tor({ status: Status.Stopped, tracker_stats: [
+      idle, ts({ ...idle, announce: 'http://second.example.net/announce', tier: 1 }),
+    ] })
+    expect(trackerHealth([t]).map(h => h.host).sort()).toEqual(['second.example.net', 'tracker.example.org'])
+  })
+  it('breaks a count tie on the display name, not the host', () => {
+    // flacsfor.me -> Redacted sorts under O for OpenTrackr, not under F.
+    const a = tor({ tracker_stats: [ts({ announce: 'http://flacsfor.me/announce' })] })
+    const b = tor({ tracker_stats: [ts({ announce: 'http://tracker.opentrackr.org/announce' })] })
+    expect(trackerHealth([a, b]).map(h => h.host)).toEqual(['tracker.opentrackr.org', 'flacsfor.me'])
+  })
 })
 
 describe('filters', () => {
@@ -136,6 +157,21 @@ describe('filters', () => {
     expect(filterFn('dir:/data/torrents/radarr', base).label).toBe('radarr')
     expect(set.filter(filterFn('dir:/data/torrents/radarr', base).f)).toHaveLength(1)
     expect(set.filter(filterFn('tracker:tracker.example.org', base).f)).toHaveLength(9)
+    // the key is the host, the label is the name it shows as
+    expect(filterFn('tracker:bt1.archive.org', base).label).toBe('Archive.org')
+    expect(filterFn('tracker:tracker.example.org', base).label).toBe('tracker.example.org')
+
+    // The sidebar count and the filter behind it must agree: a host that is a live
+    // tracker on one torrent and an unused backup on another counts once, not twice.
+    const X = 'http://x.example.net/announce'
+    const live = tor({ tracker_stats: [ts({ announce: X })] })
+    const backup = tor({ tracker_stats: [
+      ts({ announce: 'http://live.example.org/announce' }),
+      ts({ announce: X, has_announced: false, last_announce_succeeded: false, last_announce_result: '', last_announce_time: 0, has_scraped: false, tier: 1 }),
+    ] })
+    const pair = [live, backup]
+    expect(trackerHealth(pair).find(h => h.host === 'x.example.net')?.count)
+      .toBe(pair.filter(filterFn('tracker:x.example.net', base).f).length)
     expect(filterFn('trackererr', base).label).toBe('Error')   // folded in; old links still work
     expect(filterFn('bogus', base).label).toBe('All torrents')
     expect(filterFn('constructor', base).label).toBe('All torrents')   // prototype keys are not filters
@@ -194,6 +230,11 @@ describe('sort', () => {
     expect([aa, zz].sort(sortFn('uploaded', -1))[0]).toBe(zz)
     expect([zz, aa].sort(sortFn('tracker', 1))[0]).toBe(aa)
     expect([zz, aa].sort(sortFn('path', 1, base))[0]).toBe(aa)
+
+    // the tracker column sorts on the name it shows, not the announce host
+    const mapped = mk({ name: 'e', tracker_stats: [ts({ announce: 'http://flacsfor.me/announce' })] })      // → Redacted
+    const raw = mk({ name: 'f', tracker_stats: [ts({ announce: 'http://sss.example.org/announce' })] })
+    expect([raw, mapped].sort(sortFn('tracker', 1))[0]).toBe(mapped)
 
     // seeds come from the swarm, not the peer counts
     const few = mk({ name: 'c', tracker_stats: [ts({ seeder_count: 2 })] })

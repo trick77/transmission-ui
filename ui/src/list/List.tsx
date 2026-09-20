@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
-import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, hostOf, type SortKey } from '../lib/model'
+import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, usesTracker, type SortKey } from '../lib/model'
+import { trackerName } from '../lib/trackers'
 import { dismissNotice, dismissRemoval, focus, run, set, setViewOrder, stopRemoval, syncUrl, useStore, type Removing } from '../state/store'
 import * as api from '../rpc/methods'
 import { Menu, Seg, useDismiss } from '../app/ui'
@@ -114,7 +115,7 @@ export function List() {
 
   // tracker-down notices
   const health = useMemo(() => trackerHealth(torrents).filter(h => (h.state === 'down' || h.state === 'rejected') && !dismissed.has(`${h.host}@${Math.floor(h.since)}`)), [torrents, dismissed])
-  const affected = (host: string) => torrents.filter(t => t.tracker_stats.some(ts => hostOf(ts.announce) === host)).map(t => t.id)
+  const affected = (host: string) => torrents.filter(t => usesTracker(t, host)).map(t => t.id)
 
   const allSel = ids.length > 0 && ids.every(id => selected.has(id))
   const someSel = !allSel && ids.some(id => selected.has(id))
@@ -175,7 +176,8 @@ export function List() {
         <div key={h.host} className="notice">
           <span className="st" />
           <span>
-            <b>{h.host}</b> {h.state === 'rejected' ? <>rejects this client ({h.result}) · {h.count} torrents affected</> : <>has been unreachable for {duration(Date.now() / 1000 - h.since)} · {h.count} torrents affected{session?.dht_enabled ? ', DHT and PEX still finding peers' : ''}</>}
+            {/* The name matches the sidebar; the host says which announce URL is failing. */}
+            <b title={h.host}>{trackerName(h.host)}</b> {h.state === 'rejected' ? <>rejects this client ({h.result}) · {h.count} torrents affected</> : <>has been unreachable for {duration(Date.now() / 1000 - h.since)} · {h.count} torrents affected{session?.dht_enabled ? ', DHT and PEX still finding peers' : ''}</>}
           </span>
           <button className="btn sm ghost" onClick={() => void run('Re-announce', () => api.reannounce(affected(h.host)))}>Re-announce all</button>
           <button className="btn sm ghost icon" title="Dismiss" onClick={() => dismissNotice(`${h.host}@${Math.floor(h.since)}`)}><Icon name="x" size={14} /></button>

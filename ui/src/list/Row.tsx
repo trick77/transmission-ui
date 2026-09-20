@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Icon } from '../icons/Icon'
 import { ago, bytes, compact, date, eta, percent, rateParts, ratio, ratioOwed } from '../lib/format'
 import { hostOf, relDir, statusView, swarmOf } from '../lib/model'
+import { trackerName } from '../lib/trackers'
 import { Status, type TorrentSummary } from '../rpc/types'
 import * as api from '../rpc/methods'
 import { run } from '../state/store'
@@ -42,6 +43,8 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
 
   if (compactRow) {
     const host = t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : ''
+    // The cell shows the name; the announce host stays one hover away.
+    const trkName = host ? trackerName(host) : ''
     // The second line is gone, so what it carried moves into tooltips: the status word and
     // the peer counts onto the dot. The labels stay on screen as chips.
     const why = t.error !== 0 ? (t.error_string || 'Error')
@@ -70,7 +73,7 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
         {/* Relative like Last active; the exact date stays one hover away. */}
         <span className="num r muted" title={date(t.added_date)}>{ago(t.added_date)}</span>
         <span className="num r muted">{ago(t.activity_date)}</span>
-        <span className={'tcell' + (host ? '' : ' faint')} title={host}>{host || '—'}</span>
+        <span className={'tcell' + (host ? '' : ' faint')} title={host}>{trkName || '—'}</span>
         <span className={'tcell' + (dir ? '' : ' faint')} title={dir}>{dir ? dir + '/' : '—'}</span>
       </div>
     )

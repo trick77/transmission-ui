@@ -666,8 +666,13 @@ const dstr = days => agostr(days);
 const idlestr = (d, id) => d === 0 ? `${(id * 7) % 50 + 5}m ago` : agostr(d);
 const TRK = {iso:"bttracker.debian.org", radarr:"tracker.blender.org", buffer:"tracker.blender.org",
              audiobooks:"bt1.archive.org", "sonarr/docs":"bt1.archive.org"};
+// Announce host -> the name the tracker is known by, keyed on the registrable
+// domain and matched by suffix walk (mirrors ui/src/lib/trackers.ts).
+const TRK_NAMES = {"debian.org":"Debian", "blender.org":"Blender", "archive.org":"Archive.org",
+                   "opentrackr.org":"OpenTrackr"};
 const upl = t => { const [n,u] = t.size.split(' '); return `${(parseFloat(n)*parseFloat(t.ratio)).toFixed(1)} ${u}`; };
 const trk = t => TRK[rel(t.dir)] || 'tracker.opentrackr.org';
+const trkname = t => { let h = trk(t); while (h.includes('.')) { if (TRK_NAMES[h]) return TRK_NAMES[h]; h = h.slice(h.indexOf('.')+1); } return trk(t); };
 const spd = (v, dir) => v === "0"
   ? `<span class="spd zero num">—</span>`
   : `<span class="spd ${dir} num"><svg class="i arrow"><use href="#i-${dir==='dl'?'down':'up'}"/></svg>${v}</span>`;
@@ -719,7 +724,7 @@ function rowOne(t, sel){
     <span class="num r muted">${upl(t)}</span>
     <span class="num r muted">${dstr(t.age)}</span>
     <span class="num r muted">${idlestr(t.idle, t.id)}</span>
-    <span class="tcell" title="${trk(t)}">${trk(t)}</span>
+    <span class="tcell" title="${trk(t)}">${trkname(t)}</span>
     <span class="tcell" title="${rel(t.dir)}">${rel(t.dir)}/</span>
   </div>`;
 }
