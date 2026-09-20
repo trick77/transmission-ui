@@ -14,7 +14,8 @@ async function rpc<T = unknown>(method: string, args: Record<string, unknown> = 
   if (j.error) throw new Error(j.error.data?.error_string || j.error.message)
   return j.result as T
 }
-const torrents = () => rpc<{ torrents: { id: number; name: string; status: number; labels: string[] }[] }>('torrent_get', { fields: ['id', 'name', 'status', 'labels'] }).then(r => r.torrents)
+type E2ETorrent = { id: number; name: string; status: number; labels: string[]; error: number; tracker_stats: { has_announced: boolean; last_announce_succeeded: boolean }[] }
+const torrents = () => rpc<{ torrents: E2ETorrent[] }>('torrent_get', { fields: ['id', 'name', 'status', 'labels', 'error', 'tracker_stats'] }).then(r => r.torrents)
 const shot = (page: Page, name: string) => page.screenshot({ path: `test-results/${name}.png` })
 
 test.beforeEach(async ({ page }) => {
@@ -25,11 +26,19 @@ test.beforeEach(async ({ page }) => {
 test('list renders every daemon torrent and the sidebar counts match', async ({ page }) => {
   const list = await torrents()
   await expect(page.locator('.row')).toHaveCount(list.length)
-  const stopped = list.filter(t => t.status === 0).length
   await expect(page.locator('.sidebar [data-f="all"] .cnt')).toHaveText(String(list.length))
-  const errCount = Number(await page.locator('.sidebar [data-f="error"] .cnt').textContent())
+
+  // Error covers a daemon error OR a failing tracker, counted once for a torrent
+  // with both, so it is derived from the daemon rather than inferred from another
+  // filter. A seeding torrent with a dead tracker is an error and is not stopped.
+  const failing = (t: E2ETorrent) => t.error !== 0
+    || t.tracker_stats.some(ts => ts.has_announced && !ts.last_announce_succeeded)
+  const expectedErrors = list.filter(failing).length
+  await expect(page.locator('.sidebar [data-f="error"] .cnt')).toHaveText(String(expectedErrors))
+  // Stopped excludes errored torrents, so the two filters never double-count one.
   const stoppedUi = Number(await page.locator('.sidebar [data-f="stopped"] .cnt').textContent())
-  expect(errCount + stoppedUi).toBe(stopped)  // fixtures: one stopped, one errored (status 0 + error)
+  expect(stoppedUi).toBe(list.filter(t => t.status === 0 && t.error === 0).length)
+  await expect(page.locator('.sidebar [data-f="trackererr"]')).toHaveCount(0)
   await shot(page, 'list')
 })
 
