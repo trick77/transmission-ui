@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Header } from './Header'
+import { BrandMark } from '../icons/BrandMark'
 import { Sidebar } from './Sidebar'
 import { List } from '../list/List'
 import { Inspector } from '../inspector/Inspector'
@@ -8,6 +9,19 @@ import { get, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
 import { basePath } from '../rpc/client'
 import { run } from '../state/store'
+
+function SignIn() {
+  return (
+    <div className="signin">
+      <div className="card">
+        <BrandMark />
+        <h1>Sign in</h1>
+        <p className="sub">Your session has ended.</p>
+        <button className="btn primary" onClick={() => { location.href = `${basePath()}/api/auth/login` }}>Sign in</button>
+      </div>
+    </div>
+  )
+}
 
 export function App() {
   const focusId = useStore(s => s.focusId)
@@ -27,7 +41,7 @@ export function App() {
       if (e.key === 'Escape') { set({ selected: new Set() }); return }
       if (!ids.length) return
       if (e.key === ' ') { e.preventDefault(); const t = s.byId.get(ids[0]); if (!t) return; void run(t.status === 0 ? 'Resume' : 'Pause', () => t.status === 0 ? api.start(ids) : api.stop(ids)) }
-      if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); set({ dialog: { kind: 'confirm-remove', ids, deleteData: e.metaKey || e.ctrlKey } }) }
+      if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); set({ dialog: { kind: 'confirm-remove', ids, deleteData: !(e.metaKey || e.ctrlKey) } }) }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -47,6 +61,10 @@ export function App() {
     return () => { document.removeEventListener('dragover', over); document.removeEventListener('drop', drop) }
   }, [])
 
+  // A missing session gets the sign-in screen, not the shell with a footnote.
+  // 'error' is a reachability problem, not an auth one, and keeps the shell.
+  if (connection === 'unauthorized') return <SignIn />
+
   return (
     <div className="app">
       <Header />
@@ -56,11 +74,10 @@ export function App() {
         {focusId != null ? <Inspector /> : null}
       </div>
       <Dialogs />
-      {connection === 'unauthorized' || connection === 'error' ? (
+      {connection === 'error' ? (
         <div className="notice" style={{ position: 'fixed', left: 'calc(var(--sidebar-w) + 16px)', bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>
           <span className="st" />
-          <span>{connection === 'unauthorized' ? <><b>Not signed in.</b> Sign in to continue.</> : <><b>Can't reach the daemon.</b> {lastError} · retrying</>}</span>
-          {connection === 'unauthorized' ? <button className="btn sm" onClick={() => { location.href = `${basePath()}/api/auth/login` }}>Sign in</button> : null}
+          <span><b>Can't reach the daemon.</b> {lastError} · retrying</span>
         </div>
       ) : null}
       {toastMsg ? <div className="notice" style={{ position: 'fixed', right: 16, bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>{toastMsg}</div> : null}

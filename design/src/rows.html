@@ -72,7 +72,7 @@ function rowOne(t, sel){
     <div class="name">
       <span class="sdot ${s.cls}" title="${why}"></span>
       <span class="t" title="${t.err ? why : t.name}">${t.name}</span>
-      ${t.lbl.length?`<span class="lbl-n" title="${t.lbl.join(' · ')}">${t.lbl.length}</span>`:''}
+      ${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
       ${acts}
     </div>
     <span class="num r muted">${t.size}</span>
@@ -150,7 +150,7 @@ function contextMenu(rowEl){
        <div class="cmenu sub">${it('up','Move to top')}${it('up','Move up')}${it('down','Move down')}${it('down','Move to bottom')}</div></div>` +
     it('tag','Labels…') + it('folder','Set location…') + it('file','Rename…') + it('gear','Limits & priority…') + `<div class="sep"></div>` +
     it('magnet','Copy magnet link','⌘C') + it('link','Open folder') + `<div class="sep"></div>` +
-    it('x','Remove from list','⌫','danger') + it('trash','Remove and delete data…','⌘⌫','danger');
+    it('trash','Remove and delete data…','⌫','danger') + it('x','Remove from list','⌘⌫','danger');
   document.body.appendChild(m);
 }
 function syncSel(){

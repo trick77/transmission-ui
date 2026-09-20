@@ -8,7 +8,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - `hack/` local daemon state, `fixtures.sh` (seeds every torrent state), `coverage-gate.sh` + `coverage-floors`.
 - `ui/sim/` standalone fake daemon (`node ui/sim/server.ts`, `:9092`). Node runs it with built-in type stripping, so keep it erasable: no enum, no parameter properties, `.ts` on every relative import, `import type { … }` in statement form only.
 - `backend/` Go: serves the embedded `ui/dist`, OIDC RP at `/api/auth/*` (signed-cookie session, no DB), reverse-proxies `/transmission/rpc` to the daemon with its basic auth attached. Ported from peeq's `internal/auth`.
-- Auth modes (`BACKEND_AUTH_MODE`): `oidc` | `form` (server-rendered `/login`, checks `TM_USER`/`TM_PASS`). Local work uses `form`; there is no auto-login mode. An upstream 401 becomes a 502, never a passthrough: forwarding `WWW-Authenticate` would pop the browser dialog the backend exists to remove.
+- Auth modes (`BACKEND_AUTH_MODE`): `oidc` | `form` (server-rendered `/login`, checks `TM_USER`/`TM_PASS`). Local work uses `form`; there is no auto-login mode. The app shell is gated in both: signed out, form mode 302s to `/login` and oidc renders the same card without the form. The check sits inside `staticHandler` after the SPA-fallback switch, NOT on the `GET /` route -- every unknown extensionless path is rewritten to index.html, so gating the route alone leaves the shell reachable at `/settings` or any deep link. It answers **200, never 4xx** -- the container healthcheck probes that exact route and counts >= 400 as unhealthy. `/login`, `POST /login` and `/login-assets/` mount in every mode; the POST 404s outside form mode. An upstream 401 becomes a 502, never a passthrough: forwarding `WWW-Authenticate` would pop the browser dialog the backend exists to remove.
 - A path in `BACKEND_PUBLIC_URL` is the prefix the proxy forwards (it is NOT stripped); every route mounts under it and every redirect keeps it.
 - `compose.yaml` = production stack (Containerfile image, `.env` from `.env.example`). `compose.dev.yaml` = throwaway local daemon.
 
@@ -30,7 +30,9 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 ## Conventions
 - All RPC calls go through `ui/src/rpc/methods.ts`; method and field names are the daemon's, snake_case throughout (rpc 18+). Take spellings from the upstream `docs/rpc-spec.md`, never from memory.
 - Derived views (filters, sort, folders, tracker health) live in `ui/src/lib/model.ts`, mirrored from `design/src/rows.html`.
-- Bulk actions = one RPC with an id array. Remove vs remove+delete are always two separate, differently worded actions.
+- Bulk actions = one RPC with an id array. Remove vs remove+delete are always two separate, differently worded actions. Remove+delete is the default (⌫, sel-bar button, first menu entry); remove-only is ⌘⌫. Do not "fix" that inversion.
 - Colour rules: accent only for active download + controls, red only for errors, everything else neutral.
+- Row grids come in pairs: a `grid-template-columns` change needs the matching `>:nth-child(n+N){display:none}`, or leftover cells auto-place into an implicit second row and double the row height. Two-line rows have 8 children, compact 11. Below 1200px the tail columns drop (at 1194px Name was at its 180px floor, 24 of 29 names clipped).
+- Sidebar headings: sentence case, 14px/400, no tracking. `.side-h` is shared with Settings.
 - Node ≥ 22 ships a fake `localStorage` global: `ui/src/test-setup.ts` replaces it; don't remove that.
 - `compose.yaml` / `Containerfile` naming; default branch `master`; remote `trick77/transmission-ui` — CI on PRs, image + release on master push.

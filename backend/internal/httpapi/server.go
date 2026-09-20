@@ -56,11 +56,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(p("GET /api/auth/callback"), s.handleCallback)
 	mux.HandleFunc(p("GET /api/auth/logout"), s.handleLogout)
 	mux.HandleFunc(p("GET /api/auth/me"), s.handleMe)
-	if s.cfg.AuthMode == config.AuthModeForm {
-		mux.HandleFunc(p("GET /login"), s.handleLoginPage)
-		mux.HandleFunc(p("POST /login"), s.handleLoginSubmit)
-		mux.Handle(p("GET /login-assets/"), loginAssetHandler(s.cfg.BasePath))
-	}
+	// Registered in every mode: oidc serves the same page without the form, and
+	// its fonts, background and icon come from /login-assets/ either way.
+	mux.HandleFunc(p("GET /login"), s.handleLoginPage)
+	mux.HandleFunc(p("POST /login"), s.handleLoginSubmitGuard)
+	mux.Handle(p("GET /login-assets/"), loginAssetHandler(s.cfg.BasePath))
 	mux.Handle(p("POST /transmission/rpc"), s.requireAuth(s.rpc))
 	// Without this, a GET on the RPC path falls through to the SPA handler and
 	// answers 200 with index.html. The daemon's RPC is POST-only. A methodless
@@ -204,17 +204,21 @@ func (s *Server) staticHandler() http.Handler {
 			name = "index.html"
 		}
 		if name == "index.html" {
-			// Form mode owns a login page, so send an unauthenticated visitor
-			// there rather than loading the app just to show it a banner. This
+			// The shell is privileged: handing it to an anonymous visitor renders
+			// the whole UI and leaks the layout, with only the RPC refusing. This
 			// sits after the switch so it covers client-side routes too, not
 			// only "/" -- otherwise a deep link still rendered the shell.
-			// OIDC mode leaves the shell to render: its sign-in leaves this
-			// origin entirely.
-			if s.cfg.AuthMode == config.AuthModeForm {
-				if _, err := s.sessions.Decode(r); err != nil {
+			//
+			// Form mode redirects to the page that owns the form. OIDC renders
+			// the same card without one, with 200 and not 401: the container
+			// healthcheck probes "/" and counts >= 400 as unhealthy.
+			if claims, err := s.sessions.Decode(r); err != nil || !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
+				if s.cfg.AuthMode == config.AuthModeForm {
 					http.Redirect(w, r, s.cfg.BasePath+"/login", http.StatusFound)
 					return
 				}
+				s.renderLogin(w, http.StatusOK, "")
+				return
 			}
 			// Tell the app where it is mounted. It cannot infer this from the
 			// URL: on the bundle-only path the daemon serves the UI from

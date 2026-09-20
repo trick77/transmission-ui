@@ -109,13 +109,29 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 
 /* ───────── Sidebar ───────── */
 .sidebar{border-right:1px solid var(--line);padding:14px 10px;overflow:auto;background:var(--bg)}
-.side-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:0 8px;margin:11px 0 4px}
+/* Signed-out screen. The server keeps the bundle away from anonymous visitors,
+   so this is for a session that expires while the tab is open: same card as the
+   backend's login page, so the two do not read as different applications. */
+.signin{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:var(--bg);z-index:100}
+.signin .card{width:min(100%,332px);background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:26px 24px 22px;text-align:center}
+.signin h1{font-family:var(--serif);font-size:21px;font-weight:500;margin:14px 0 6px}
+.signin .sub{font-size:13px;color:var(--ink-2);margin:0 0 18px}
+.signin .btn{width:100%;justify-content:center}
+.signin .logo{width:34px;height:34px}
+
+/* Sidebar headings read as words, not as tracked-out caps: loom's scale
+   (14px / 400 / 20px line-height), sentence case, no letter-spacing. */
+.side-h{font-size:14px;font-weight:400;line-height:20px;color:var(--ink-3);padding:0 8px;margin:13px 0 4px}
 .side-h:first-child{margin-top:0}
 .side-item{display:flex;align-items:center;gap:9px;height:25px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left}
 .side-item:hover{background:var(--surface-2);color:var(--ink)}
 .side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:500;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
 .side-item .dot{width:8px;height:8px;border-radius:50%;flex:none}
-.side-item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Long hosts and folder names fade out rather than ending in an ellipsis. The mask
+   always fades the last 20px of the box; short entries end well before it because
+   .lbl is flex:1, so in practice only overflowing text meets the gradient. */
+.side-item .lbl{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent)}
 .side-item .cnt{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
 .side-item.on .cnt{color:var(--accent)}
 .tag-dot{display:none}
@@ -270,13 +286,43 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .row.one .num{font-variant-numeric:tabular-nums}
 .row.one .faint{color:var(--ink-3)}
 .row.one .tcell{font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-/* labels have no room for chips on one line: a count, the names in its tooltip */
-.row.one .lbl-n{flex:none;font-size:10px;line-height:1;padding:2px 5px;border-radius:99px;border:1px solid var(--line);color:var(--ink-3)}
+/* labels read as names, not as a bare count: the same chips the two-line row uses,
+   shrunk to fit. flex:none with a cap keeps their footprint bounded, so the name
+   column keeps the rest of the track instead of splitting the squeeze with them. */
+.row.one .chip.lbl{flex:none;max-width:110px;font-size:10px;line-height:1;padding:2px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* with the inspector docked the tail columns go first: Path, Tracker, Last active, Added on, Uploaded */
 .main.has-insp .cols.one,
 .main.has-insp .row.one{grid-template-columns:24px minmax(160px,1fr) 80px 92px 52px 56px}
 .main.has-insp .cols.one>:nth-child(n+7),
 .main.has-insp .row.one>:nth-child(n+7){display:none}
+
+/* ───────── Tablet (iPad landscape ≈ 1194px) ─────────
+   Measured at 1194px with the inspector closed: all 11 compact columns fit only by
+   squeezing Name to its 180px floor, and 24 of 29 names were clipped. The tail
+   columns drop in the order the docked-inspector rules already use, so the name
+   gets their ~460px. The dropped values stay in the inspector. */
+@media (max-width:1200px){
+  .cols.one,
+  .row.one{grid-template-columns:24px minmax(180px,1fr) 84px 96px 56px 60px}
+  .cols.one>:nth-child(n+7),
+  .row.one>:nth-child(n+7){display:none}
+  /* Two-line rows overflow their track here too: drop Uploaded and Added on.
+     The hide rule is not optional: 8 children in a 6-track grid would otherwise
+     auto-place the tail into an implicit second row and double the row height. */
+  .cols:not(.one),
+  .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 84px 92px 104px 104px}
+  .cols:not(.one)>:nth-child(n+7),
+  .row:not(.one)>:nth-child(n+7){display:none}
+  /* With the inspector docked there is no room to spare: name only. */
+  .main.has-insp .cols:not(.one),
+  .main.has-insp .row:not(.one){grid-template-columns:24px minmax(200px,1fr) 80px 88px}
+  .main.has-insp .cols:not(.one)>:nth-child(n+5),
+  .main.has-insp .row:not(.one)>:nth-child(n+5){display:none}
+  .main.has-insp .cols.one,
+  .main.has-insp .row.one{grid-template-columns:24px minmax(180px,1fr) 80px 92px}
+  .main.has-insp .cols.one>:nth-child(n+5),
+  .main.has-insp .row.one>:nth-child(n+5){display:none}
+}
 
 /* comfortable density (Interface setting) */
 :root[data-density="comfortable"] .row{padding:14px 16px}
@@ -581,7 +627,7 @@ function rowOne(t, sel){
     <div class="name">
       <span class="sdot ${s.cls}" title="${why}"></span>
       <span class="t" title="${t.err ? why : t.name}">${t.name}</span>
-      ${t.lbl.length?`<span class="lbl-n" title="${t.lbl.join(' · ')}">${t.lbl.length}</span>`:''}
+      ${t.lbl.map(l=>`<span class="chip lbl">${l}</span>`).join('')}
       ${acts}
     </div>
     <span class="num r muted">${t.size}</span>
@@ -659,7 +705,7 @@ function contextMenu(rowEl){
        <div class="cmenu sub">${it('up','Move to top')}${it('up','Move up')}${it('down','Move down')}${it('down','Move to bottom')}</div></div>` +
     it('tag','Labels…') + it('folder','Set location…') + it('file','Rename…') + it('gear','Limits & priority…') + `<div class="sep"></div>` +
     it('magnet','Copy magnet link','⌘C') + it('link','Open folder') + `<div class="sep"></div>` +
-    it('x','Remove from list','⌫','danger') + it('trash','Remove and delete data…','⌘⌫','danger');
+    it('trash','Remove and delete data…','⌫','danger') + it('x','Remove from list','⌘⌫','danger');
   document.body.appendChild(m);
 }
 function syncSel(){
