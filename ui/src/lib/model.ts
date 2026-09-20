@@ -141,8 +141,8 @@ export const FILTERS: Record<FilterKey, { label: string; f: (t: TorrentSummary) 
   seed: { label: 'Seeding', f: t => t.status === Status.Seed },
   active: { label: 'Active', f: isActive },
   inactive: { label: 'Inactive', f: t => !isActive(t) && !isQueuedOrChecking(t) },
-  finished: { label: 'Finished', f: t => t.is_finished || (t.percent_done >= 1 && t.metadata_percent_complete >= 1) },
-  queued: { label: 'Queued / Checking', f: isQueuedOrChecking },
+  finished: { label: 'Completed', f: t => t.is_finished || (t.percent_done >= 1 && t.metadata_percent_complete >= 1) },
+  queued: { label: 'Checking', f: isQueuedOrChecking },
   stopped: { label: 'Stopped', f: t => t.status === Status.Stopped && t.error === 0 },
   // A daemon error and a failing tracker are different conditions, but both mean
   // "this torrent needs looking at" and in practice the same torrents carry both,
@@ -150,7 +150,10 @@ export const FILTERS: Record<FilterKey, { label: string; f: (t: TorrentSummary) 
   // with both appears once.
   error: { label: 'Error', f: t => t.error !== 0 || hasTrackerProblem(t) },
 }
-export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'seed', 'active', 'inactive', 'finished', 'queued', 'stopped', 'error']
+// Sidebar list. 'queued' (Checking) is listed but not in Sidebar's PINNED set, so it
+// only appears while something is actually checking. 'seed' keeps its FILTERS entry
+// though it has no entry here, so an existing ?filter=seed link still resolves.
+export const FILTER_ORDER: FilterKey[] = ['all', 'download', 'active', 'finished', 'inactive', 'queued', 'stopped', 'error']
 
 /** A filter string is a FilterKey, `label:<name>`, `dir:<path>` (prefix) or `tracker:<host>`. */
 export function filterFn(filter: string, base: string): { label: string; f: (t: TorrentSummary) => boolean } {

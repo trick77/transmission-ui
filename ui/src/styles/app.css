@@ -160,7 +160,10 @@ body.resizing{cursor:col-resize;user-select:none}
 .side-h{font-size:12px;font-weight:500;color:var(--ink-3);padding:0 8px;margin:13px 0 4px}
 .side-h:first-child{margin-top:0}
 /* Entries carry loom's .ui-sidebar-text scale: 14px / 400 / 20px line-height. */
-.side-item{display:flex;align-items:center;gap:9px;min-height:28px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left;font-size:14px;font-weight:400;line-height:20px}
+/* 24px around a 20px line box = 2px of air top and bottom. 28px was too loose to
+   read the Status list as one group; below 24 the label crowds its own box and the
+   .on pill loses its padding. Section breaks (.side-h) carry the spacing instead. */
+.side-item{display:flex;align-items:center;gap:9px;min-height:24px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left;font-size:14px;font-weight:400;line-height:20px}
 .side-item:hover{background:var(--surface-2);color:var(--ink)}
 .side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:500;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
 .side-item .dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -177,8 +180,11 @@ body.resizing{cursor:col-resize;user-select:none}
 .side-item .st.issues{border:1.5px solid var(--ink-3);width:6px;height:6px}
 .side-item .sub{font-size:11px;color:var(--ink-3);white-space:nowrap}
 .side-item .sub.down{color:var(--err)}
-.side-item.two{padding:5px 8px;align-items:flex-start}
-.side-item.two .col{flex:1;min-width:0;line-height:1.25}
+/* A tracker row with a sub-line is two 15px lines in the same 0 8px padding every
+   other item uses, so the list keeps one rhythm: 24px for a one-line item, 30px
+   here, and no extra air of its own. It was 5px 8px = 45px, which read as a gap. */
+.side-item.two{padding:0 8px;align-items:flex-start}
+.side-item.two .col{flex:1;min-width:0;line-height:15px}
 /* The host sits on its own line above the status line. The leading comes from
    .side-item.two .col above, which inherits here and overrides .side-item. */
 .side-item.two .col .lbl{display:block}
@@ -261,20 +267,28 @@ body.resizing{cursor:col-resize;user-select:none}
    left of its header. --sbw is measured at runtime (List.tsx): it is 10px with
    classic scrollbars and 0 with overlay ones, so it cannot be hardcoded.
    scrollbar-gutter does not work here: .cols is not a scroll container. */
-.cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 40px 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px calc(16px + var(--sbw, 0px)) 6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
+.cols{display:grid;grid-template-columns:24px minmax(260px,1fr) 40px 56px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:6px calc(16px + var(--sbw, 0px)) 6px 16px;font-size:12px;font-weight:500;color:var(--ink-3);border-bottom:1px solid var(--line-soft)}
 .cols .r{text-align:right}
-/* Size heads a right-aligned column but its label sits centred over the numbers:
-   flush right it drifted away from the values it names. Cells stay .r.
-   .sort lands on this same element and makes it inline-flex, which renders
-   text-align inert, so the centring has to be stated both ways or the head
-   jumps left the moment you sort by Size. */
-.cols .r.hl{text-align:center;justify-content:center}
+/* Size heads a right-aligned column and its label is right-aligned with it. The
+   label used to be centred: across the old 84px track the values (never wider than
+   "1.23 GB") sat far from a flush-right head, so it drifted from what it names. The
+   track is 56px now -- value plus ~19px of slack -- so right beats centred, and head
+   and numbers share an edge. .sort lands on this same element and makes it
+   inline-flex, which renders text-align inert, so the alignment has to be stated
+   both ways or the head jumps the moment you sort by Size. */
+.cols .r.hl{text-align:right;justify-content:flex-end}
+/* Progress heads a left-aligned cell whose content is a bar spanning the track, so a
+   flush-left label sits off to one side of what it names. Centred, it sits over the
+   bar's middle. Same inline-flex caveat as .hl: .sort makes text-align inert. */
+.cols .hc{text-align:center;justify-content:center}
 .cols .sort{color:var(--ink);display:inline-flex;align-items:center;gap:3px}
 .rows{overflow:auto;flex:1;padding-bottom:20px}
-.row{display:grid;grid-template-columns:24px minmax(260px,1fr) 40px 84px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
+.row{display:grid;grid-template-columns:24px minmax(260px,1fr) 40px 56px 92px 104px 104px 64px 72px;gap:0 14px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line-soft);cursor:default}
 /* Zebra: alternating bands carry the eye across a wide row, so the one-line layout drops
    the per-row rule that would otherwise fight them. Hover and selection stay on top. */
-.row.one{border-bottom:0;padding:5px 16px}
+/* 4px, not 5: 30px per row against the 22px .acts button, which is the tallest
+   child and sets the floor. Two more px off would clip it. */
+.row.one{border-bottom:0;padding:4px 16px}
 /* 9 children, 9 tracks: the pair rule still needs its counterpart, or a tenth
    cell would auto-place into an implicit second row and double the height. */
 .row:not(.one)>:nth-child(n+10){display:none}
@@ -350,7 +364,7 @@ body.resizing{cursor:col-resize;user-select:none}
 .spd.dl{color:var(--accent)} .spd.ul{color:var(--ink-2)} .spd.ul .arrow{color:var(--ink-3)} .spd.zero{color:var(--ink-3)}
 
 /* with inspector docked: drop Ratio + ETA, keep the list readable */
-.main.has-insp .cols:not(.one),.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 40px 80px 88px 100px 100px}
+.main.has-insp .cols:not(.one),.main.has-insp .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 40px 56px 88px 100px 100px}
 .main.has-insp .cols:not(.one)>:nth-child(n+8),.main.has-insp .row:not(.one)>:nth-child(n+8){display:none}
 
 .empty{padding:60px 20px;text-align:center;color:var(--ink-3)}
@@ -377,7 +391,7 @@ body.resizing{cursor:col-resize;user-select:none}
    1600px the floor wins and the trailing columns run off the right edge, which is
    the intended trade: the name is what people read. */
 .cols.one,
-.row.one{grid-template-columns:16px 14px minmax(420px,1fr) 40px 84px 96px 56px 60px 80px 92px 88px 140px 160px}
+.row.one{grid-template-columns:16px 14px minmax(420px,1fr) 40px 56px 96px 56px 60px 80px 92px 88px 140px 160px}
 .cols.one>:nth-child(n+14),.row.one>:nth-child(n+14){display:none}
 /* locale month names ("19. Sept. 2026") are wider than en-US, so no cell may wrap */
 .cols.one>*,.row.one>*{white-space:nowrap;overflow:hidden}
@@ -409,7 +423,7 @@ body.resizing{cursor:col-resize;user-select:none}
 .row.one .chip.lbl{flex:none;max-width:110px;font-size:10px;line-height:1;padding:2px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* with the inspector docked the tail columns go first: Path, Tracker, Last active, Added on, Uploaded */
 .main.has-insp .cols.one,
-.main.has-insp .row.one{grid-template-columns:16px 14px minmax(160px,1fr) 40px 80px 92px 52px 56px}
+.main.has-insp .row.one{grid-template-columns:16px 14px minmax(160px,1fr) 40px 56px 92px 52px 56px}
 .main.has-insp .cols.one>:nth-child(n+9),
 .main.has-insp .row.one>:nth-child(n+9){display:none}
 
@@ -420,23 +434,23 @@ body.resizing{cursor:col-resize;user-select:none}
    gets their ~460px. The dropped values stay in the inspector. */
 @media (max-width:1200px){
   .cols.one,
-  .row.one{grid-template-columns:16px 14px minmax(180px,1fr) 40px 84px 96px 56px}
+  .row.one{grid-template-columns:16px 14px minmax(180px,1fr) 40px 56px 96px 56px}
   .cols.one>:nth-child(n+8),
   .row.one>:nth-child(n+8){display:none}
   /* Two-line rows overflow their track here too: drop Uploaded and Added on.
      The hide rule is not optional: 8 children in a 6-track grid would otherwise
      auto-place the tail into an implicit second row and double the row height. */
   .cols:not(.one),
-  .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 40px 84px 92px 104px 104px}
+  .row:not(.one){grid-template-columns:24px minmax(220px,1fr) 40px 56px 92px 104px 104px}
   .cols:not(.one)>:nth-child(n+8),
   .row:not(.one)>:nth-child(n+8){display:none}
   /* With the inspector docked there is no room to spare: name only. */
   .main.has-insp .cols:not(.one),
-  .main.has-insp .row:not(.one){grid-template-columns:24px minmax(200px,1fr) 40px 80px 88px}
+  .main.has-insp .row:not(.one){grid-template-columns:24px minmax(200px,1fr) 40px 56px 88px}
   .main.has-insp .cols:not(.one)>:nth-child(n+6),
   .main.has-insp .row:not(.one)>:nth-child(n+6){display:none}
   .main.has-insp .cols.one,
-  .main.has-insp .row.one{grid-template-columns:16px 14px minmax(180px,1fr) 40px 80px 92px}
+  .main.has-insp .row.one{grid-template-columns:16px 14px minmax(180px,1fr) 40px 56px 92px}
   .main.has-insp .cols.one>:nth-child(n+7),
   .main.has-insp .row.one>:nth-child(n+7){display:none}
 }
