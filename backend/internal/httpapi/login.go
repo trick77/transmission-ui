@@ -87,8 +87,8 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
   .err{margin:0 0 14px;padding:8px 11px;border-radius:var(--r);font-size:12px;
        background:var(--err-soft);color:var(--err)}
   /* oidc mode has no form: the single action is a link, painted as the button. */
-  .btn{display:block;width:100%;height:34px;line-height:34px;border-radius:var(--r);margin-top:4px;
-       text-align:center;text-decoration:none;font:inherit;font-weight:500;cursor:pointer;
+  .btn{display:block;width:100%;height:34px;border-radius:var(--r);margin-top:4px;
+       text-align:center;text-decoration:none;font:inherit;font-weight:500;line-height:34px;cursor:pointer;
        background:var(--accent);color:#1f1512}
   .btn:hover{filter:brightness(1.08)}
   @media (prefers-reduced-motion:no-preference){.card{animation:rise .18s ease-out}}
