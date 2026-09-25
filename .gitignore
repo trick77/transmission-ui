@@ -25,6 +25,7 @@ ui/playwright-report/
 
 # Local agent / browser tooling (machine-specific)
 .claude/
+.agents/
 .codex/
 .worktrees/
 .superpowers/
