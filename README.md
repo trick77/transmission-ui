@@ -66,11 +66,11 @@ This path has no backend, so the daemon's own basic auth applies and there is no
 
 ```
 docker compose -f compose.dev.yaml up -d   # throwaway daemon on :9091, dev/devpass
-hack/fixtures.sh                           # seed every torrent state the UI shows
+scripts/fixtures.sh                           # seed every torrent state the UI shows
 cd ui && npm ci && npm run dev             # http://localhost:5173
 ```
 
-`hack/backend.sh` builds and runs the real backend against that daemon in form mode, which is what
+`scripts/backend.sh` builds and runs the real backend against that daemon in form mode, which is what
 `ui/e2e/backend.spec.ts` drives. `make sim` runs the UI against `ui/sim/`, an in-process fake
 daemon, when you don't want a container — the screenshots above come from it, so the torrents in
 them are made up.

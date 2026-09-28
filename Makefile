@@ -5,7 +5,7 @@ dev:
 	cd ui && npm run dev
 
 fixtures:
-	./hack/fixtures.sh
+	./scripts/fixtures.sh
 
 # Dev server against ui/sim/, the fake daemon. No container, no fixtures. Needs Node >= 23.6.
 # Knobs: TM_SIM_SEED, TM_SIM_COUNT, TM_SIM_SPEED, TM_SIM_PORT.
@@ -22,7 +22,7 @@ fe-test:
 
 fe-coverage:
 	cd ui && npm run test -- --run --coverage
-	./hack/coverage-gate.sh ui
+	./scripts/coverage-gate.sh ui
 
 fe-e2e:
 	cd ui && npm run e2e

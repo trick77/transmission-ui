@@ -2,7 +2,7 @@
 // proxies RPC to the daemon with the daemon's credentials attached. Run in form
 // mode, which needs no identity provider.
 //
-// Needs the backend running against the compose daemon; hack/backend.sh starts
+// Needs the backend running against the compose daemon; scripts/backend.sh starts
 // it. TM_APP points at it.
 import { test, expect } from '@playwright/test'
 

@@ -1,4 +1,4 @@
-// Runs against the local compose daemon seeded by hack/fixtures.sh, through the Vite dev server (npm run dev).
+// Runs against the local compose daemon seeded by scripts/fixtures.sh, through the Vite dev server (npm run dev).
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 

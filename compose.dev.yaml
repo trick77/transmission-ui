@@ -1,8 +1,8 @@
 # Local development: a throwaway transmission-daemon 4.1.3 on :9091 with fixed dev credentials,
-# state under hack/. Never point this at real data or the server.
+# state under scripts/. Never point this at real data or the server.
 #
 #   docker compose -f compose.dev.yaml up -d
-#   hack/fixtures.sh                       # seeds every torrent state the UI shows
+#   scripts/fixtures.sh                       # seeds every torrent state the UI shows
 #   cd ui && npm run dev                   # UI on http://localhost:5173, proxies RPC here
 #   docker compose -f compose.dev.yaml down
 #
@@ -22,9 +22,9 @@ services:
       PASS: devpass
       TRANSMISSION_WEB_HOME: /web
     volumes:
-      - ./hack/state:/config
-      - ./hack/downloads:/downloads
-      - ./hack/watch:/watch
+      - ./scripts/state:/config
+      - ./scripts/downloads:/downloads
+      - ./scripts/watch:/watch
       - ./ui/dist:/web:ro
     ports:
       - "9091:9091"
