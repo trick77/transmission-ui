@@ -11,7 +11,7 @@ on:
     paths-ignore:
       - "design/**"
       - "docs/**"
-      - "hack/**"
+      - "scripts/**"
       - ".github/**"
       - "**/*.md"
       - "LICENSE"

@@ -57,14 +57,14 @@
 
   TRANSPARENT CANVAS, not a transparent icon: the chip itself is opaque, and
   only the four corners outside its rx-4 radius are clear, so what lands in a
-  tab is a chip rather than a square tile. That is what hack/gen-icons.sh's
+  tab is a chip rather than a square tile. That is what scripts/gen-icons.sh's
   opaque=false assertion on icon-192/512 checks.
 
   Mirror any shape change by hand into icon-tile.svg and icon-maskable.svg,
   which are copies and cannot follow on their own, and into the .logo chip in
   design/src/shell-top.html, ui/src/styles/app.css and
   backend/internal/httpapi/login.go, which draw the same geometry. Regenerate
-  the rasters with hack/gen-icons.sh after touching this file.
+  the rasters with scripts/gen-icons.sh after touching this file.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <linearGradient id="og" x1="0" y1="0" x2="0.72" y2="1">

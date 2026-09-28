@@ -1,6 +1,6 @@
 #!/bin/sh
 # Seed the local tm-dev daemon with torrents in every state the UI shows.
-# Usage: hack/fixtures.sh   (container must be up: docker compose up -d)
+# Usage: scripts/fixtures.sh   (container must be up: docker compose up -d)
 set -eu
 R="docker exec tm-dev transmission-remote -n dev:devpass"
 X="docker exec tm-dev"

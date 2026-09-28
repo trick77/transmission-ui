@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
       include: ['src/**/*.test.{ts,tsx}', 'sim/**/*.test.ts'],
       coverage: {
         provider: 'v8',
-        // json-summary is what hack/coverage-gate.sh reads (the project floor); lcov for tooling;
+        // json-summary is what scripts/coverage-gate.sh reads (the project floor); lcov for tooling;
         // text-summary for humans reading the log.
         reporter: ['text-summary', 'json-summary', 'lcov'],
         reportsDirectory: '../coverage/ui',

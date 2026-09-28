@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: ui
     steps:
-      # fetch-depth: 0 — hack/patch-coverage.sh diffs the branch against the PR
+      # fetch-depth: 0 — scripts/patch-coverage.sh diffs the branch against the PR
       # base, which needs real history.
       - uses: actions/checkout@v7
         with:
@@ -92,10 +92,10 @@ jobs:
       - run: npm test -- --run --coverage
       # The floor gate runs first: when a PR drops the project below the floor
       # the absolute number is the more actionable failure.
-      - run: ./hack/coverage-gate.sh ui
+      - run: ./scripts/coverage-gate.sh ui
         working-directory: .
       - name: UI patch coverage
-        run: ./hack/patch-coverage.sh "origin/${{ github.base_ref || 'master' }}"
+        run: ./scripts/patch-coverage.sh "origin/${{ github.base_ref || 'master' }}"
         working-directory: .
 
   # Browser-level tests against a real transmission-daemon 4.1.3 (the version
@@ -132,7 +132,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Start daemon
         run: |
-          mkdir -p hack/state hack/downloads hack/watch
+          mkdir -p scripts/state scripts/downloads scripts/watch
           for i in 1 2 3; do
             docker compose -f compose.dev.yaml pull && break
             [ "$i" = 3 ] && { echo "::error::image pull failed 3 times"; exit 1; }
@@ -145,7 +145,7 @@ jobs:
             sleep 2
           done
           [ "$code" = "409" ] || { docker compose -f compose.dev.yaml logs; exit 1; }
-      - run: ./hack/fixtures.sh
+      - run: ./scripts/fixtures.sh
       - name: Start dev server
         run: |
           printf 'TM_RPC_TARGET=http://localhost:9091\nTM_RPC_AUTH=dev:devpass\n' > ui/.env.local
@@ -157,11 +157,11 @@ jobs:
         with:
           go-version-file: backend/go.mod
       - name: Start backend
-        run: ./hack/backend.sh
+        run: ./scripts/backend.sh
       - run: npx playwright test
         working-directory: ui
       - if: always()
-        run: ./hack/backend.sh stop
+        run: ./scripts/backend.sh stop
       - uses: actions/upload-artifact@v7
         if: always()
         with:
