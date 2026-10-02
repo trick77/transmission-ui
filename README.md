@@ -58,22 +58,32 @@ What you need to do on your side:
 6. **Turn on compression.** The app serves its bundle uncompressed (about 320 kB of JavaScript,
    under 100 kB gzipped) and leaves that to the proxy.
 
-With Traefik, for example, that is the proxy's network on the service plus these labels:
+With Traefik, for example, that is a `compose.override.yaml` next to `compose.yaml`, which Compose
+merges in on its own:
 
 ```yaml
-    networks: [traefik]
+services:
+  transmission-ui:
+    networks:
+      - default      # keep it: the daemon is reached over this one
+      - traefik
     labels:
       traefik.enable: "true"
+      traefik.docker.network: traefik
       traefik.http.routers.transmission-ui.rule: Host(`transmission.example.com`)
       traefik.http.routers.transmission-ui.entrypoints: websecure
       traefik.http.routers.transmission-ui.tls: "true"
       traefik.http.routers.transmission-ui.middlewares: transmission-ui-compress
       traefik.http.middlewares.transmission-ui-compress.compress: "true"
       traefik.http.services.transmission-ui.loadbalancer.server.port: "8080"
+
+networks:
+  traefik:
+    external: true
 ```
 
-Keep such settings in your own compose file or an override, not in a copy of this repo's
-`compose.yaml`: that file is a starting point and changes with releases.
+Keep such settings in your own compose file or an override like this one, not in a copy of this
+repo's `compose.yaml`: that file is a starting point and changes with releases.
 
 ### Signing in
 

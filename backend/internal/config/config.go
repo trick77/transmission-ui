@@ -95,7 +95,7 @@ func Load() (Config, error) {
 	case cfg.PublicURL == "":
 		problems = append(problems,
 			"BACKEND_PUBLIC_URL is required: the https URL your reverse proxy serves this app at")
-	case !strings.HasPrefix(cfg.PublicURL, "https://") && !isLoopbackURL(cfg.PublicURL):
+	case !isHTTPSURL(cfg.PublicURL) && !isLoopbackURL(cfg.PublicURL):
 		problems = append(problems, fmt.Sprintf(
 			"BACKEND_PUBLIC_URL (%s) must be https: run this app behind a reverse proxy that terminates TLS (plain http is accepted for a loopback address only, for local runs)",
 			cfg.PublicURL))
@@ -175,6 +175,13 @@ func BasePathOf(raw string) string {
 		return ""
 	}
 	return p
+}
+
+// isHTTPSURL reports whether the public URL is an https URL with a host. The
+// scheme is compared as parsed, so HTTPS:// counts.
+func isHTTPSURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && u.Host != ""
 }
 
 // isLoopbackURL reports whether the public URL points at this machine, which

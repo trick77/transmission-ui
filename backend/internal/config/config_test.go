@@ -160,6 +160,8 @@ func TestPublicURLMustBeHTTPS(t *testing.T) {
 	}{
 		{"https", "https://host.example", true},
 		{"https with a prefix", "https://host.example/transmission", true},
+		{"https in capitals", "HTTPS://host.example", true},
+		{"https without a host", "https://", false},
 		{"loopback http, for local runs", "http://127.0.0.1:8127", true},
 		{"localhost http", "http://localhost:8127", true},
 		{"unset", "", false},
