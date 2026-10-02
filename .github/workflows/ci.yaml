@@ -122,7 +122,7 @@ jobs:
         working-directory: ui
       # The browser download is the slow half of this step; --with-deps still
       # has to run for the system libraries, which are not cacheable.
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
