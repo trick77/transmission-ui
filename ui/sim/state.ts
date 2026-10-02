@@ -1,6 +1,6 @@
 // The live model. Everything mutable lives here; tick.ts moves it and handlers.ts reads and writes it.
 
-import type { Session, TorrentDetail } from '../src/rpc/types.ts'
+import type { Session, StatsBlock, TorrentDetail } from '../src/rpc/types.ts'
 import { makeRand, seedOf, type Rand } from './rand.ts'
 import { ST } from './derive.ts'
 import { buildSession, buildSpace, buildTorrents, clampSeededRates, TRACKERS } from './data.ts'
@@ -25,14 +25,6 @@ export interface SimFields {
   rand: Rand
 }
 
-export interface StatsBlockState {
-  uploaded_bytes: number
-  downloaded_bytes: number
-  files_added: number
-  session_count: number
-  seconds_active: number
-}
-
 export interface SimState {
   torrents: TorrentDetail[]
   session: Session
@@ -44,8 +36,8 @@ export interface SimState {
   /** Tracker host -> unix time the next outage starts. */
   trackerNext: Map<string, number>
   space: Map<string, { size: number; total: number }>
-  cur: StatsBlockState
-  cum: StatsBlockState
+  cur: StatsBlock
+  cum: StatsBlock
   portOpen: boolean
   nextId: number
   seed: number
@@ -119,11 +111,3 @@ export function createState(opts: SimOptions = {}): SimState {
   }
 }
 
-export const byId = (s: SimState, id: number) => s.torrents.find(t => t.id === id)
-
-/** Which mount a download dir belongs to, mirroring mountOf() in the store. */
-export function mountOf(dir: string, base: string): string {
-  if (base && (dir === base || dir.startsWith(base + '/'))) return base
-  const parts = dir.split('/').filter(Boolean)
-  return '/' + parts.slice(0, Math.min(2, parts.length)).join('/')
-}

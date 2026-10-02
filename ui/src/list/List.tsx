@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
-import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, usesTracker, type SortKey } from '../lib/model'
+import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, ADV_TITLE, advActive, advFn, filterFn, sortFn, trackerHealth, usesTracker, type SortKey } from '../lib/model'
 import { trackerName } from '../lib/trackers'
 import { dismissNotice, dismissRemoval, focus, get, run, selectAllVisible, set, setViewOrder, stopRemoval, syncUrl, useStore, type Removing } from '../state/store'
 import * as api from '../rpc/methods'
@@ -168,7 +168,7 @@ export function List() {
           <div ref={fref} className="fpop">
             <h4>Filter</h4>
             {ADV_KEYS.map(k => (
-              <div key={k} className="frow"><span>{{ size: 'Size', age: 'Added', ratio: 'Ratio', idle: 'Activity' }[k]}</span>
+              <div key={k} className="frow"><span>{ADV_TITLE[k]}</span>
                 <Seg value={adv[k] ?? 'any'} options={ADV_OPTIONS[k]} onChange={v => { set(s => ({ adv: { ...s.adv, [k]: v } })); syncUrl() }} />
               </div>
             ))}

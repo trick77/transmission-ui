@@ -1,19 +1,19 @@
 // The RPC surface. One switch, daemon field names throughout, every write mutating real state so
 // the UI's next poll shows the consequence.
 
-import type { Session, TorrentDetail, TrackerStat } from '../src/rpc/types.ts'
+import type { Session, StatsBlock, TorrentDetail, TrackerStat } from '../src/rpc/types.ts'
 import { createHash } from 'node:crypto'
 import { decode } from '../src/lib/bencode.ts'
+import { mountOf } from '../src/lib/paths.ts'
 import { ST, hostOf, isChecking, magnetOf, refreshPieceMap, reconcile, renumberQueue, wantedHave, wantedSize } from './derive.ts'
-import { newTorrent, TRACKERS, BASE } from './data.ts'
-import { byId, mountOf, simFieldsFor, type SimState } from './state.ts'
+import { newTorrent, BASE } from './data.ts'
+import { simFieldsFor, type SimState } from './state.ts'
 import { promoteQueue, seedGoal, etaOf } from './tick.ts'
 
 export class RpcFailure extends Error {}
 
 type Args = Record<string, unknown>
 
-const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
 
 /**
  * The RPC spec lets `ids` be an array, a single id, a hash string, or "recently_active"; the bundled
@@ -263,7 +263,7 @@ export function handle(state: SimState, method: string, args: Args, now: number)
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function round(b: { uploaded_bytes: number; downloaded_bytes: number; files_added: number; session_count: number; seconds_active: number }) {
+function round(b: StatsBlock) {
   return {
     uploaded_bytes: Math.round(b.uploaded_bytes),
     downloaded_bytes: Math.round(b.downloaded_bytes),
@@ -431,4 +431,3 @@ function fromMetainfo(b64: string): Parsed {
   }
 }
 
-export { TRACKERS, byId, num }

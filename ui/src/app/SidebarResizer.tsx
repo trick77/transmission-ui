@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebar, displayedSidebarW, get, set, writeLocal } from '../state/store'
+import { SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampSidebar, displayedSidebarW, get, set } from '../state/store'
+import { writeLocal } from '../lib/local'
 
 const STEP = 16          // px per arrow key
 const DOUBLE_TAP_MS = 350

@@ -5,7 +5,8 @@ import { classifyAnnounce, hostOf, statusView, swarmOf, relDir } from '../lib/mo
 import type { Session, TorrentDetail, TorrentFile } from '../rpc/types'
 import * as api from '../rpc/methods'
 import { focus, run, set, setInspectorTab, useStore } from '../state/store'
-import { NumInput, Seg, Toggle, Opt, Sec } from '../app/ui'
+import { Toggle, Opt, Sec } from '../app/ui'
+import { LimitRows } from '../dialogs/parts'
 
 export function Inspector() {
   const extra = useStore(s => s.detail)
@@ -122,12 +123,7 @@ function Overview({ d, base }: { d: TorrentDetail; base: string }) {
       </dl>
 
       <Sec>Options</Sec>
-      <Opt label="Honor global limits"><Toggle on={d.honors_session_limits} onChange={v => setT('Limits', { honors_session_limits: v })} /></Opt>
-      <Opt label="Limit download"><NumInput value={d.download_limit} unit="kB/s" width={110} onCommit={v => setT('Limit', { download_limit: v })} disabled={!d.download_limited} /><Toggle on={d.download_limited} onChange={v => setT('Limit', { download_limited: v })} /></Opt>
-      <Opt label="Limit upload"><NumInput value={d.upload_limit} unit="kB/s" width={110} onCommit={v => setT('Limit', { upload_limit: v })} disabled={!d.upload_limited} /><Toggle on={d.upload_limited} onChange={v => setT('Limit', { upload_limited: v })} /></Opt>
-      <Opt label="Bandwidth priority"><Seg value={String(d.bandwidth_priority)} options={[{ v: '-1', l: 'Low' }, { v: '0', l: 'Normal' }, { v: '1', l: 'High' }]} onChange={v => setT('Priority', { bandwidth_priority: Number(v) as -1 | 0 | 1 })} /></Opt>
-      <Opt label="Seed ratio"><Seg value={String(d.seed_ratio_mode)} options={[{ v: '0', l: 'Global' }, { v: '1', l: 'Custom' }, { v: '2', l: 'Unlimited' }]} onChange={v => setT('Seed ratio', { seed_ratio_mode: Number(v) as 0 | 1 | 2 })} />{d.seed_ratio_mode === 1 ? <NumInput value={d.seed_ratio_limit} width={70} onCommit={v => setT('Seed ratio', { seed_ratio_limit: v })} /> : null}</Opt>
-      <Opt label="Peer limit"><NumInput value={d.peer_limit} width={80} onCommit={v => setT('Peer limit', { 'peer_limit': v })} /></Opt>
+      <LimitRows d={d} setT={setT} width={110} />
       <Opt label="Sequential download" desc="Pieces in order, for previewing"><Toggle on={d.sequential_download} onChange={v => setT('Sequential', { sequential_download: v })} /></Opt>
       <div className="hint" style={{ marginTop: 10 }}>Limits are in kB/s ({KB} bytes).</div>
     </div>

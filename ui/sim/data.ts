@@ -666,5 +666,5 @@ export function newTorrent(id: number, name: string, hash: string, dir: string, 
   return t
 }
 
-export { TRACKERS, MOOD_RESULT, CLIENTS, D as DIRS }
+export { TRACKERS, MOOD_RESULT }
 export type { TrackerMood }

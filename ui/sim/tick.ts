@@ -2,6 +2,7 @@
 // simulator costs nothing and there is no interval to leak.
 
 import type { Peer, TorrentDetail } from '../src/rpc/types.ts'
+import { RATIO_INF, RATIO_NA } from '../src/lib/format.ts'
 import { ST, reconcile, hostOf } from './derive.ts'
 import { MAGNET_REVEALS, TRACKERS, MOOD_RESULT, materializeMetadata, countPeersFrom, makePeer, flagsOf } from './data.ts'
 import { type SimState, type SimFields, simFieldsFor } from './state.ts'
@@ -9,7 +10,6 @@ import { type SimState, type SimFields, simFieldsFor } from './state.ts'
 /** Longest wall-clock gap a single tick will honour, before the speed multiplier. */
 export const MAX_DT = 5
 
-const RATIO_NA = -1, RATIO_INF = -2
 
 export function tick(state: SimState, nowMs: number): void {
   // Clamp the raw gap first and scale second, or TM_SIM_SPEED would do nothing against the cap.

@@ -3,6 +3,7 @@
 
 import { Status, type TorrentSummary, type TrackerStat } from '../rpc/types'
 import { daysSince, gb, ratioValue } from './format'
+import { readLocal, writeLocal } from './local'
 import { trackerName } from './trackers'
 
 /**
@@ -72,17 +73,15 @@ export interface TrackerHealth {
 const DOWN_AFTER_S = 10 * 60
 
 // When we first saw a host failing, so a re-announce (which refreshes last_announce_time) doesn't reset the clock.
-const firstFailing = new Map<string, number>(readFirstFailing())
-function readFirstFailing(): [string, number][] { try { return JSON.parse(localStorage.getItem('tm.trkfail') || '[]') } catch { return [] } }
+const firstFailing = new Map(readLocal<[string, number][]>('tm.trkfail', []))
 function rememberFailing(host: string, since: number) {
   const cur = firstFailing.get(host)
   if (cur != null && cur <= since) return
   firstFailing.set(host, since)
-  try { localStorage.setItem('tm.trkfail', JSON.stringify([...firstFailing])) } catch { /* ignore */ }
+  writeLocal('tm.trkfail', [...firstFailing])
 }
 function forgetFailing(host: string) {
-  if (!firstFailing.delete(host)) return
-  try { localStorage.setItem('tm.trkfail', JSON.stringify([...firstFailing])) } catch { /* ignore */ }
+  if (firstFailing.delete(host)) writeLocal('tm.trkfail', [...firstFailing])
 }
 
 // The sidebar and the list's notices both ask on every poll, for the same array.
@@ -226,6 +225,7 @@ export const ADV_LABEL: Record<AdvKey, Record<string, string>> = {
   ratio: { lt1: 'ratio < 1', gte1: 'ratio ≥ 1', gte2: 'ratio ≥ 2' },
   idle: { active: 'active now', idle7: 'idle > 7 d', idle30: 'idle > 30 d' },
 }
+export const ADV_TITLE: Record<AdvKey, string> = { size: 'Size', age: 'Added', ratio: 'Ratio', idle: 'Activity' }
 export const ADV_KEYS: AdvKey[] = ['size', 'age', 'ratio', 'idle']
 export const advActive = (adv: Adv) => ADV_KEYS.filter(k => adv[k] && adv[k] !== 'any')
 export function advFn(adv: Adv): (t: TorrentSummary) => boolean {

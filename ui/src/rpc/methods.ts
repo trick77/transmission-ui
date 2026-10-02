@@ -25,7 +25,6 @@ export const portTest = (ip_protocol: IpProtocol) =>
 export const blocklistUpdate = () => rpc<{ blocklist_size: number }>('blocklist_update')
 
 export const start = (ids: number[]) => rpc('torrent_start', { ids })
-export const startNow = (ids: number[]) => rpc('torrent_start_now', { ids })
 export const stop = (ids: number[]) => rpc('torrent_stop', { ids })
 export const verify = (ids: number[]) => rpc('torrent_verify', { ids })
 export const reannounce = (ids: number[]) => rpc('torrent_reannounce', { ids })

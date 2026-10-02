@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes } from '../lib/format'
 import { parseTorrent, toBase64, type TorrentInfo } from '../lib/bencode'
-import { folderTree, hostOf, labelCounts, relDir } from '../lib/model'
+import { hostOf, labelCounts } from '../lib/model'
 import * as api from '../rpc/methods'
-import { get, refreshNow, toast, useStore } from '../state/store'
+import { refreshNow, toast, useStore } from '../state/store'
 import { Modal } from './Dialogs'
-import { Seg, Toggle } from '../app/ui'
+import { Opt, Seg, Toggle } from '../app/ui'
+import { Chip, FolderChips, useFreeSpace } from './parts'
 
 type Src = { kind: 'file'; name: string; info: TorrentInfo; b64: string } | { kind: 'magnet'; url: string; name: string }
 
@@ -18,6 +19,11 @@ function readFile(f: File): Promise<ArrayBuffer> {
 function magnetName(url: string): string {
   const m = /[?&]dn=([^&]+)/.exec(url)
   return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : 'magnet link'
+}
+
+/** Every magnet link, URL or daemon-side path in a pasted blob, one source each. */
+function linksIn(text: string): Src[] {
+  return text.split(/\s+/).filter(s => /^(magnet:|https?:\/\/|\/)/.test(s)).map(url => ({ kind: 'magnet', url, name: magnetName(url) }))
 }
 
 export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => void; initialMagnet?: string; initialFiles?: File[] }) {
@@ -32,13 +38,20 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
   const [prio, setPrio] = useState<'-1' | '0' | '1'>('0')
   const [seq, setSeq] = useState(false)
   const [unwanted, setUnwanted] = useState<Set<number>>(new Set())
-  const [free, setFree] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [drag, setDrag] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (!dir && base) setDir(base) }, [base, dir])
-  useEffect(() => { let live = true; if (!dir) return; api.freeSpace(dir).then(r => { if (live) setFree(r.size_bytes) }).catch(() => setFree(null)); return () => { live = false } }, [dir])
-  useEffect(() => { if (initialFiles?.length) void addFiles(initialFiles) }, [initialFiles])
+  const free = useFreeSpace(dir)
+  // Keyed on the array itself: StrictMode runs the effect twice for one drop, and a second
+  // drop while the dialog is open arrives as a new array.
+  const taken = useRef<File[] | undefined>(undefined)
+  useEffect(() => {
+    if (!initialFiles?.length || taken.current === initialFiles) return
+    taken.current = initialFiles
+    void addFiles(initialFiles)
+  }, [initialFiles])
 
   async function addFiles(files: File[] | FileList) {
     const out: Src[] = []
@@ -51,12 +64,11 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
     setSources(s => [...s, ...out])
   }
   function addText() {
-    const lines = text.split(/\s+/).map(s => s.trim()).filter(s => /^(magnet:|https?:\/\/|\/)/.test(s))
-    if (!lines.length) return
-    setSources(s => [...s, ...lines.map(url => ({ kind: 'magnet' as const, url, name: magnetName(url) }))])
+    const links = linksIn(text)
+    if (!links.length) return
+    setSources(s => [...s, ...links])
     setText('')
   }
-  const folders = folderTree(torrents, base)
   const known = labelCounts(torrents).map(l => l.label)
   const single = sources.length === 1 && sources[0].kind === 'file' ? sources[0] : null
   const files = single ? single.info.files : []
@@ -64,8 +76,9 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
   const pendingText = text.trim().length > 0
 
   async function submit() {
-    if (pendingText) addText()
-    const srcs = pendingText ? [...sources, ...text.split(/\s+/).filter(s => /^(magnet:|https?:\/\/|\/)/.test(s)).map(url => ({ kind: 'magnet' as const, url, name: magnetName(url) }))] : sources
+    // What is still in the box counts too; addText() would only reach `sources` next render.
+    const srcs = [...sources, ...linksIn(text)]
+    addText()
     if (!srcs.length) return
     setBusy(true)
     let added = 0, dup = 0
@@ -81,7 +94,7 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
     if (added || dup) onClose()
   }
 
-  const q = get().session?.download_dir
+  const addLabel = () => { const v = draft.trim(); if (v) setLabels(x => x.includes(v) ? x : [...x, v]); setDraft('') }
   return (
     <Modal title="Add torrent" width={680} onClose={onClose}
       footer={<>
@@ -93,7 +106,7 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
       bodyStyle={{ display: 'grid', gap: 18 }}>
       <div className={'drop' + (drag ? ' active' : '')}
         onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)}
-        onDrop={e => { e.preventDefault(); setDrag(false); void addFiles(e.dataTransfer.files) }} onClick={() => fileRef.current?.click()}>
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); setDrag(false); void addFiles(e.dataTransfer.files) }} onClick={() => fileRef.current?.click()}>
         <Icon name="upload" className="big" />
         <div><b>Drop .torrent files here</b> <span className="faint">or</span> <span style={{ color: 'var(--accent)', fontWeight: 500 }}>browse</span></div>
         <div className="hint">Multiple files are added as separate torrents</div>
@@ -119,15 +132,13 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <div className="field"><label>Save to</label>
           <div className="input"><Icon name="folder" style={{ color: 'var(--ink-3)' }} /><input value={dir} onChange={e => setDir(e.target.value)} /><span className="unit">{free != null ? `${bytes(free)} free` : ''}</span></div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 2 }}>
-            {[q ?? '', ...folders.map(f => f.path)].filter(Boolean).map(p => <button key={p} className="chip lbl" style={p === dir ? { background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'transparent' } : undefined} onClick={() => setDir(p)}>{relDir(p, base) || '/'}</button>)}
-          </div>
+          <FolderChips value={dir} onPick={setDir} />
         </div>
         <div className="field"><label>Labels</label>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', minHeight: 32, alignItems: 'center' }}>
-            {known.map(l => <button key={l} className="chip lbl" style={labels.includes(l) ? { background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'transparent' } : undefined} onClick={() => setLabels(x => x.includes(l) ? x.filter(y => y !== l) : [...x, l])}>{l}</button>)}
+            {[...new Set([...known, ...labels])].map(l => <Chip key={l} on={labels.includes(l)} onClick={() => setLabels(x => x.includes(l) ? x.filter(y => y !== l) : [...x, l])}>{l}</Chip>)}
             <input placeholder={known.length ? '+ new' : 'New label, Enter'} style={{ background: 'none', border: 0, outline: 'none', color: 'var(--ink)', minWidth: 60, flex: 1 }}
-              onKeyDown={e => { const v = (e.target as HTMLInputElement).value.trim(); if (e.key === 'Enter' && v) { setLabels(x => x.includes(v) ? x : [...x, v]); (e.target as HTMLInputElement).value = '' } }} />
+              value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel() }} />
           </div>
         </div>
       </div>
@@ -147,9 +158,9 @@ export function Add({ onClose, initialMagnet, initialFiles }: { onClose: () => v
         </div>
       ) : null}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
-        <div className="opt"><div className="txt"><div className="l">Start when added</div></div><div className="ctl"><Toggle on={start} onChange={setStart} /></div></div>
-        <div className="opt"><div className="txt"><div className="l">Bandwidth priority</div></div><div className="ctl"><Seg value={prio} options={[{ v: '-1', l: 'Low' }, { v: '0', l: 'Normal' }, { v: '1', l: 'High' }]} onChange={setPrio} /></div></div>
-        <div className="opt"><div className="txt"><div className="l">Sequential download</div><div className="d">Pieces in order, for previewing</div></div><div className="ctl"><Toggle on={seq} onChange={setSeq} /></div></div>
+        <Opt label="Start when added"><Toggle on={start} onChange={setStart} /></Opt>
+        <Opt label="Bandwidth priority"><Seg value={prio} options={[{ v: '-1', l: 'Low' }, { v: '0', l: 'Normal' }, { v: '1', l: 'High' }]} onChange={setPrio} /></Opt>
+        <Opt label="Sequential download" desc="Pieces in order, for previewing"><Toggle on={seq} onChange={setSeq} /></Opt>
       </div>
     </Modal>
   )

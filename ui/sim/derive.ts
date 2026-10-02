@@ -11,10 +11,6 @@ export const ST = Object.freeze({
   Stopped: 0, CheckWait: 1, Check: 2, DownloadWait: 3, Download: 4, SeedWait: 5, Seed: 6,
 })
 
-export type StatusNum = 0 | 1 | 2 | 3 | 4 | 5 | 6
-
-export const isDownloading = (s: number) => s === ST.Download
-export const isSeeding = (s: number) => s === ST.Seed
 export const isChecking = (s: number) => s === ST.Check || s === ST.CheckWait
 
 /**

@@ -13,8 +13,6 @@ export function bytes(n: number, digits?: number): string {
 
 export function gb(n: number): number { return n / 1e9 }
 
-export function rate(bps: number): string { return bps > 0 ? `${bytes(bps)}/s` : '—' }
-
 /** Split a rate into number and unit so the unit can be styled smaller. */
 export function rateParts(bps: number): [string, string] {
   const s = bytes(bps)

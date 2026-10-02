@@ -3,7 +3,8 @@ import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import type { Session, Transport } from '../rpc/types'
 import * as api from '../rpc/methods'
-import { run, set, toast, useStore, writeLocal, type Density } from '../state/store'
+import { readLocal, writeLocal } from '../lib/local'
+import { run, set, toast, useStore, type Density } from '../state/store'
 import { NumInput, Opt, Seg, Sec, TextInput, Toggle, useDismiss } from '../app/ui'
 
 const SECTIONS = ['Speed', 'Downloads', 'Seeding', 'Queue', 'Network', 'Peers', 'Interface'] as const
@@ -148,14 +149,14 @@ function Network({ s, save }: { s: Session; save: (p: Partial<Session>) => void 
 
 function Interface() {
   const density = useStore(s => s.density)
-  const [notify, setNotify] = useState<boolean>(() => { try { return localStorage.getItem('tm.notify') === 'true' } catch { return false } })
+  const [notify, setNotify] = useState(() => readLocal<boolean>('tm.notify', false) === true)
   return <>
     <Sec first>Interface</Sec>
     <Opt label="Row density"><Seg value={density} options={[{ v: 'compact', l: 'Compact' }, { v: 'comfortable', l: 'Comfortable' }]} onChange={v => { set({ density: v as Density }); writeLocal('tm.density', v); document.documentElement.dataset.density = v }} /></Opt>
     <Sec>Notifications</Sec>
     <Opt label="Notify when a download completes" desc="Uses the browser's notifications; asks for permission once."><Toggle on={notify} onChange={async v => {
       if (v && 'Notification' in window && Notification.permission !== 'granted') { const p = await Notification.requestPermission(); if (p !== 'granted') return }
-      setNotify(v); writeLocal('tm.notify', String(v))
+      setNotify(v); writeLocal('tm.notify', v)
     }} /></Opt>
   </>
 }

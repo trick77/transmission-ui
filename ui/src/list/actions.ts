@@ -4,13 +4,15 @@ import { Status } from '../rpc/types'
 import { get, run, set, toast } from '../state/store'
 import type { MenuItem } from '../app/ui'
 
+/** Resume wins over Pause as soon as one of them is stopped. */
+export const anyStopped = (ids: number[]) => ids.some(id => get().byId.get(id)?.status === Status.Stopped)
+
 export function torrentMenu(ids: number[]): MenuItem[] {
   const s = get()
   const one = ids.length === 1 ? s.byId.get(ids[0]) : undefined
-  const anyStopped = ids.some(id => s.byId.get(id)?.status === Status.Stopped)
   const q = (where: 'top' | 'up' | 'down' | 'bottom') => () => void run('Queue', () => api.queueMove(where, ids))
   return [
-    anyStopped ? { icon: 'play', label: 'Resume', k: '␣', onClick: () => void run('Resume', () => api.start(ids)) }
+    anyStopped(ids) ? { icon: 'play', label: 'Resume', k: '␣', onClick: () => void run('Resume', () => api.start(ids)) }
       : { icon: 'pause', label: 'Pause', k: '␣', onClick: () => void run('Pause', () => api.stop(ids)) },
     { icon: 'globe', label: 'Re-announce', onClick: () => void run('Re-announce', () => api.reannounce(ids)) },
     { icon: 'check', label: 'Verify local data', onClick: () => void run('Verify', () => api.verify(ids)) },

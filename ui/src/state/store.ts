@@ -4,6 +4,8 @@ import { useSyncExternalStore } from 'react'
 import * as api from '../rpc/methods'
 import { EXTRA_FIELDS, type FreeSpace, type Session, type SessionStats, type TorrentExtra, type TorrentSummary } from '../rpc/types'
 import type { Adv, SortKey } from '../lib/model'
+import { readLocal, writeLocal } from '../lib/local'
+import { mountOf } from '../lib/paths'
 
 export type Dialog =
   | { kind: 'none' }
@@ -131,9 +133,6 @@ export function useStore<T>(sel: (s: Snapshot) => T): T {
   return useSyncExternalStore(subscribe, () => sel(snap))
 }
 
-function readLocal<T>(k: string, d: T): T { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : d } catch { return d } }
-export function writeLocal(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* private mode */ } }
-
 // ─── URL sync (deep links like the mocks) ───
 export function syncUrl() {
   const u = new URL(location.href)
@@ -235,13 +234,6 @@ export async function refreshFreeSpace() {
   const m = new Map(snap.freeSpace)
   await Promise.all([...roots].map(async r => { try { m.set(r, await api.freeSpace(r)) } catch { /* path may not exist */ } }))
   set({ freeSpace: m })
-}
-
-/** Base download dir if the path is under it, else the path's first two components. */
-function mountOf(dir: string, base: string): string {
-  if (base && (dir === base || dir.startsWith(base + '/'))) return base
-  const parts = dir.split('/').filter(Boolean)
-  return '/' + parts.slice(0, Math.min(2, parts.length)).join('/')
 }
 
 let started = false

@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Icon } from '../icons/Icon'
 import { get, removeSequence, run, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
-import type { TorrentDetail } from '../rpc/types'
-import { relDir, labelCounts, folderTree } from '../lib/model'
+import { bytes } from '../lib/format'
+import { labelCounts } from '../lib/model'
 import { Add } from './Add'
 import { Settings } from './Settings'
-import { NumInput, Opt, Seg, TextInput, Toggle, useDismiss } from '../app/ui'
+import { Opt, TextInput, Toggle, useDismiss } from '../app/ui'
+import { Chip, FolderChips, LIMIT_FIELDS, LimitRows, useFreeSpace, type Limits as LimitValues } from './parts'
 
 export function Modal({ title, width, children, footer, onClose, bodyStyle }: { title: ReactNode; width: number; children: ReactNode; footer?: ReactNode; onClose: () => void; bodyStyle?: React.CSSProperties }) {
   const ref = useDismiss(onClose)
@@ -85,7 +86,7 @@ function Labels({ ids, onClose }: { ids: number[]; onClose: () => void }) {
         <button className="btn primary" onClick={save}>Save</button></>}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         {[...new Set([...existing, ...sel])].map(l => (
-          <button key={l} className="chip lbl" style={sel.includes(l) ? { background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'transparent', height: 26, padding: '0 10px' } : { height: 26, padding: '0 10px' }} onClick={() => toggle(l)}>{l}</button>
+          <Chip key={l} on={sel.includes(l)} style={{ height: 26, padding: '0 10px' }} onClick={() => toggle(l)}>{l}</Chip>
         ))}
         {!existing.length && !sel.length ? <span className="hint">No labels yet.</span> : null}
       </div>
@@ -95,24 +96,17 @@ function Labels({ ids, onClose }: { ids: number[]; onClose: () => void }) {
 }
 
 function Location({ ids, onClose }: { ids: number[]; onClose: () => void }) {
-  const session = useStore(s => s.session)
-  const torrents = useStore(s => s.torrents)
-  const base = session?.download_dir ?? ''
-  const [path, setPath] = useState(get().byId.get(ids[0])?.download_dir ?? base)
+  const [path, setPath] = useState(() => get().byId.get(ids[0])?.download_dir ?? get().session?.download_dir ?? '')
   const [move, setMove] = useState(true)
-  const [free, setFree] = useState<number | null>(null)
-  useEffect(() => { let live = true; api.freeSpace(path).then(r => { if (live) setFree(r.size_bytes) }).catch(() => setFree(null)); return () => { live = false } }, [path])
-  const folders = folderTree(torrents, base)
+  const free = useFreeSpace(path)
   return (
     <Modal title="Set location" width={560} onClose={onClose}
       footer={<><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
         <button className="btn primary" onClick={() => { onClose(); void run('Move', () => api.setLocation(ids, path, move)) }}>{move ? 'Move' : 'Set location'}</button></>}>
       <div style={{ display: 'grid', gap: 14 }}>
         <div className="field"><label>Folder</label>
-          <TextInput value={path} onCommit={setPath} icon="folder" unit={free != null ? `${(free / 1e9).toFixed(0)} GB free` : undefined} autoFocus />
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 2 }}>
-            {[base, ...folders.map(f => f.path)].filter(Boolean).map(p => <button key={p} className="chip lbl" style={p === path ? { background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'transparent' } : undefined} onClick={() => setPath(p)}>{relDir(p, base) || '/'}</button>)}
-          </div>
+          <TextInput value={path} onCommit={setPath} icon="folder" unit={free != null ? `${bytes(free)} free` : undefined} autoFocus />
+          <FolderChips value={path} onPick={setPath} />
         </div>
         <Opt label="Move data" desc={move ? 'Files are moved to the new folder.' : 'Only the path changes; use when the files are already there.'}><Toggle on={move} onChange={setMove} /></Opt>
       </div>
@@ -133,25 +127,14 @@ function Rename({ id, onClose }: { id: number; onClose: () => void }) {
   )
 }
 
-const LIMIT_FIELDS = ['honors_session_limits', 'download_limit', 'download_limited', 'upload_limit', 'upload_limited', 'bandwidth_priority',
-  'seed_ratio_mode', 'seed_ratio_limit', 'seed_idle_mode', 'seed_idle_limit', 'peer_limit'] as const
-
 function Limits({ ids, onClose }: { ids: number[]; onClose: () => void }) {
-  const [d, setD] = useState<Pick<TorrentDetail, typeof LIMIT_FIELDS[number]> | null>(null)
+  const [d, setD] = useState<LimitValues | null>(null)
   const load = useCallback(() => api.getTorrentFields(ids[0], LIMIT_FIELDS).then(r => setD(r ?? null)), [ids])
   useEffect(() => { load().catch(() => {}) }, [load])
   const setT = (label: string, args: api.TorrentSetArgs) => void run(label, () => api.setTorrent(ids, args).then(load))
   return (
     <Modal title="Limits & priority" width={520} onClose={onClose} footer={<><span className="hint">{ids.length > 1 ? `Applies to ${ids.length} torrents · values shown are from the first` : names(ids)[0]}</span><div className="spacer" /><button className="btn primary" onClick={onClose}>Done</button></>}>
-      {!d ? <div className="hint">Loading…</div> : <>
-        <Opt label="Honor global limits"><Toggle on={d.honors_session_limits} onChange={v => setT('Limits', { honors_session_limits: v })} /></Opt>
-        <Opt label="Limit download"><NumInput value={d.download_limit} unit="kB/s" onCommit={v => setT('Limit', { download_limit: v })} disabled={!d.download_limited} /><Toggle on={d.download_limited} onChange={v => setT('Limit', { download_limited: v })} /></Opt>
-        <Opt label="Limit upload"><NumInput value={d.upload_limit} unit="kB/s" onCommit={v => setT('Limit', { upload_limit: v })} disabled={!d.upload_limited} /><Toggle on={d.upload_limited} onChange={v => setT('Limit', { upload_limited: v })} /></Opt>
-        <Opt label="Bandwidth priority"><Seg value={String(d.bandwidth_priority)} options={[{ v: '-1', l: 'Low' }, { v: '0', l: 'Normal' }, { v: '1', l: 'High' }]} onChange={v => setT('Priority', { bandwidth_priority: Number(v) as -1 | 0 | 1 })} /></Opt>
-        <Opt label="Seed ratio"><Seg value={String(d.seed_ratio_mode)} options={[{ v: '0', l: 'Global' }, { v: '1', l: 'Custom' }, { v: '2', l: 'Unlimited' }]} onChange={v => setT('Seed ratio', { seed_ratio_mode: Number(v) as 0 | 1 | 2 })} />{d.seed_ratio_mode === 1 ? <NumInput value={d.seed_ratio_limit} width={70} onCommit={v => setT('Seed ratio', { seed_ratio_limit: v })} /> : null}</Opt>
-        <Opt label="Idle seeding"><Seg value={String(d.seed_idle_mode)} options={[{ v: '0', l: 'Global' }, { v: '1', l: 'Custom' }, { v: '2', l: 'Unlimited' }]} onChange={v => setT('Idle', { seed_idle_mode: Number(v) as 0 | 1 | 2 })} />{d.seed_idle_mode === 1 ? <NumInput value={d.seed_idle_limit} unit="min" width={90} onCommit={v => setT('Idle', { seed_idle_limit: v })} /> : null}</Opt>
-        <Opt label="Peer limit"><NumInput value={d.peer_limit} width={80} onCommit={v => setT('Peer limit', { 'peer_limit': v })} /></Opt>
-      </>}
+      {!d ? <div className="hint">Loading…</div> : <LimitRows d={d} setT={setT} idle />}
     </Modal>
   )
 }

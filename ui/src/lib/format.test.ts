@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rate, rateParts, ratio, ratioOwed, ratioValue, RATIO_INF, RATIO_NA } from './format'
+import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rateParts, ratio, ratioOwed, ratioValue, RATIO_INF, RATIO_NA } from './format'
 
 describe('bytes', () => {
   it('formats SI units with sensible digits', () => {
@@ -25,7 +25,6 @@ describe('bytes', () => {
 })
 
 describe('rates', () => {
-  it('rate hides zero', () => { expect(rate(0)).toBe('—'); expect(rate(12_400_000)).toBe('12.4 MB/s') })
   it('rateParts splits number and unit', () => { expect(rateParts(1_210_000)).toEqual(['1.21', 'MB/s']) })
 })
 
