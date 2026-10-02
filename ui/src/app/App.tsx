@@ -6,10 +6,9 @@ import { SidebarResizer } from './SidebarResizer'
 import { List } from '../list/List'
 import { Inspector } from '../inspector/Inspector'
 import { Dialogs } from '../dialogs/Dialogs'
-import { get, set, useStore } from '../state/store'
+import { get, run, selectAllVisible, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
 import { basePath } from '../rpc/client'
-import { run } from '../state/store'
 
 function SignIn() {
   return (
@@ -38,7 +37,7 @@ export function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); document.querySelector<HTMLInputElement>('.search input')?.focus(); return }
       if (inField || s.dialog.kind !== 'none') return
       const ids = s.selected.size ? [...s.selected] : s.focusId != null ? [s.focusId] : []
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); document.dispatchEvent(new CustomEvent('tm:select-all')); return }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAllVisible(); return }
       if (e.key === 'Escape') { set({ selected: new Set() }); return }
       if (!ids.length) return
       if (e.key === ' ') { e.preventDefault(); const t = s.byId.get(ids[0]); if (!t) return; void run(t.status === 0 ? 'Resume' : 'Pause', () => t.status === 0 ? api.start(ids) : api.stop(ids)) }

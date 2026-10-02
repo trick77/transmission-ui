@@ -1,9 +1,9 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { ADV_KEYS, ADV_LABEL, ADV_OPTIONS, advActive, advFn, filterFn, sortFn, trackerHealth, usesTracker, type SortKey } from '../lib/model'
 import { trackerName } from '../lib/trackers'
-import { dismissNotice, dismissRemoval, focus, run, set, setViewOrder, stopRemoval, syncUrl, useStore, type Removing } from '../state/store'
+import { dismissNotice, dismissRemoval, focus, get, run, selectAllVisible, set, setViewOrder, stopRemoval, syncUrl, useStore, type Removing } from '../state/store'
 import * as api from '../rpc/methods'
 import { Menu, Seg, useDismiss } from '../app/ui'
 import { Row, type RowRemoval } from './Row'
@@ -38,7 +38,8 @@ export function List() {
   const torrents = useStore(s => s.torrents)
   const filter = useStore(s => s.filter)
   const adv = useStore(s => s.adv)
-  const search = useStore(s => s.search)
+  // The box itself stays immediate; filtering and re-sorting the list may lag a keystroke.
+  const search = useDeferredValue(useStore(s => s.search))
   const sort = useStore(s => s.sort)
   const sortDir = useStore(s => s.sortDir)
   const selected = useStore(s => s.selected)
@@ -69,10 +70,16 @@ export function List() {
   const closeF = useCallback(() => setFpop(false), [])
   const fref = useDismiss(closeF, fpop)
 
-  const selectAll = useCallback(() => {
-    set(s => ({ selected: ids.every(id => s.selected.has(id)) && ids.length ? new Set() : new Set(ids) }))
-  }, [ids])
-  useEffect(() => { document.addEventListener('tm:select-all', selectAll); return () => document.removeEventListener('tm:select-all', selectAll) }, [selectAll])
+  // Stable across polls, or every memoized Row would re-render with the list. The
+  // selection is read at click time for the same reason.
+  // Anchored to the trigger, not the pointer: the menu then opens in the same place for
+  // every row, which the pointer-anchored version never did.
+  const onMore = useCallback((id: number, trigger: HTMLElement) => {
+    const sel = get().selected
+    const r = trigger.getBoundingClientRect()
+    setMenu({ x: r.right, y: r.bottom + 4, kind: 'row', ids: sel.has(id) ? [...sel] : [id], rowId: id })
+  }, [])
+  const removals = useMemo(() => new Map(removing?.ids.map(id => [id, removalOf(removing, id)])), [removing])
 
   // The header is not a scroll container, so scrollbar-gutter cannot align it
   // with the rows. Publish the pane's real scrollbar width instead. The observer
@@ -117,9 +124,10 @@ export function List() {
   const health = useMemo(() => trackerHealth(torrents).filter(h => (h.state === 'down' || h.state === 'rejected') && !dismissed.has(`${h.host}@${Math.floor(h.since)}`)), [torrents, dismissed])
   const affected = (host: string) => torrents.filter(t => usesTracker(t, host)).map(t => t.id)
 
-  const allSel = ids.length > 0 && ids.every(id => selected.has(id))
-  const someSel = !allSel && ids.some(id => selected.has(id))
-  const selIds = [...selected].filter(id => ids.includes(id))
+  const shown = useMemo(() => new Set(ids), [ids])
+  const selIds = useMemo(() => [...selected].filter(id => shown.has(id)), [selected, shown])
+  const allSel = ids.length > 0 && selIds.length === ids.length
+  const someSel = !allSel && selIds.length > 0
 
   return (
     <section className="list">
@@ -187,7 +195,7 @@ export function List() {
       {/* The dot and action tracks carry no header. They are plain spans, never COLS
           entries: everything in that list becomes a clickable sort trigger. */}
       <div className={'cols' + (one ? ' one' : '')}>
-        <span className={'chk' + (allSel ? ' on' : someSel ? ' some' : '')} id="selall" title="Select all" onClick={selectAll} />
+        <span className={'chk' + (allSel ? ' on' : someSel ? ' some' : '')} id="selall" title="Select all" onClick={selectAllVisible} />
         {one ? <span className="dot-h" /> : null}
         {cols.map(c => (
           <Fragment key={c.key}>
@@ -203,14 +211,7 @@ export function List() {
       <div className="rows" id="rows" ref={rowsRef} onClick={onRowClick} onContextMenu={onContext}>
         {list.length ? list.map(t => (
           <Row key={t.id} t={t} base={base} compactRow={one} selected={selected.has(t.id)} focused={focusId === t.id}
-            removal={removalOf(removing, t.id)} menuOpen={menu?.rowId === t.id}
-            onMore={e => {
-              const target = selected.has(t.id) ? [...selected] : [t.id]
-              // Anchored to the trigger, not the pointer: the menu then opens in the same
-              // place for every row, which the pointer-anchored version never did.
-              const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-              setMenu({ x: r.right, y: r.bottom + 4, kind: 'row', ids: target, rowId: t.id })
-            }} />
+            removal={removals.get(t.id) ?? null} menuOpen={menu?.rowId === t.id} onMore={onMore} />
         )) : (
           <div className="empty">
             <div className="t">{connection === 'connecting' ? 'Connecting…' : torrents.length ? 'Nothing matches' : 'No torrents yet'}</div>
@@ -224,7 +225,7 @@ export function List() {
           opens at the pointer and reads left-to-right from there. */}
       {menu ? (
         <Menu x={menu.x} y={menu.y} alignRight={!menu.atPointer} onClose={() => setMenu(null)}
-          items={menu.kind === 'view' ? viewMenu(menu.ids, selectAll) : torrentMenu(menu.ids)} />
+          items={menu.kind === 'view' ? viewMenu(menu.ids, selectAllVisible) : torrentMenu(menu.ids)} />
       ) : null}
     </section>
   )

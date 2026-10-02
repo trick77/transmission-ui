@@ -55,14 +55,19 @@ export function Sec({ children, first }: { children: ReactNode; first?: boolean 
 /** Closes on outside click or Escape. */
 export function useDismiss(onClose: () => void, active = true) {
   const ref = useRef<HTMLDivElement>(null)
+  // Callers pass a fresh closure on most renders. Reading it through a ref keeps the
+  // listeners in place across those: re-arming them on every poll left a window after
+  // each one in which an outside click was missed.
+  const close = useRef(onClose)
+  useEffect(() => { close.current = onClose })
   useEffect(() => {
     if (!active) return
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) close.current() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current() }
     // defer so the click that opened us doesn't close us
     const id = setTimeout(() => { document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey) }, 0)
     return () => { clearTimeout(id); document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
-  }, [onClose, active])
+  }, [active])
   return ref
 }
 

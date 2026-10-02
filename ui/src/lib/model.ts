@@ -5,6 +5,24 @@ import { Status, type TorrentSummary, type TrackerStat } from '../rpc/types'
 import { daysSince, gb, ratioValue } from './format'
 import { trackerName } from './trackers'
 
+/**
+ * Per-torrent results cached on the row object itself. A poll replaces the object of a
+ * torrent that changed and keeps the others, so a cached answer is exactly as fresh as
+ * the row: unchanged torrents cost nothing on the next sort or filter pass.
+ */
+function perRow<V>(f: (t: TorrentSummary) => V): (t: TorrentSummary) => V {
+  const seen = new WeakMap<TorrentSummary, V>()
+  return t => {
+    if (seen.has(t)) return seen.get(t)!
+    const v = f(t)
+    seen.set(t, v)
+    return v
+  }
+}
+
+/** Same order as String.localeCompare, without resolving the locale on every call. */
+const collate = new Intl.Collator().compare
+
 export type ChipKind = 'dl' | 'seed' | 'wait' | 'stop' | 'err'
 
 export interface StatusView { kind: ChipKind; bar: string; label: string }
@@ -40,7 +58,7 @@ export function classifyAnnounce(ts: TrackerStat): TrackerFailure {
   return 'tracker'
 }
 
-export const hasTrackerProblem = (t: TorrentSummary) => t.tracker_stats.some(ts => classifyAnnounce(ts) !== 'ok')
+export const hasTrackerProblem = perRow(t => t.tracker_stats.some(ts => classifyAnnounce(ts) !== 'ok'))
 
 export interface TrackerHealth {
   host: string
@@ -67,7 +85,14 @@ function forgetFailing(host: string) {
   try { localStorage.setItem('tm.trkfail', JSON.stringify([...firstFailing])) } catch { /* ignore */ }
 }
 
+// The sidebar and the list's notices both ask on every poll, for the same array.
+let lastHealth: { torrents: TorrentSummary[]; out: TrackerHealth[] } | null = null
 export function trackerHealth(torrents: TorrentSummary[]): TrackerHealth[] {
+  if (lastHealth?.torrents !== torrents) lastHealth = { torrents, out: computeHealth(torrents) }
+  return lastHealth.out
+}
+
+function computeHealth(torrents: TorrentSummary[]): TrackerHealth[] {
   const byHost = new Map<string, { count: number; announced: number; failing: number; rejected: number; torrentLevel: number; since: number; result: string }>()
   for (const t of torrents) {
     const seen = new Set<string>()
@@ -91,6 +116,9 @@ export function trackerHealth(torrents: TorrentSummary[]): TrackerHealth[] {
       byHost.set(host, h)
     }
   }
+  // A host nobody announces to any more has no outage left to time. Not on an empty
+  // list: that is the moment before the first poll, not a daemon without trackers.
+  if (torrents.length) for (const host of [...firstFailing.keys()]) if (!byHost.has(host)) forgetFailing(host)
   const now = Date.now() / 1000
   return [...byHost.entries()].map(([host, h]) => {
     const allFailing = h.announced > 0 && h.failing === h.announced
@@ -101,7 +129,7 @@ export function trackerHealth(torrents: TorrentSummary[]): TrackerHealth[] {
     else if (allFailing && now - since >= DOWN_AFTER_S) state = 'down'
     else if (h.failing > 0 || h.torrentLevel > 0) state = 'issues'
     return { host, count: h.count, failing: h.failing + h.torrentLevel, state, since, result: shortResult(h.result) }
-  }).sort((a, b) => b.count - a.count || trackerName(a.host).localeCompare(trackerName(b.host)))
+  }).sort((a, b) => b.count - a.count || collate(trackerName(a.host), trackerName(b.host)))
 }
 
 /**
@@ -121,13 +149,15 @@ export function usedTrackers(t: TorrentSummary): TrackerStat[] {
 export const usesTracker = (t: TorrentSummary, host: string) =>
   usedTrackers(t).some(ts => hostOf(ts.announce) === host)
 
+// A handful of distinct announce URLs, asked for once per tracker per torrent per poll.
+const hosts = new Map<string, string>()
 export function hostOf(announce: string): string {
-  try {
-    const u = new URL(announce)
-    return u.hostname
-  } catch {
-    return announce
+  let h = hosts.get(announce)
+  if (h === undefined) {
+    try { h = new URL(announce).hostname } catch { h = announce }
+    hosts.set(announce, h)
   }
+  return h
 }
 
 function shortResult(r: string): string {
@@ -198,13 +228,17 @@ export const ADV_LABEL: Record<AdvKey, Record<string, string>> = {
 }
 export const ADV_KEYS: AdvKey[] = ['size', 'age', 'ratio', 'idle']
 export const advActive = (adv: Adv) => ADV_KEYS.filter(k => adv[k] && adv[k] !== 'any')
-export const advFn = (adv: Adv) => (t: TorrentSummary) => advActive(adv).every(k => ADV[k][adv[k]!]?.(t) ?? true)
+export function advFn(adv: Adv): (t: TorrentSummary) => boolean {
+  const tests = advActive(adv).map(k => ADV[k][adv[k]!]).filter(Boolean)
+  return t => tests.every(f => f(t))
+}
 
 // ─── sort ───
 export type SortKey = 'state' | 'name' | 'size' | 'progress' | 'down' | 'up' | 'ratio' | 'eta' | 'added' | 'activity' | 'seeds' | 'uploaded' | 'tracker' | 'path'
 
 /** Problems first, then by how much attention a torrent needs. */
-export function rank(t: TorrentSummary): number {
+export const rank = perRow(rankOf)
+function rankOf(t: TorrentSummary): number {
   if (t.error !== 0) return 0
   if (hasTrackerProblem(t)) return 1
   switch (t.status) {
@@ -219,16 +253,16 @@ export function rank(t: TorrentSummary): number {
 
 /** `base` is the session download dir, so Path sorts on what the row actually shows. */
 export function sortFn(key: SortKey, dir: 1 | -1, base = ''): (a: TorrentSummary, b: TorrentSummary) => number {
-  const num = (f: (t: TorrentSummary) => number) => (a: TorrentSummary, b: TorrentSummary) => (f(a) - f(b)) * dir || a.name.localeCompare(b.name)
+  const num = (f: (t: TorrentSummary) => number) => (a: TorrentSummary, b: TorrentSummary) => (f(a) - f(b)) * dir || collate(a.name, b.name)
   // A missing tracker or path is the absence of a value, not a value that sorts low, so it
   // parks last in both directions. (An unknown ETA differs: there it is a real extreme.)
   const text = (f: (t: TorrentSummary) => string) => (a: TorrentSummary, b: TorrentSummary) => {
     const x = f(a), y = f(b)
     if (!x !== !y) return x ? -1 : 1
-    return x.localeCompare(y) * dir || a.name.localeCompare(b.name)
+    return collate(x, y) * dir || collate(a.name, b.name)
   }
   switch (key) {
-    case 'name': return (a, b) => a.name.localeCompare(b.name) * dir
+    case 'name': return (a, b) => collate(a.name, b.name) * dir
     case 'size': return num(t => t.size_when_done)
     case 'progress': return num(t => t.percent_done)
     case 'down': return num(t => t.rate_download)
@@ -239,11 +273,13 @@ export function sortFn(key: SortKey, dir: 1 | -1, base = ''): (a: TorrentSummary
     case 'activity': return num(t => t.activity_date)
     case 'seeds': return num(t => swarmOf(t).seeds)
     case 'uploaded': return num(t => t.uploaded_ever)
-    case 'tracker': return text(t => t.tracker_stats.length ? trackerName(hostOf(t.tracker_stats[0].announce)) : '')
+    case 'tracker': return text(firstTrackerName)
     case 'path': return text(t => relDir(t.download_dir, base))
-    default: return (a, b) => (rank(a) - rank(b)) * dir || b.activity_date - a.activity_date || a.name.localeCompare(b.name)
+    default: return (a, b) => (rank(a) - rank(b)) * dir || b.activity_date - a.activity_date || collate(a.name, b.name)
   }
 }
+
+const firstTrackerName = perRow(t => t.tracker_stats.length ? trackerName(hostOf(t.tracker_stats[0].announce)) : '')
 
 // ─── folders ───
 export function relDir(dir: string, base: string): string {
@@ -256,7 +292,16 @@ export interface FolderNode { path: string; name: string; depth: number; count: 
 
 /** Flattened folder tree of every download dir relative to the session download-dir. */
 export function folderTree(torrents: TorrentSummary[], base: string): FolderNode[] {
-  const dirs = [...new Set(torrents.map(t => t.download_dir))].sort()
+  const perDir = new Map<string, number>()
+  for (const t of torrents) perDir.set(t.download_dir, (perDir.get(t.download_dir) ?? 0) + 1)
+  // A folder holds its own torrents and those of every folder below it: hand each
+  // directory's count to all of its ancestors once, rather than scan the list per folder.
+  const within = new Map<string, number>()
+  for (const [d, n] of perDir) {
+    for (let i = d.indexOf('/', 1); i !== -1; i = d.indexOf('/', i + 1)) within.set(d.slice(0, i), (within.get(d.slice(0, i)) ?? 0) + n)
+    within.set(d, (within.get(d) ?? 0) + n)
+  }
+  const dirs = [...perDir.keys()].sort()
   const seen = new Set<string>()
   const out: FolderNode[] = []
   for (const d of dirs) {
@@ -266,7 +311,7 @@ export function folderTree(torrents: TorrentSummary[], base: string): FolderNode
       const p = (inBase ? base + '/' : '/') + parts.slice(0, i).join('/')
       if (seen.has(p)) continue
       seen.add(p)
-      out.push({ path: p, name: parts[i - 1], depth: i - 1, count: torrents.filter(t => t.download_dir === p || t.download_dir.startsWith(p + '/')).length })
+      out.push({ path: p, name: parts[i - 1], depth: i - 1, count: within.get(p) ?? 0 })
     }
   }
   return out
@@ -275,12 +320,12 @@ export function folderTree(torrents: TorrentSummary[], base: string): FolderNode
 export function labelCounts(torrents: TorrentSummary[]): { label: string; count: number }[] {
   const m = new Map<string, number>()
   for (const t of torrents) for (const l of t.labels) m.set(l, (m.get(l) ?? 0) + 1)
-  return [...m.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+  return [...m.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count || collate(a.label, b.label))
 }
 
 /** Peers/swarm text under the name. */
-export function swarmOf(t: TorrentSummary): { seeds: number; leechers: number } {
+export const swarmOf = perRow((t): { seeds: number; leechers: number } => {
   let seeds = 0, leechers = 0
   for (const ts of t.tracker_stats) { seeds = Math.max(seeds, ts.seeder_count); leechers = Math.max(leechers, ts.leecher_count) }
   return { seeds, leechers }
-}
+})

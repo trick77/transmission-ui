@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import { FILTERS, FILTER_ORDER, folderTree, labelCounts, trackerHealth, relDir } from '../lib/model'
@@ -15,9 +16,15 @@ export function Sidebar() {
   const session = useStore(s => s.session)
   const freeSpace = useStore(s => s.freeSpace)
   const base = session?.download_dir ?? ''
-  const folders = folderTree(torrents, base)
-  const labels = labelCounts(torrents)
+  // `torrents` keeps its identity across a poll that changed nothing, so these hold.
+  const folders = useMemo(() => folderTree(torrents, base), [torrents, base])
+  const labels = useMemo(() => labelCounts(torrents), [torrents])
   const trackers = trackerHealth(torrents)
+  const counts = useMemo(() => {
+    const n = Object.fromEntries(Object.keys(FILTERS).map(k => [k, 0])) as Record<FilterKey, number>
+    for (const t of torrents) for (const k in FILTERS) if (FILTERS[k as FilterKey].f(t)) n[k as FilterKey]++
+    return n
+  }, [torrents])
   const disks = [...freeSpace.values()]
 
   return (
@@ -29,7 +36,7 @@ export function Sidebar() {
       {(FILTER_ORDER.includes(filter as FilterKey) || !(filter in FILTERS)
         ? FILTER_ORDER
         : [filter as FilterKey, ...FILTER_ORDER]).map(k => {
-        const n = torrents.filter(FILTERS[k].f).length
+        const n = counts[k]
         // An empty filter is a dead end: hide it. 'all' anchors the list,
         // 'active'/'error' are pinned so the sidebar keeps a stable shape, and
         // the active filter has to stay, or selecting it would remove it from view.

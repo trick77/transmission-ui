@@ -306,6 +306,12 @@ const errMsg = (e: unknown) => e instanceof Error ? e.message : String(e)
 let viewOrder: number[] = []
 export function setViewOrder(ids: number[]) { viewOrder = ids }
 
+/** Select everything the list shows; a second time, with all of it selected, clears. */
+export function selectAllVisible() {
+  const ids = viewOrder
+  set(s => ({ selected: ids.length && ids.every(id => s.selected.has(id)) ? new Set() : new Set(ids) }))
+}
+
 let removalToken = 0
 
 export async function removeSequence(ids: number[], deleteData: boolean) {
@@ -321,7 +327,8 @@ export async function removeSequence(ids: number[], deleteData: boolean) {
   // Progress should walk down the screen, so the batch follows the order the rows are
   // displayed in. The caller passes that order (it holds the sorted, filtered list);
   // store order is the fallback, since `selected` is a Set and carries no order at all.
-  const order = (viewOrder.length ? viewOrder : snap.torrents.map(t => t.id)).filter(id => ids.includes(id))
+  const wanted = new Set(ids)
+  const order = (viewOrder.length ? viewOrder : snap.torrents.map(t => t.id)).filter(id => wanted.has(id))
   const batch = order.length === ids.length ? order : [...new Set([...order, ...ids])]
   // The rows are on their way out: drop them from the selection so the sel-bar cannot
   // fire a second remove at torrents that are already going.
