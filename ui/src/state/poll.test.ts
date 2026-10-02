@@ -55,6 +55,18 @@ describe('list poll', () => {
     expect(get().byId).toBe(byId)
   })
 
+  // Tracker health turns "down" by the clock alone, so a quiet list must not stay
+  // the same array forever, or nothing would ever recompute it.
+  it('a quiet list still gets a fresh array every few ticks, around the same rows', async () => {
+    const { get } = await start()
+    const { torrents, byId } = get()
+    for (let i = 0; i < 5; i++) await tick()
+    expect(get().torrents).not.toBe(torrents)
+    expect(get().torrents).toEqual(torrents)
+    expect(get().torrents[0]).toBe(torrents[0])
+    expect(get().byId).toBe(byId)
+  })
+
   it('a delta replaces only the rows that changed and drops the removed ones', async () => {
     const { get } = await start()
     const before = get().byId

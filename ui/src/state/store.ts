@@ -146,7 +146,7 @@ export function syncUrl() {
 }
 
 // ─── polling ───
-const LIST_MS = 2000, HIDDEN_MS = 5000, FULL_EVERY = 30, SESSION_EVERY = 15, SPACE_MS = 30000
+const LIST_MS = 2000, HIDDEN_MS = 5000, FULL_EVERY = 30, SESSION_EVERY = 15, SPACE_MS = 30000, CLOCK_EVERY = 5
 let timer: ReturnType<typeof setTimeout> | null = null
 let ticks = 0
 // The next pass fetches everything: every torrent, the session, free space, and the whole
@@ -158,9 +158,15 @@ let pollAgain = false
 // startPolling() has just read the session; the first pass need not read it again.
 let sessionFresh = false
 
-/** Nothing in the delta leaves `torrents` and `byId` alone, so nothing derived from them reruns. */
+/**
+ * Nothing in the delta leaves `torrents` and `byId` alone, so nothing derived from them
+ * reruns. Some of what is derived also depends on the clock, though: a failing tracker
+ * turns from "issues" into "down" ten minutes in, with no torrent changing. So every few
+ * ticks a quiet list still gets a new array, around the same row objects: the sidebar
+ * and the notices recompute, and no row re-renders.
+ */
 function mergeTorrents(list: TorrentSummary[], removed: number[] | undefined, full: boolean): Partial<Snapshot> {
-  if (!full && !list.length && !removed?.length) return {}
+  if (!full && !list.length && !removed?.length) return ticks % CLOCK_EVERY === 0 ? { torrents: [...snap.torrents] } : {}
   const byId = full ? new Map<number, TorrentSummary>() : new Map(snap.byId)
   for (const t of list) byId.set(t.id, t)
   for (const id of removed ?? []) byId.delete(id)
