@@ -42,9 +42,10 @@ type Server struct {
 	index     []byte
 	indexETag string
 
-	// Form login: no attempt is evaluated before this instant. See handleLoginSubmit.
-	loginMu     sync.Mutex
-	loginLocked time.Time
+	// Form login is judged one attempt at a time; see handleLoginSubmit.
+	loginMu      sync.Mutex
+	loginQueue   chan struct{}
+	loginPenalty time.Duration
 }
 
 const baseMeta = `<meta name="tmui-base" content="">`
@@ -53,7 +54,8 @@ const baseMeta = `<meta name="tmui-base" content="">`
 // be told where it is mounted: under a base path the UI would then call the
 // RPC at the origin root and miss the reverse proxy's route.
 func New(cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fs.FS, log *slog.Logger) (*Server, error) {
-	s := &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log}
+	s := &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log,
+		loginQueue: make(chan struct{}, loginQueueLen), loginPenalty: loginPenalty}
 	index, err := fs.ReadFile(ui, "index.html")
 	if err != nil {
 		return nil, errors.New("the UI bundle has no index.html")

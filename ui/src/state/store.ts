@@ -155,6 +155,8 @@ let ticks = 0
 let forceFull = true
 let inFlight = false
 let pollAgain = false
+// startPolling() has just read the session; the first pass need not read it again.
+let sessionFresh = false
 
 /** Nothing in the delta leaves `torrents` and `byId` alone, so nothing derived from them reruns. */
 function mergeTorrents(list: TorrentSummary[], removed: number[] | undefined, full: boolean): Partial<Snapshot> {
@@ -200,8 +202,9 @@ async function pollOnce() {
   try {
     const [tr, st] = await Promise.all([
       api.getTorrents(full ? undefined : 'recently_active'), api.getStats(),
-      refreshDetail(full), forced || ticks % SESSION_EVERY === 0 ? refreshSession() : null,
+      refreshDetail(full), !sessionFresh && (forced || ticks % SESSION_EVERY === 0) ? refreshSession() : null,
     ])
+    sessionFresh = false
     const history = [...snap.history, { down: st.download_speed, up: st.upload_speed }].slice(-60)
     set({ ...mergeTorrents(tr.torrents, tr.removed, full), stats: st, history, connection: 'ok', lastError: '' })
     if (snap.focusId != null && !snap.byId.has(snap.focusId)) { set({ focusId: null, detail: null }); syncUrl() }
@@ -240,7 +243,9 @@ let started = false
 export function startPolling() {
   if (started) return
   started = true
-  void pollOnce()
+  // The session goes first and alone. It does the 409 session-id handshake once instead
+  // of once per parallel request, and the rows need its download dir to render paths.
+  void refreshSession().then(() => { sessionFresh = snap.session != null; return pollOnce() })
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void pollOnce() })
 }
 

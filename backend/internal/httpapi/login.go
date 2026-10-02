@@ -181,8 +181,13 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	s.renderLogin(w, http.StatusOK, "")
 }
 
-// loginCooldown is how long the form refuses every attempt after a failed one.
-const loginCooldown = 500 * time.Millisecond
+const (
+	// loginPenalty is how long a failed attempt holds the form before the next
+	// one is judged.
+	loginPenalty = 500 * time.Millisecond
+	// loginQueueLen is how many attempts may wait their turn; more are refused.
+	loginQueueLen = 8
+)
 
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	// The route is registered in every mode so the page and its assets resolve,
@@ -195,30 +200,33 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.renderLogin(w, http.StatusBadRequest, "Could not read the form.")
 		return
 	}
-	// A failed attempt closes the form to everyone for a moment, and an attempt
-	// that arrives in that window is turned away unjudged. That caps guessing
-	// at two tries a second however many connections do it; a per-request
-	// delay alone only slowed each connection down. The price is that someone
-	// hammering the form can keep a real user out while they do.
-	s.loginMu.Lock()
-	wait := time.Until(s.loginLocked)
-	s.loginMu.Unlock()
-	if wait > 0 {
-		w.Header().Set("Retry-After", "1")
-		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
-		return
-	}
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
+	// Attempts are judged one at a time, and a failed one holds the turn for
+	// loginPenalty. That caps guessing at two tries a second however many
+	// connections do it; a delay per request only slowed each connection down.
+	// A correct attempt waits behind whatever is queued and is not refused,
+	// unless the queue is full, which is what a flood looks like.
+	select {
+	case s.loginQueue <- struct{}{}:
+		defer func() { <-s.loginQueue }()
+	default:
+		w.Header().Set("Retry-After", "5")
+		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
+		return
+	}
+	s.loginMu.Lock()
 	// Constant time on both halves, over digests: comparing with == would leak
 	// the username and password a byte at a time to anyone who can measure the
 	// response, and ConstantTimeCompare on the raw values returns early when
 	// the lengths differ, which leaks the lengths.
-	if !sameSecret(user, s.cfg.RPCUser) || !sameSecret(pass, s.cfg.RPCPass) {
-		s.loginMu.Lock()
-		s.loginLocked = time.Now().Add(loginCooldown)
-		s.loginMu.Unlock()
+	ok := sameSecret(user, s.cfg.RPCUser) && sameSecret(pass, s.cfg.RPCPass)
+	if !ok {
+		time.Sleep(s.loginPenalty)
+	}
+	s.loginMu.Unlock()
+	if !ok {
 		// The same message either way, so a wrong username is indistinguishable
 		// from a wrong password.
 		s.log.Warn("failed form login", "user", user, "remote", r.RemoteAddr)

@@ -101,23 +101,55 @@ func TestLoginPageDoesNotBounceARefusedSession(t *testing.T) {
 	}
 }
 
-func TestFormLoginCoolsDownAfterAFailure(t *testing.T) {
+// Parallel connections must not multiply the guessing rate: failed attempts
+// take their penalty one after another, not side by side.
+func TestFormLoginJudgesOneAttemptAtATime(t *testing.T) {
 	srv, _ := formServer(t)
 	try := func(pass string) int {
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, post(url.Values{"username": {"daemonuser"}, "password": {pass}}))
 		return rec.Code
 	}
-	if got := try("nope"); got != http.StatusUnauthorized {
-		t.Fatalf("want 401, got %d", got)
+	const guesses = 3
+	srv.loginPenalty = 100 * time.Millisecond
+	start := time.Now()
+	codes := make(chan int, guesses)
+	for range guesses {
+		go func() { codes <- try("nope") }()
 	}
-	// Even the right password is turned away unjudged inside the window.
-	if got := try("daemonpass"); got != http.StatusTooManyRequests {
-		t.Fatalf("want 429 during the cooldown, got %d", got)
+	for range guesses {
+		if got := <-codes; got != http.StatusUnauthorized {
+			t.Fatalf("want 401, got %d", got)
+		}
 	}
-	time.Sleep(loginCooldown + 50*time.Millisecond)
+	if took := time.Since(start); took < guesses*srv.loginPenalty {
+		t.Fatalf("%d parallel guesses took %v, want at least %v", guesses, took, guesses*srv.loginPenalty)
+	}
+	// A correct attempt right after is judged, not turned away.
 	if got := try("daemonpass"); got != http.StatusFound {
-		t.Fatalf("want a sign-in after the cooldown, got %d", got)
+		t.Fatalf("want a sign-in, got %d", got)
+	}
+}
+
+func TestFormLoginRefusesAFlood(t *testing.T) {
+	srv, _ := formServer(t)
+	srv.loginPenalty = 20 * time.Millisecond
+	codes := make(chan int, loginQueueLen*3)
+	for range cap(codes) {
+		go func() {
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, post(url.Values{"username": {"daemonuser"}, "password": {"nope"}}))
+			codes <- rec.Code
+		}()
+	}
+	refused := 0
+	for range cap(codes) {
+		if <-codes == http.StatusTooManyRequests {
+			refused++
+		}
+	}
+	if refused == 0 {
+		t.Fatal("a flood past the queue length was all queued, none refused")
 	}
 }
 
