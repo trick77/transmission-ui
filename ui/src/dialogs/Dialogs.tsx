@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Icon } from '../icons/Icon'
-import { get, refreshNow, removeSequence, run, set, useStore } from '../state/store'
+import { get, removeSequence, run, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
+import type { TorrentDetail } from '../rpc/types'
 import { relDir, labelCounts, folderTree } from '../lib/model'
 import { Add } from './Add'
 import { Settings } from './Settings'
@@ -132,10 +133,14 @@ function Rename({ id, onClose }: { id: number; onClose: () => void }) {
   )
 }
 
+const LIMIT_FIELDS = ['honors_session_limits', 'download_limit', 'download_limited', 'upload_limit', 'upload_limited', 'bandwidth_priority',
+  'seed_ratio_mode', 'seed_ratio_limit', 'seed_idle_mode', 'seed_idle_limit', 'peer_limit'] as const
+
 function Limits({ ids, onClose }: { ids: number[]; onClose: () => void }) {
-  const [d, setD] = useState<Awaited<ReturnType<typeof api.getTorrentDetail>> | null>(null)
-  useEffect(() => { api.getTorrentDetail(ids[0]).then(setD).catch(() => {}) }, [ids])
-  const setT = (label: string, args: api.TorrentSetArgs) => void run(label, () => api.setTorrent(ids, args).then(() => api.getTorrentDetail(ids[0]).then(setD)))
+  const [d, setD] = useState<Pick<TorrentDetail, typeof LIMIT_FIELDS[number]> | null>(null)
+  const load = useCallback(() => api.getTorrentFields(ids[0], LIMIT_FIELDS).then(r => setD(r ?? null)), [ids])
+  useEffect(() => { load().catch(() => {}) }, [load])
+  const setT = (label: string, args: api.TorrentSetArgs) => void run(label, () => api.setTorrent(ids, args).then(load))
   return (
     <Modal title="Limits & priority" width={520} onClose={onClose} footer={<><span className="hint">{ids.length > 1 ? `Applies to ${ids.length} torrents · values shown are from the first` : names(ids)[0]}</span><div className="spacer" /><button className="btn primary" onClick={onClose}>Done</button></>}>
       {!d ? <div className="hint">Loading…</div> : <>
@@ -155,11 +160,11 @@ function TrackersEdit({ id, onClose }: { id: number; onClose: () => void }) {
   const [text, setText] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   // On a failed load text stays null so Save stays disabled: saving an empty list would strip every tracker.
-  useEffect(() => { api.getTorrentDetail(id).then(d => { if (d) setText(d.tracker_list); else setFailed(true) }).catch(() => setFailed(true)) }, [id])
+  useEffect(() => { api.getTorrentFields(id, ['tracker_list']).then(d => { if (d) setText(d.tracker_list); else setFailed(true) }).catch(() => setFailed(true)) }, [id])
   return (
     <Modal title="Trackers" width={560} onClose={onClose}
       footer={<><span className="hint">{failed ? <span style={{ color: 'var(--err)' }}>Could not load the tracker list; nothing will be saved.</span> : 'One announce URL per line; a blank line starts a new tier.'}</span><div className="spacer" /><button className="btn ghost" onClick={onClose}>Cancel</button>
-        <button className="btn primary" disabled={text == null} onClick={() => { onClose(); void run('Trackers', () => api.setTorrent([id], { tracker_list: text ?? '' }).then(refreshNow)) }}>Save</button></>}>
+        <button className="btn primary" disabled={text == null} onClick={() => { onClose(); void run('Trackers', () => api.setTorrent([id], { tracker_list: text ?? '' })) }}>Save</button></>}>
       <textarea value={text ?? ''} onChange={e => setText(e.target.value)} spellCheck={false}
         style={{ width: '100%', minHeight: 220, resize: 'vertical', background: 'var(--surface-2)', color: 'var(--ink)', border: '1px solid transparent', borderRadius: 'var(--r)', padding: 10, font: '12px var(--mono)', outline: 'none' }} />
     </Modal>

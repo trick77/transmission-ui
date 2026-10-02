@@ -14,10 +14,9 @@ function paint(w: number) {
  * Drag handle on the sidebar's right edge.
  *
  * Pointer Events throughout, so mouse, trackpad, Apple Pencil and finger all take one
- * code path. During a drag only the CSS variable and local state move: the store's
- * useSnap subscribers read the whole snapshot, so a set() per pointermove would
- * re-render the row list on every frame. The store and localStorage are written once,
- * on release.
+ * code path. During a drag only the CSS variable and local state move: every set()
+ * runs every subscriber's selector, which is too much per pointermove. The store and
+ * localStorage are written once, on release.
  *
  * Reset is a double-tap, detected from pointer timestamps rather than onDoubleClick:
  * Safari only synthesises dblclick from a double-tap under conditions we would rather

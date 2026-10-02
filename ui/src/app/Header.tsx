@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { bytes, duration, rateParts } from '../lib/format'
-import { refreshSession, run, set, useStore } from '../state/store'
+import { run, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
 import { useDismiss } from './ui'
 
@@ -45,7 +45,7 @@ export function Header() {
         <span className="s ul"><span className="top"><Icon name="up" className="arrow" /><span className="num">{un}</span><span className="faint" style={{ fontSize: 11 }}>{uu}</span></span><span className="tot">{cur ? bytes(cur.uploaded_bytes) : '—'} this session</span></span>
         {alt && session ? <span className="lim">alt {session.alt_speed_down}/{session.alt_speed_up}</span> : null}
         <button id="turtle" className={'turtle' + (alt ? ' on' : '')} title={alt ? 'Alternative speed limits on' : 'Alternative speed limits off'}
-          onClick={() => void run('Alt speed', () => api.setSession({ 'alt_speed_enabled': !alt }).then(refreshSession))}>
+          onClick={() => void run('Alt speed', () => api.setSession({ 'alt_speed_enabled': !alt }))}>
           <Icon name="turtle" />
         </button>
         {pop ? (

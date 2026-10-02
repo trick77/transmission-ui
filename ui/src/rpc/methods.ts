@@ -1,6 +1,6 @@
 import { rpc } from './client'
 import {
-  DETAIL_FIELDS, SUMMARY_FIELDS,
+  SUMMARY_FIELDS,
   type FreeSpace, type Session, type SessionStats, type TorrentDetail, type TorrentSummary,
 } from './types'
 
@@ -11,8 +11,9 @@ export type IpProtocol = 'ipv4' | 'ipv6'
 export const getTorrents = (ids?: Ids) =>
   rpc<{ torrents: TorrentSummary[]; removed?: number[] }>('torrent_get', { fields: SUMMARY_FIELDS, ...(ids ? { ids } : {}) })
 
-export const getTorrentDetail = (id: number) =>
-  rpc<{ torrents: TorrentDetail[] }>('torrent_get', { fields: DETAIL_FIELDS, ids: [id] }).then(r => r.torrents[0])
+/** One torrent, only the named fields. Undefined when the daemon no longer has it. */
+export const getTorrentFields = <K extends keyof TorrentDetail>(id: number, fields: readonly K[]) =>
+  rpc<{ torrents: Pick<TorrentDetail, K>[] }>('torrent_get', { fields, ids: [id] }).then(r => r.torrents[0] as Pick<TorrentDetail, K> | undefined)
 
 export const getSession = () => rpc<Session>('session_get')
 export const setSession = (params: Partial<Session>) => rpc('session_set', params)

@@ -3,7 +3,7 @@ import { Icon } from '../icons/Icon'
 import { bytes, duration } from '../lib/format'
 import type { Session, Transport } from '../rpc/types'
 import * as api from '../rpc/methods'
-import { refreshSession, run, set, toast, useStore, writeLocal, type Density } from '../state/store'
+import { run, set, toast, useStore, writeLocal, type Density } from '../state/store'
 import { NumInput, Opt, Seg, Sec, TextInput, Toggle, useDismiss } from '../app/ui'
 
 const SECTIONS = ['Speed', 'Downloads', 'Seeding', 'Queue', 'Network', 'Peers', 'Interface'] as const
@@ -17,7 +17,7 @@ export function Settings({ onClose, section }: { onClose: () => void; section?: 
   const stats = useStore(x => x.stats)
   const [sec, setSec] = useState<Section>((SECTIONS.find(x => x.toLowerCase() === section) ?? 'Speed'))
   const ref = useDismiss(onClose)
-  const save = (patch: Partial<Session>) => void run('Settings', () => api.setSession(patch).then(refreshSession))
+  const save = (patch: Partial<Session>) => void run('Settings', () => api.setSession(patch))
   if (!s) return null
   const all = stats?.cumulative_stats
   return (
@@ -77,7 +77,7 @@ export function Settings({ onClose, section }: { onClose: () => void; section?: 
               <Sec>Encryption</Sec>
               <Opt label="Encrypted peers"><Seg value={s.encryption} options={[{ v: 'allowed', l: 'Allow' }, { v: 'preferred', l: 'Prefer' }, { v: 'required', l: 'Require' }]} onChange={v => save({ encryption: v })} /></Opt>
               <Sec>Blocklist</Sec>
-              <Opt label="Enable blocklist" desc={`${s.blocklist_size.toLocaleString()} rules`}><button className="btn sm" onClick={() => void run('Blocklist', () => api.blocklistUpdate().then(r => { toast(`Blocklist updated: ${r.blocklist_size.toLocaleString()} rules`); return refreshSession() }))}>Update</button><Toggle on={s.blocklist_enabled} onChange={v => save({ 'blocklist_enabled': v })} /></Opt>
+              <Opt label="Enable blocklist" desc={`${s.blocklist_size.toLocaleString()} rules`}><button className="btn sm" onClick={() => void run('Blocklist', () => api.blocklistUpdate().then(r => { toast(`Blocklist updated: ${r.blocklist_size.toLocaleString()} rules`) }))}>Update</button><Toggle on={s.blocklist_enabled} onChange={v => save({ 'blocklist_enabled': v })} /></Opt>
               <Opt label="Blocklist URL"><TextInput value={s.blocklist_url} mono wide onCommit={v => save({ 'blocklist_url': v })} /></Opt>
             </> : <Interface />}
           </div>

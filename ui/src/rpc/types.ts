@@ -142,9 +142,11 @@ export const SUMMARY_FIELDS: (keyof TorrentSummary)[] = [
   'recheck_progress', 'metadata_percent_complete', 'tracker_stats', 'bandwidth_priority', 'hash_string', 'magnet_link',
 ]
 
-export const DETAIL_FIELDS: (keyof TorrentDetail)[] = [
-  ...SUMMARY_FIELDS,
-  'torrent_file', 'comment', 'creator', 'date_created', 'is_private', 'piece_count', 'piece_size',
+/** What the inspector needs on top of the summary the list poll already holds. */
+export type TorrentExtra = Pick<TorrentDetail, 'id' | Exclude<keyof TorrentDetail, keyof TorrentSummary>>
+
+export const EXTRA_FIELDS: (keyof TorrentExtra)[] = [
+  'id', 'torrent_file', 'comment', 'creator', 'date_created', 'is_private', 'piece_count', 'piece_size',
   'pieces', 'availability', 'have_valid', 'have_unchecked', 'corrupt_ever', 'downloaded_ever',
   'seconds_downloading', 'seconds_seeding', 'peers_from', 'seed_ratio_limit', 'seed_ratio_mode', 'seed_idle_limit', 'seed_idle_mode',
   'honors_session_limits', 'download_limit', 'download_limited', 'upload_limit', 'upload_limited', 'peer_limit',

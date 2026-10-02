@@ -1,21 +1,21 @@
 import { useMemo } from 'react'
 import { Icon } from '../icons/Icon'
-import { ago, bytes, dateTime, duration, inFuture, percent, rateParts, ratio, KB } from '../lib/format'
+import { ago, bytes, dateTime, duration, eta, inFuture, percent, rateParts, ratio, KB } from '../lib/format'
 import { classifyAnnounce, hostOf, statusView, swarmOf, relDir } from '../lib/model'
-import type { Session, TorrentDetail } from '../rpc/types'
+import type { Session, TorrentDetail, TorrentFile } from '../rpc/types'
 import * as api from '../rpc/methods'
-import { focus, run, set, useStore } from '../state/store'
+import { focus, run, set, setInspectorTab, useStore } from '../state/store'
 import { NumInput, Seg, Toggle, Opt, Sec } from '../app/ui'
 
 export function Inspector() {
-  const detail = useStore(s => s.detail)
-  const summary = useStore(s => s.focusId != null ? s.byId.get(s.focusId) : undefined)
+  const extra = useStore(s => s.detail)
+  const t = useStore(s => s.focusId != null ? s.byId.get(s.focusId) : undefined)
   const tab = useStore(s => s.inspectorTab)
   const base = useStore(s => s.session?.download_dir ?? '')
-  const t = detail ?? summary
+  // The list poll owns the summary half, so the rates here never lag the row beside them.
+  const d = useMemo<TorrentDetail | null>(() => t && extra && extra.id === t.id ? { ...extra, ...t } : null, [extra, t])
   if (!t) return null
   const sv = statusView(t)
-  const d = detail && detail.id === t.id ? detail : null
   return (
     <aside className="inspector">
       <div className="insp-head">
@@ -29,8 +29,8 @@ export function Inspector() {
       </div>
       <div className="tabs" id="tabs">
         {(['overview', 'files', 'peers', 'trackers'] as const).map(k => (
-          <button key={k} className={tab === k ? 'on' : ''} onClick={() => set({ inspectorTab: k })}>
-            {k[0].toUpperCase() + k.slice(1)} {k !== 'overview' && d ? <span className="faint">{k === 'files' ? d.files.length : k === 'peers' ? d.peers.length : d.tracker_stats.length}</span> : null}
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setInspectorTab(k)}>
+            {k[0].toUpperCase() + k.slice(1)} {k !== 'overview' && d ? <span className="faint">{k === 'files' ? d.files.length : k === 'peers' ? d.peers_connected : d.tracker_stats.length}</span> : null}
           </button>
         ))}
       </div>
@@ -88,7 +88,7 @@ function Overview({ d, base }: { d: TorrentDetail; base: string }) {
       <div className="stat-row">
         <div className="stat"><div className="l">Download</div><div className="v" style={{ color: 'var(--accent)' }}>{d.rate_download > 0 ? <>{dn} <small>{du}</small></> : '—'}</div></div>
         <div className="stat"><div className="l">Upload</div><div className="v">{d.rate_upload > 0 ? <>{un} <small>{uu}</small></> : '—'}</div></div>
-        <div className="stat"><div className="l">ETA</div><div className="v">{d.percent_done >= 1 ? '∞' : d.eta < 0 ? '—' : duration(d.eta)}</div></div>
+        <div className="stat"><div className="l">ETA</div><div className="v">{eta(d.eta, d.percent_done >= 1)}</div></div>
       </div>
       <Sec>Progress · {percent(d.percent_done, 1)}</Sec>
       <div className="bar" style={{ ['--p' as string]: percent(d.percent_done, 1), height: 7 }}><i /></div>
@@ -135,37 +135,46 @@ function Overview({ d, base }: { d: TorrentDetail; base: string }) {
 }
 
 // ─── files ───
-interface Node { name: string; path: string; idx: number[]; length: number; done: number; children: Node[]; depth: number }
+interface Node { name: string; path: string; idx: number[]; length: number; children: Node[]; depth: number }
 
-function buildTree(d: TorrentDetail): Node {
-  const root: Node = { name: '', path: '', idx: [], length: 0, done: 0, children: [], depth: -1 }
+/** Names and sizes only: they are what the tree is built from, and they do not change
+ *  between polls. Progress comes from file_stats at render time. */
+function buildTree(files: TorrentFile[]): Node {
+  const root: Node = { name: '', path: '', idx: [], length: 0, children: [], depth: -1 }
   const dirs = new Map<string, Node>()
-  d.files.forEach((f, i) => {
+  files.forEach((f, i) => {
     const parts = f.name.split('/')
-    let cur = root
+    let cur = root, path = ''
     parts.forEach((p, j) => {
-      cur.idx.push(i); cur.length += f.length; cur.done += f.bytes_completed
-      const path = parts.slice(0, j + 1).join('/')
-      if (j === parts.length - 1) { cur.children.push({ name: p, path, idx: [i], length: f.length, done: f.bytes_completed, children: [], depth: j }); return }
+      cur.idx.push(i); cur.length += f.length
+      path = j ? `${path}/${p}` : p
+      if (j === parts.length - 1) { cur.children.push({ name: p, path, idx: [i], length: f.length, children: [], depth: j }); return }
       let n = dirs.get(path)
-      if (!n) { n = { name: p, path, idx: [], length: 0, done: 0, children: [], depth: j }; dirs.set(path, n); cur.children.push(n) }
+      if (!n) { n = { name: p, path, idx: [], length: 0, children: [], depth: j }; dirs.set(path, n); cur.children.push(n) }
       cur = n
     })
   })
+  // folders first, then by name
+  const order = (n: Node) => { n.children.sort((a, b) => (b.children.length ? 1 : 0) - (a.children.length ? 1 : 0) || a.name.localeCompare(b.name)).forEach(order) }
+  order(root)
   return root
 }
 
 function Files({ d }: { d: TorrentDetail }) {
-  const root = useMemo(() => buildTree(d), [d.files])
+  const root = useMemo(() => buildTree(d.files), [d.files])
   const setF = (label: string, args: api.TorrentSetArgs) => void run(label, () => api.setTorrent([d.id], args))
   const rows: React.ReactElement[] = []
   const walk = (n: Node) => {
     const isDir = n.children.length > 0
-    const wanted = n.idx.map(i => d.file_stats[i]?.wanted ?? true)
-    const allW = wanted.every(Boolean), anyW = wanted.some(Boolean)
-    const prios = new Set(n.idx.map(i => d.file_stats[i]?.priority ?? 0))
-    const prio = prios.size === 1 ? [...prios][0] : null
-    const pct = n.length ? n.done / n.length : 1
+    let allW = true, anyW = false, done = 0, prio: number | null | undefined
+    for (const i of n.idx) {
+      const st = d.file_stats[i]
+      if (st?.wanted ?? true) anyW = true; else allW = false
+      done += st?.bytes_completed ?? 0
+      const p = st?.priority ?? 0
+      prio = prio === undefined || prio === p ? p : null
+    }
+    const pct = n.length ? done / n.length : 1
     rows.push(
       <div key={n.path} className={'f' + (n.depth > 0 ? ` d${Math.min(2, n.depth)}` : '')} style={n.depth > 2 ? { paddingLeft: 18 * n.depth } : undefined}>
         <span className={'chk' + (allW ? ' on' : anyW ? ' mixed' : '')} onClick={() => setF('Files', allW ? { 'files_unwanted': n.idx } : { 'files_wanted': n.idx })} />
@@ -181,7 +190,7 @@ function Files({ d }: { d: TorrentDetail }) {
         </span>
       </div>,
     )
-    n.children.sort((a, b) => (b.children.length ? 1 : 0) - (a.children.length ? 1 : 0) || a.name.localeCompare(b.name)).forEach(walk)
+    n.children.forEach(walk)
   }
   root.children.forEach(walk)
   return (
@@ -195,7 +204,7 @@ function Files({ d }: { d: TorrentDetail }) {
 
 // ─── peers ───
 function Peers({ d }: { d: TorrentDetail }) {
-  const peers = [...d.peers].sort((a, b) => (b.rate_to_client + b.rate_to_peer) - (a.rate_to_client + a.rate_to_peer))
+  const peers = useMemo(() => [...d.peers].sort((a, b) => (b.rate_to_client + b.rate_to_peer) - (a.rate_to_client + a.rate_to_peer)), [d.peers])
   return (
     <div className="insp-body">
       {peers.length ? (
@@ -204,7 +213,7 @@ function Peers({ d }: { d: TorrentDetail }) {
           <thead><tr><th>Address</th><th>Client</th><th className="r">%</th><th className="r">Down</th><th className="r">Up</th><th>Flags</th></tr></thead>
           <tbody>
             {peers.map(p => (
-              <tr key={p.address + p.port}>
+              <tr key={`${p.address}:${p.port}`}>
                 <td className="num" title={`${p.address}:${p.port}`}>{p.address}</td>
                 <td title={p.client_name}>{p.client_name}</td>
                 <td className="r"><div className="mini" style={{ ['--p' as string]: percent(p.progress) }}><i /></div></td>
