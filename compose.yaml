@@ -1,5 +1,11 @@
 # Production stack: this UI in front of a transmission-daemon you run elsewhere.
 #
+# NOT a complete deployment. It needs a reverse proxy that terminates TLS, and
+# that part is yours: no port is published here, so the container is reachable
+# only by a proxy attached to a network it shares. See "Reverse proxy" in
+# README.md for what the proxy must do. The app refuses to start unless
+# BACKEND_PUBLIC_URL is https.
+#
 # The image is the UI bundle plus a Go backend that
 #   - terminates OIDC against your identity provider and keeps the session in a
 #     signed cookie, and
@@ -29,7 +35,7 @@ services:
       BACKEND_PUBLIC_URL: "${BACKEND_PUBLIC_URL}"
       BACKEND_SESSION_SECRET: "${BACKEND_SESSION_SECRET:?generate one, e.g. openssl rand -base64 48}"
       # oidc (an identity provider) or form (a login page checked against
-      # TM_USER/TM_PASS, for setups with no IdP). Traefik terminates TLS.
+      # TM_USER/TM_PASS, for setups with no IdP).
       BACKEND_AUTH_MODE: "${BACKEND_AUTH_MODE:-oidc}"
       BACKEND_OIDC_ISSUER: "${BACKEND_OIDC_ISSUER}"
       BACKEND_OIDC_CLIENT_ID: "${BACKEND_OIDC_CLIENT_ID}"
@@ -56,23 +62,8 @@ services:
       start_interval: 5s
       retries: 3
 
-    networks:
-      - default
-      - traefik
-
-    labels:
-      traefik.enable: "true"
-      traefik.docker.network: traefik
-      traefik.http.routers.transmission-ui.rule: Host(`${TM_HOST}`)
-      traefik.http.routers.transmission-ui.entrypoints: websecure
-      traefik.http.routers.transmission-ui.tls: "true"
-      # The backend serves the bundle uncompressed; this is the one place it
-      # gets gzip/brotli. Drop both lines if your Traefik already attaches a
-      # compress middleware to the entrypoint.
-      traefik.http.middlewares.transmission-ui-compress.compress: "true"
-      traefik.http.routers.transmission-ui.middlewares: transmission-ui-compress
-      traefik.http.services.transmission-ui.loadbalancer.server.port: "8080"
-
-networks:
-  traefik:
-    external: true
+    # Reachable from other containers on a shared network, not from the host:
+    # attach your reverse proxy's network here (and its labels or config), or
+    # add a `ports:` mapping if the proxy runs on the host itself.
+    expose:
+      - "8080"

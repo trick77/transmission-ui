@@ -80,9 +80,10 @@ func TestLoopbackPublicURLDropsSecureCookies(t *testing.T) {
 func TestFormModeGeneratesSessionSecret(t *testing.T) {
 	os.Clearenv()
 	withEnv(t, map[string]string{
-		"BACKEND_AUTH_MODE": "form",
-		"TM_USER":           "u",
-		"TM_PASS":           "p",
+		"BACKEND_AUTH_MODE":  "form",
+		"BACKEND_PUBLIC_URL": "https://host.example",
+		"TM_USER":            "u",
+		"TM_PASS":            "p",
 	})
 	cfg, err := Load()
 	if err != nil {
@@ -121,6 +122,7 @@ func TestFormModeIgnoresAllowedGroup(t *testing.T) {
 	os.Clearenv()
 	withEnv(t, map[string]string{
 		"BACKEND_AUTH_MODE":          "form",
+		"BACKEND_PUBLIC_URL":         "https://host.example",
 		"BACKEND_OIDC_ALLOWED_GROUP": "media",
 		"TM_USER":                    "u",
 		"TM_PASS":                    "p",
@@ -145,5 +147,52 @@ func TestMissingOIDCSettingsAreListedInOrder(t *testing.T) {
 	issuer, redirect := strings.Index(err.Error(), "BACKEND_OIDC_ISSUER"), strings.Index(err.Error(), "BACKEND_OIDC_REDIRECT_URL")
 	if issuer < 0 || redirect < issuer {
 		t.Fatalf("want issuer listed before redirect URL: %v", err)
+	}
+}
+
+// The app is built to sit behind a TLS-terminating reverse proxy. Over plain
+// http the browser drops the Secure session cookie and sign-in loops, so a
+// deployment without one is refused at startup instead, in either auth mode.
+func TestPublicURLMustBeHTTPS(t *testing.T) {
+	for _, tc := range []struct {
+		name, url string
+		ok        bool
+	}{
+		{"https", "https://host.example", true},
+		{"https with a prefix", "https://host.example/transmission", true},
+		{"loopback http, for local runs", "http://127.0.0.1:8127", true},
+		{"localhost http", "http://localhost:8127", true},
+		{"unset", "", false},
+		{"plain http on a LAN address", "http://192.168.1.20:8080", false},
+		{"plain http on a hostname", "http://seedbox.lan", false},
+		{"no scheme", "host.example", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Clearenv()
+			withEnv(t, map[string]string{
+				"BACKEND_AUTH_MODE":  "form",
+				"BACKEND_PUBLIC_URL": tc.url,
+				"TM_USER":            "u",
+				"TM_PASS":            "p",
+			})
+			_, err := Load()
+			if tc.ok && err != nil {
+				t.Fatalf("want it to start, got %v", err)
+			}
+			if !tc.ok && (err == nil || !strings.Contains(err.Error(), "BACKEND_PUBLIC_URL")) {
+				t.Fatalf("want a BACKEND_PUBLIC_URL complaint, got %v", err)
+			}
+		})
+	}
+}
+
+func TestPublicURLMustBeHTTPSInOIDCModeToo(t *testing.T) {
+	os.Clearenv()
+	withEnv(t, oidcEnv(map[string]string{
+		"BACKEND_PUBLIC_URL":        "http://host.example/transmission",
+		"BACKEND_OIDC_REDIRECT_URL": "http://host.example/transmission/api/auth/callback",
+	}))
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "must be https") {
+		t.Fatalf("want an https complaint, got %v", err)
 	}
 }

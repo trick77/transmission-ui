@@ -86,6 +86,20 @@ func Load() (Config, error) {
 	cfg.BasePath = BasePathOf(cfg.PublicURL)
 
 	var problems []string
+	// The app is meant to sit behind a reverse proxy that terminates TLS: a
+	// form password and the session cookie both cross the wire. Plain http to
+	// anything but this machine cannot even work, because the browser drops
+	// the Secure session cookie and sign-in loops with nothing to explain it.
+	// So refuse to start, and say why.
+	switch {
+	case cfg.PublicURL == "":
+		problems = append(problems,
+			"BACKEND_PUBLIC_URL is required: the https URL your reverse proxy serves this app at")
+	case !strings.HasPrefix(cfg.PublicURL, "https://") && !isLoopbackURL(cfg.PublicURL):
+		problems = append(problems, fmt.Sprintf(
+			"BACKEND_PUBLIC_URL (%s) must be https: run this app behind a reverse proxy that terminates TLS (plain http is accepted for a loopback address only, for local runs)",
+			cfg.PublicURL))
+	}
 	switch cfg.AuthMode {
 	case AuthModeOIDC:
 		if cfg.SessionSecret == "" {
@@ -94,7 +108,6 @@ func Load() (Config, error) {
 		// A slice, not a map: the problems then come out in the same order on
 		// every start.
 		for _, v := range []struct{ name, value string }{
-			{"BACKEND_PUBLIC_URL", cfg.PublicURL},
 			{"BACKEND_OIDC_ISSUER", cfg.OIDCIssuer},
 			{"BACKEND_OIDC_CLIENT_ID", cfg.OIDCClientID},
 			{"BACKEND_OIDC_CLIENT_SECRET", cfg.OIDCClientSecret},
