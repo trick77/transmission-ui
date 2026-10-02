@@ -68,6 +68,9 @@ jobs:
         working-directory: backend
       - run: go test ./...
         working-directory: backend
+      # scripts/strip-comment-lines.go sits outside the module, so neither vet
+      # nor test above sees it. patch-coverage.sh runs it on backend coverage.
+      - run: ./scripts/strip-comment-lines.test.sh
 
   ui:
     name: UI (typecheck + build + test)
