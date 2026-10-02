@@ -99,7 +99,7 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 /* speed pill */
 .speeds{display:flex;align-items:center;gap:14px;height:36px;padding:0 6px 0 12px;border-radius:999px;border:1px solid var(--line);position:relative;cursor:pointer}
 .speeds:hover{background:var(--surface-2)}
-.speeds .s{flex-direction:column;align-items:flex-start;gap:0;line-height:1.1}
+.speeds .s{display:flex;flex-direction:column;align-items:center;gap:6px;line-height:1.1}
 .speeds .s .top{display:flex;align-items:center;gap:5px}
 .speeds .s .tot{font-family:var(--mono);font-size:10px;color:var(--ink-3);padding-left:19px}
 .speeds .lim{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:-4px}
@@ -111,7 +111,6 @@ svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .pop td{padding:5px 0;border-top:1px solid var(--line-soft);text-align:right}
 .pop td:first-child{text-align:left;color:var(--ink-2)}
 .pop .foot{margin-top:10px;font-size:11px;color:var(--ink-3)}
-.speeds .s{display:flex;align-items:center;gap:6px}
 .speeds .s .num{font-size:13px}
 .speeds .arrow{width:14px;height:14px}
 .speeds .dl{color:var(--accent)} .speeds .ul{color:var(--ink)} .speeds .ul .arrow{color:var(--ink-3)}
@@ -166,14 +165,12 @@ body.resizing{cursor:col-resize;user-select:none}
 .side-item{display:flex;align-items:center;gap:9px;min-height:24px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left;font-size:14px;font-weight:400;line-height:20px}
 .side-item:hover{background:var(--surface-2);color:var(--ink)}
 .side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:500;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
-.side-item .dot{width:8px;height:8px;border-radius:50%;flex:none}
 /* Long hosts and folder names fade out rather than ending in an ellipsis. The mask
    always fades the last 20px of the box; short entries end well before it because
    .lbl is flex:1, so in practice only overflowing text meets the gradient. */
 .side-item .lbl{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent)}
 .side-item .cnt{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
 .side-item.on .cnt{color:var(--accent)}
-.tag-dot{display:none}
 /* tracker health in the sidebar */
 .side-item .st{width:7px;height:7px;border-radius:50%;flex:none;margin-left:2px}
 .side-item .st.down{background:var(--err)}
@@ -197,8 +194,7 @@ body.resizing{cursor:col-resize;user-select:none}
 .disk{padding:4px 8px 6px;font-size:12px}
 .disk .p{display:flex;justify-content:space-between;gap:8px;color:var(--ink-2)}
 .disk .p span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.disk .p b{white-space:nowrap;flex:none}
-.disk .p b{font-family:var(--mono);font-weight:400;color:var(--ink-3);font-size:11px}
+.disk .p b{white-space:nowrap;flex:none;font-family:var(--mono);font-weight:400;color:var(--ink-3);font-size:11px}
 .disk .bar{height:3px;margin-top:5px}
 .disk .bar i{background:var(--ink-3)}
 .disk .bar.hot i{background:var(--accent)}
@@ -258,7 +254,6 @@ body.resizing{cursor:col-resize;user-select:none}
 .row.pending.failed{opacity:1;pointer-events:auto}
 .row.pending.failed .rm-st{color:var(--err)}
 .row .chk{cursor:pointer}
-.row.sel .chk{background:var(--accent-fill);border-color:var(--accent-fill);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23faf9f5' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");background-size:12px;background-position:center;background-repeat:no-repeat}
 .chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
 
 /* ───────── Torrent rows ───────── */
@@ -336,7 +331,6 @@ body.resizing{cursor:col-resize;user-select:none}
   .acts button{width:32px;height:32px}
 }
 .acts button:hover{background:var(--surface-3);color:var(--ink)}
-.acts button.on{background:var(--surface-3);color:var(--ink)}
 .cols .chk{cursor:pointer}
 .chk.some{background:linear-gradient(var(--ink-3),var(--ink-3)) center/8px 2px no-repeat}
 .name .m{display:flex;align-items:center;gap:8px;margin-top:4px;color:var(--ink-3);font-size:12px;white-space:nowrap;overflow:hidden;min-width:0}
@@ -351,6 +345,7 @@ body.resizing{cursor:col-resize;user-select:none}
 .chip.err{background:var(--err-soft);color:var(--err)}
 .chip.stop{background:var(--stop-soft);color:var(--ink-2)}
 .chip.lbl{background:none;color:var(--ink-2);font-weight:400;padding:0 7px;border:1px solid var(--line)}
+.chip.lbl.on{background:var(--accent-soft);color:var(--accent);border-color:transparent}
 .chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .bar{height:5px;border-radius:99px;background:var(--surface-3);overflow:hidden;position:relative}
 .bar i{position:absolute;inset:0;width:var(--p);background:var(--accent);border-radius:99px}
@@ -492,7 +487,6 @@ body.resizing{cursor:col-resize;user-select:none}
 .tree .f.d1{padding-left:18px} .tree .f.d2{padding-left:36px}
 .tree .f .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tree .f .n.dir{font-weight:500}
-.tree .f .bar{height:4px}
 .tree .f .r{text-align:right}
 .tree .chk{width:14px;height:14px;border-radius:3px}
 .tree .chk.on{background:var(--accent-fill);border-color:var(--accent-fill)}
@@ -502,7 +496,7 @@ body.resizing{cursor:col-resize;user-select:none}
 
 /* peers table */
 .tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
-.tbl th{text-align:left;padding:4px;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:500;color:var(--ink-3);padding:4px 6px;border-bottom:1px solid var(--line)}
+.tbl th{text-align:left;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:500;color:var(--ink-3);padding:4px 6px;border-bottom:1px solid var(--line)}
 .tbl td{padding:6px 4px;border-bottom:1px solid var(--line-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tbl .r{text-align:right}
 .flag{display:inline-block;width:20px;font-family:var(--mono);color:var(--ink-3)}
@@ -534,7 +528,6 @@ body.resizing{cursor:col-resize;user-select:none}
 .input input::placeholder{color:var(--ink-3)}
 .input .unit{color:var(--ink-3);font-size:12px}
 .input.mono input{font-family:var(--mono);font-size:12px}
-.select{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:var(--r);background:var(--surface-2)}
 .hint{font-size:12px;color:var(--ink-3)}
 .toggle{width:34px;height:20px;border-radius:99px;background:var(--surface-3);position:relative;flex:none;transition:background .15s}
 .toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
@@ -547,8 +540,6 @@ body.resizing{cursor:col-resize;user-select:none}
 .opt .ctl{display:flex;align-items:center;gap:8px;flex:none}
 .opt .input{width:130px}
 .opt .input.wide{width:220px}
-.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line);flex:none;position:relative}
-.radio.on{border-color:var(--accent);border-width:5px}
 .drop{border:1.5px dashed var(--line);border-radius:var(--r-lg);padding:26px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--ink-2);background:var(--bg)}
 .drop.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .drop .big{width:28px;height:28px}

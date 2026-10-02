@@ -6,11 +6,9 @@ import type { TorrentDetail } from '../rpc/types'
 import { useStore } from '../state/store'
 import { NumInput, Opt, Seg, Toggle } from '../app/ui'
 
-const CHIP_ON: CSSProperties = { background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'transparent' }
-
 /** A label-shaped button that can be picked. */
 export function Chip({ on, onClick, style, children }: { on: boolean; onClick: () => void; style?: CSSProperties; children: ReactNode }) {
-  return <button className="chip lbl" style={on ? { ...CHIP_ON, ...style } : style} onClick={onClick}>{children}</button>
+  return <button className={'chip lbl' + (on ? ' on' : '')} style={style} onClick={onClick}>{children}</button>
 }
 
 /** The session download dir and every folder a torrent already lives in, one click each. */
