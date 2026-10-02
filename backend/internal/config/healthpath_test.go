@@ -13,8 +13,8 @@ func TestBasePathDrivesHealthProbe(t *testing.T) {
 		{"https://host.example/", ""},
 		{"", ""},
 	} {
-		if got := basePathOf(tc.publicURL); got != tc.want {
-			t.Errorf("basePathOf(%q) = %q, want %q", tc.publicURL, got, tc.want)
+		if got := BasePathOf(tc.publicURL); got != tc.want {
+			t.Errorf("BasePathOf(%q) = %q, want %q", tc.publicURL, got, tc.want)
 		}
 	}
 }

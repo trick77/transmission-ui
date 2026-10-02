@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '26'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
       - uses: actions/setup-go@v7
         with:
           go-version-file: backend/go.mod
@@ -50,6 +52,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '26'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
       - uses: actions/setup-go@v7
         with:
           go-version-file: backend/go.mod
@@ -79,7 +83,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - uses: actions/setup-python@v7
@@ -87,7 +91,7 @@ jobs:
           python-version: "3.12"
       - run: pip install diff-cover==10.3.0
       - run: npm ci
-      - run: npm run typecheck
+      # build is `tsc --noEmit && vite build`, so it is the typecheck too.
       - run: npm run build
       - run: npm test -- --run --coverage
       # The floor gate runs first: when a PR drops the project below the floor
@@ -108,11 +112,17 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - run: npm ci
         working-directory: ui
+      # The browser download is the slow half of this step; --with-deps still
+      # has to run for the system libraries, which are not cacheable.
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
       - run: npx playwright install chromium --with-deps
         working-directory: ui
       # served.spec.ts needs the built bundle mounted into the daemon at /web.

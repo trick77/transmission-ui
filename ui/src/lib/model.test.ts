@@ -93,6 +93,20 @@ describe('trackerHealth', () => {
     expect(trackerHealth([ok])[0].state).toBe('ok')
     expect((JSON.parse(localStorage.getItem('tm.trkfail') || '[]') as [string, number][]).find(([h]) => h === 'old.example.org')).toBeUndefined()
   })
+  it('forgets a failing host once no torrent announces to it, but not on an empty list', () => {
+    const stored = () => (JSON.parse(localStorage.getItem('tm.trkfail') || '[]') as [string, number][]).map(([h]) => h)
+    trackerHealth([tor({ tracker_stats: [dead({ announce: 'http://gone.example.org/announce' })] })])
+    expect(stored()).toContain('gone.example.org')
+    trackerHealth([])   // the list before the first poll says nothing about trackers
+    expect(stored()).toContain('gone.example.org')
+    trackerHealth([tor()])
+    expect(stored()).not.toContain('gone.example.org')
+  })
+  it('answers the same list from cache, so the sidebar and the notices share one pass', () => {
+    const list = [tor(), tor()]
+    expect(trackerHealth(list)).toBe(trackerHealth(list))
+    expect(trackerHealth([...list])).not.toBe(trackerHealth(list))
+  })
   it('rejected when every announce is a whitelist/ban error', () => {
     const rej = tor({ tracker_stats: [dead({ last_announce_result: 'Your client is not on the whitelist' })] })
     expect(trackerHealth([rej])[0].state).toBe('rejected')

@@ -83,7 +83,7 @@ func Load() (Config, error) {
 	// by some browsers and the sign-in silently loops. Derive it from the
 	// public URL rather than the mode, and default to secure.
 	cfg.SecureCookies = !isLoopbackURL(cfg.PublicURL)
-	cfg.BasePath = basePathOf(cfg.PublicURL)
+	cfg.BasePath = BasePathOf(cfg.PublicURL)
 
 	var problems []string
 	switch cfg.AuthMode {
@@ -91,17 +91,17 @@ func Load() (Config, error) {
 		if cfg.SessionSecret == "" {
 			problems = append(problems, "BACKEND_SESSION_SECRET is required")
 		}
-		// BACKEND_PUBLIC_URL is informational: the redirect and logout URLs are
-		// configured directly, not derived from it, so it is not required.
-		for name, value := range map[string]string{
-			"BACKEND_PUBLIC_URL":         cfg.PublicURL,
-			"BACKEND_OIDC_ISSUER":        cfg.OIDCIssuer,
-			"BACKEND_OIDC_CLIENT_ID":     cfg.OIDCClientID,
-			"BACKEND_OIDC_CLIENT_SECRET": cfg.OIDCClientSecret,
-			"BACKEND_OIDC_REDIRECT_URL":  cfg.OIDCRedirectURL,
+		// A slice, not a map: the problems then come out in the same order on
+		// every start.
+		for _, v := range []struct{ name, value string }{
+			{"BACKEND_PUBLIC_URL", cfg.PublicURL},
+			{"BACKEND_OIDC_ISSUER", cfg.OIDCIssuer},
+			{"BACKEND_OIDC_CLIENT_ID", cfg.OIDCClientID},
+			{"BACKEND_OIDC_CLIENT_SECRET", cfg.OIDCClientSecret},
+			{"BACKEND_OIDC_REDIRECT_URL", cfg.OIDCRedirectURL},
 		} {
-			if value == "" {
-				problems = append(problems, name+" is required when BACKEND_AUTH_MODE=oidc")
+			if v.value == "" {
+				problems = append(problems, v.name+" is required when BACKEND_AUTH_MODE=oidc")
 			}
 		}
 		// The callback is only mounted under the public URL's path, so a
@@ -114,6 +114,10 @@ func Load() (Config, error) {
 				cfg.OIDCRedirectURL, cfg.PublicURL))
 		}
 	case AuthModeForm:
+		// There is no group source in this mode: the credential check is the
+		// whole decision. Leaving the setting in force would shut out every
+		// session issued before it was last changed.
+		cfg.OIDCAllowedGroup = ""
 		// A local run needs no ceremony, so generate a per-process secret when
 		// none is set: sessions then die with the process. A deployment that
 		// omits it gets the same, which signs everyone out on every restart,
@@ -146,9 +150,9 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// basePathOf extracts the path prefix from the public URL, normalised to
+// BasePathOf extracts the path prefix from the public URL, normalised to
 // either "" or "/prefix" with no trailing slash.
-func basePathOf(raw string) string {
+func BasePathOf(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return ""

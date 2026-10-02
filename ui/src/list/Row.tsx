@@ -14,7 +14,7 @@ function Speed({ bps, dir }: { bps: number; dir: 'dl' | 'ul' }) {
 /** A row's part in a bulk removal: queued behind others, being deleted now, or failed. */
 export type RowRemoval = { kind: 'queued' | 'active' | 'failed'; text: string } | null
 
-export const Row = memo(function Row({ t, selected, focused, base, compactRow, removal, menuOpen, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; removal?: RowRemoval; menuOpen: boolean; onMore: (e: React.MouseEvent) => void }) {
+export const Row = memo(function Row({ t, selected, focused, base, compactRow, removal, menuOpen, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; removal?: RowRemoval; menuOpen: boolean; onMore: (id: number, trigger: HTMLElement) => void }) {
   const s = statusView(t)
   const { seeds, leechers } = swarmOf(t)
   const swarm = seeds + leechers
@@ -33,7 +33,7 @@ export const Row = memo(function Row({ t, selected, focused, base, compactRow, r
   // trigger and keeps a fixed width, so it lands in the same place on every row.
   const acts = (
     <span className="acts">
-      <button className="more" title="More" onClick={e => { e.stopPropagation(); onMore(e) }}><Icon name="more" size={13} /></button>
+      <button className="more" title="More" onClick={e => { e.stopPropagation(); onMore(t.id, e.currentTarget) }}><Icon name="more" size={13} /></button>
     </span>
   )
   const rowCls = (selected ? ' sel' : '') + (focused ? ' focus' : '') + (menuOpen ? ' menu-open' : '') + rmCls

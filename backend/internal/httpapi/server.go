@@ -4,13 +4,16 @@ package httpapi
 
 import (
 	"bytes"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"html"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/trick77/transmission-ui/backend/internal/auth"
@@ -33,11 +36,50 @@ type Server struct {
 	rpc      http.Handler
 	ui       fs.FS
 	log      *slog.Logger
+
+	// index.html with the base path filled in, and its validator. The bundle is
+	// embedded, so both are fixed for the life of the process.
+	index     []byte
+	indexETag string
+
+	// Form login: when each client's next attempt may be judged; see loginTurn.
+	loginMu      sync.Mutex
+	loginNext    map[string]time.Time
+	loginPenalty time.Duration
 }
 
-// New builds a Server from its dependencies.
-func New(cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fs.FS, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log}
+const baseMeta = `<meta name="tmui-base" content="">`
+
+// New builds a Server from its dependencies. It fails when the bundle cannot
+// be told where it is mounted: under a base path the UI would then call the
+// RPC at the origin root and miss the reverse proxy's route.
+func New(cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fs.FS, log *slog.Logger) (*Server, error) {
+	s := &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log,
+		loginNext: map[string]time.Time{}, loginPenalty: loginPenalty}
+	index, err := fs.ReadFile(ui, "index.html")
+	if err != nil {
+		return nil, errors.New("the UI bundle has no index.html")
+	}
+	if cfg.BasePath != "" {
+		// Tell the app where it is mounted. It cannot infer this from the URL:
+		// on the bundle-only path the daemon serves the UI from
+		// /transmission/web/ while its RPC stays at /transmission/rpc.
+		if !bytes.Contains(index, []byte(baseMeta)) {
+			return nil, errors.New("index.html has no " + baseMeta + " tag to carry the base path " + cfg.BasePath)
+		}
+		index = bytes.Replace(index, []byte(baseMeta),
+			[]byte(`<meta name="tmui-base" content="`+html.EscapeString(cfg.BasePath)+`">`), 1)
+	}
+	s.index = index
+	s.indexETag = etagOf(index)
+	return s, nil
+}
+
+// etagOf is a strong validator over the content. The embedded files carry no
+// modification time, so without one a browser can never get a 304.
+func etagOf(b []byte) string {
+	sum := sha256.Sum256(b)
+	return `"` + hex.EncodeToString(sum[:8]) + `"`
 }
 
 // Handler returns the mux serving every route, mounted under the configured
@@ -57,16 +99,24 @@ func (s *Server) Handler() http.Handler {
 		}
 		return method + " " + s.cfg.BasePath + rest
 	}
+	// The session cookie is SameSite=Lax, which already keeps it off cross-site
+	// POSTs. This refuses them outright, by Sec-Fetch-Site or Origin, so a
+	// cross-site page can neither drive the daemon nor sign a visitor in as
+	// someone else. Requests without either header (curl, scripts) pass.
+	sameOrigin := http.NewCrossOriginProtection()
+
 	mux.HandleFunc(p("GET /api/auth/login"), s.handleLogin)
 	mux.HandleFunc(p("GET /api/auth/callback"), s.handleCallback)
+	// GET on purpose. The UI has no sign-out control, so this is reached by
+	// typing the URL, which a POST-only route would make impossible. The cost
+	// is that a cross-site link can sign the user out; it cannot do more.
 	mux.HandleFunc(p("GET /api/auth/logout"), s.handleLogout)
-	mux.HandleFunc(p("GET /api/auth/me"), s.handleMe)
 	// Registered in every mode: oidc serves the same page without the form, and
 	// its fonts, background and icon come from /login-assets/ either way.
 	mux.HandleFunc(p("GET /login"), s.handleLoginPage)
-	mux.HandleFunc(p("POST /login"), s.handleLoginSubmitGuard)
+	mux.Handle(p("POST /login"), sameOrigin.Handler(http.HandlerFunc(s.handleLoginSubmit)))
 	mux.Handle(p("GET /login-assets/"), loginAssetHandler(s.cfg.BasePath))
-	mux.Handle(p("POST /transmission/rpc"), s.requireAuth(s.rpc))
+	mux.Handle(p("POST /transmission/rpc"), sameOrigin.Handler(s.requireAuth(s.rpc)))
 	// Without this, a GET on the RPC path falls through to the SPA handler and
 	// answers 200 with index.html. The daemon's RPC is POST-only. A methodless
 	// pattern here would conflict with "GET /", so spell the method out.
@@ -78,17 +128,27 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// authorize is the one place a request's session is judged: 200 with a valid
+// session whose holder is in the allowed group, 401 without a session, 403 with
+// one that lacks the group (revoked since, or issued under a laxer setting).
+// Every gate asks here, so no two of them can disagree about who is signed in.
+func (s *Server) authorize(r *http.Request) int {
+	claims, err := s.sessions.Decode(r)
+	if err != nil {
+		return http.StatusUnauthorized
+	}
+	if !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
+		return http.StatusForbidden
+	}
+	return http.StatusOK
+}
+
 // requireAuth rejects unauthenticated RPC with 401. The UI turns that into a
 // redirect to /api/auth/login rather than showing a browser auth prompt.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims, err := s.sessions.Decode(r)
-		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		if !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
-			http.Error(w, "forbidden", http.StatusForbidden)
+		if status := s.authorize(r); status != http.StatusOK {
+			http.Error(w, strings.ToLower(http.StatusText(status)), status)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -138,6 +198,8 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, claims aut
 	http.Redirect(w, r, s.cfg.BasePath+"/", http.StatusFound)
 }
 
+// handleLogout ends this app's session. It does not end the identity
+// provider's: the next sign-in may go straight through.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, s.sessions.ClearCookie())
 	target := s.cfg.OIDCPostLogoutRedirectURL
@@ -152,38 +214,9 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
-func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	claims, err := s.sessions.Decode(r)
-	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	// Same check requireAuth applies: a session issued before the group was
-	// revoked, or under a laxer allowed-group setting, must not still read as
-	// signed in here while every RPC call returns 403.
-	if !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"subject":  claims.Subject,
-		"username": claims.PreferredUsername,
-		"name":     claims.Name,
-		"email":    claims.Email,
-		"groups":   claims.Groups,
-	})
-}
-
 // staticHandler serves the embedded bundle, falling back to index.html so the
 // SPA's client-side routes resolve.
 func (s *Server) staticHandler() http.Handler {
-	files := http.FileServer(http.FS(s.ui))
-	if s.cfg.BasePath != "" {
-		// FileServer resolves against the URL path, which still carries the
-		// prefix the proxy forwarded.
-		files = http.StripPrefix(s.cfg.BasePath, files)
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The proxy forwards the prefix, so take it off before looking the file
 		// up in the bundle.
@@ -194,7 +227,7 @@ func (s *Server) staticHandler() http.Handler {
 		info, err := fs.Stat(s.ui, name)
 		switch {
 		case err == nil && !info.IsDir():
-			// A real file: serve it as is. Hashed asset names are immutable.
+			// A real file: serve it as is.
 		case isAssetRequest(name):
 			// A missing asset must 404, not fall back. Returning index.html
 			// with 200 for a stale /assets/index-<hash>.js hands the browser
@@ -204,8 +237,6 @@ func (s *Server) staticHandler() http.Handler {
 			return
 		default:
 			// A client-side route: hand back the shell.
-			r = r.Clone(r.Context())
-			r.URL.Path = s.cfg.BasePath + "/"
 			name = "index.html"
 		}
 		if name == "index.html" {
@@ -217,7 +248,7 @@ func (s *Server) staticHandler() http.Handler {
 			// Form mode redirects to the page that owns the form. OIDC renders
 			// the same card without one, with 200 and not 401: the container
 			// healthcheck probes "/" and counts >= 400 as unhealthy.
-			if claims, err := s.sessions.Decode(r); err != nil || !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
+			if s.authorize(r) != http.StatusOK {
 				if s.cfg.AuthMode == config.AuthModeForm {
 					http.Redirect(w, r, s.cfg.BasePath+"/login", http.StatusFound)
 					return
@@ -225,17 +256,21 @@ func (s *Server) staticHandler() http.Handler {
 				s.renderLogin(w, http.StatusOK, "")
 				return
 			}
-			// Tell the app where it is mounted. It cannot infer this from the
-			// URL: on the bundle-only path the daemon serves the UI from
-			// /transmission/web/ while its RPC stays at /transmission/rpc.
-			// (serveIndexWithBase sets its own no-cache header.)
-			if s.cfg.BasePath != "" {
-				s.serveIndexWithBase(w, r)
-				return
-			}
-			// The index names the hashed bundles, so it must never be cached
-			// heuristically: a stale one asks for assets a redeploy removed.
+			// The index names the hashed bundles, so it must never be served
+			// from cache unchecked: a stale one asks for assets a redeploy
+			// removed. no-cache plus the ETag makes that check a 304.
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("ETag", s.indexETag)
+			http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(s.index))
+			return
+		}
+		// Vite puts a content hash in every name under assets/, so a URL there
+		// never changes what it answers. Without this the browser has nothing
+		// to cache by -- embedded files carry no modification time -- and
+		// refetches the whole bundle and both fonts on every load.
+		if strings.HasPrefix(name, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		// Go's mime table has no entry for .webmanifest, so net/http sniffs the
 		// JSON and serves it as text/plain. Chrome then refuses the manifest and
@@ -244,23 +279,8 @@ func (s *Server) staticHandler() http.Handler {
 		if path.Ext(name) == ".webmanifest" {
 			w.Header().Set("Content-Type", "application/manifest+json")
 		}
-		files.ServeHTTP(w, r)
+		http.ServeFileFS(w, r, s.ui, name) //nolint:gosec // name was just resolved by fs.Stat inside the embedded bundle; an fs.FS has no path outside itself to traverse to
 	})
-}
-
-// serveIndexWithBase writes index.html with the base-path meta tag filled in.
-func (s *Server) serveIndexWithBase(w http.ResponseWriter, r *http.Request) {
-	body, err := fs.ReadFile(s.ui, "index.html")
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	patched := bytes.Replace(body,
-		[]byte(`<meta name="tmui-base" content="">`),
-		[]byte(`<meta name="tmui-base" content="`+html.EscapeString(s.cfg.BasePath)+`">`), 1)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(patched))
 }
 
 // isAssetRequest reports whether a path should 404 rather than fall back to the

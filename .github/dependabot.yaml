@@ -36,11 +36,21 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Container base image (Containerfile, compose.dev.yaml).
+  # Container base images (Containerfile).
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
     groups:
       docker:
+        patterns: ["*"]
+
+  # Image tags in compose.yaml and compose.dev.yaml: the docker ecosystem
+  # above does not read compose files.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      compose:
         patterns: ["*"]

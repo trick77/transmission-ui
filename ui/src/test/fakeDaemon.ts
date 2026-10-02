@@ -93,6 +93,7 @@ export function installFakeDaemon(opts: { torrents?: TorrentDetail[]; session?: 
     restore: () => { fetchMock.mockRestore() },
   }
   let handshake = false
+  let sent = new Map<number, string>()
   const pick = (t: TorrentDetail, fields: string[]) => Object.fromEntries(fields.filter(f => f in t).map(f => [f, (t as unknown as Record<string, unknown>)[f]]))
   const handle = (method: string, a: Record<string, unknown>): unknown => {
     const ids = (a.ids as number[] | 'recently_active' | undefined)
@@ -106,7 +107,18 @@ export function installFakeDaemon(opts: { torrents?: TorrentDetail[]; session?: 
         'current_stats': { uploaded_bytes: 1.31e9, downloaded_bytes: 5.14e9, files_added: 3, session_count: 1, seconds_active: 570_000 },
         'cumulative_stats': { uploaded_bytes: 391e9, downloaded_bytes: 218e9, files_added: 412, session_count: 37, seconds_active: 12_300_000 },
       }
-      case 'torrent_get': return { torrents: sel().map(t => pick(t, a.fields as string[])), ...(ids === 'recently_active' ? { removed: [] } : {}) }
+      case 'torrent_get': {
+        const rows = sel().map(t => pick(t, a.fields as string[]))
+        if (Array.isArray(ids)) return { torrents: rows }
+        // A real delta: only what changed since the list was last asked for, plus the ids
+        // that went away. The daemon's window is 60 s of activity; this one is exact, so a
+        // client that leans on unchanged rows coming back anyway fails here.
+        const now = new Map(rows.map(r => [r.id as number, JSON.stringify(r)]))
+        const before = sent
+        sent = now
+        if (ids !== 'recently_active') return { torrents: rows }
+        return { torrents: rows.filter(r => before.get(r.id as number) !== now.get(r.id as number)), removed: [...before.keys()].filter(id => !now.has(id)) }
+      }
       case 'torrent_start': case 'torrent_start_now': sel().forEach(t => { t.status = t.percent_done >= 1 ? Status.Seed : Status.Download; t.error = 0 }); return {}
       case 'torrent_stop': sel().forEach(t => { t.status = Status.Stopped }); return {}
       case 'torrent_verify': sel().forEach(t => { t.status = Status.Check }); return {}

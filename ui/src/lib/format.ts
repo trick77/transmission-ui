@@ -13,8 +13,6 @@ export function bytes(n: number, digits?: number): string {
 
 export function gb(n: number): number { return n / 1e9 }
 
-export function rate(bps: number): string { return bps > 0 ? `${bytes(bps)}/s` : '—' }
-
 /** Split a rate into number and unit so the unit can be styled smaller. */
 export function rateParts(bps: number): [string, string] {
   const s = bytes(bps)
@@ -76,13 +74,17 @@ export function inFuture(unixSeconds: number): string {
   return s <= 0 ? 'now' : `in ${duration(s)}`
 }
 
+// Built once: toLocale*String with an options bag resolves the locale on every call,
+// and the compact row formats a date per row per render.
+const DAY = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })
+const TIME = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+
 export function dateTime(unixSeconds: number): string {
   if (!unixSeconds) return '—'
   const d = new Date(unixSeconds * 1000)
   const today = new Date()
   const sameDay = d.toDateString() === today.toDateString()
-  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-  return sameDay ? `Today, ${time}` : d.toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return sameDay ? `Today, ${TIME.format(d)}` : DAY.format(d)
 }
 
 /**
@@ -92,7 +94,7 @@ export function dateTime(unixSeconds: number): string {
  */
 export function date(unixSeconds: number): string {
   if (!unixSeconds) return '—'
-  return new Date(unixSeconds * 1000).toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return DAY.format(new Date(unixSeconds * 1000))
 }
 
 export function percent(p: number, digits = 0): string { return `${(p * 100).toFixed(digits)}%` }

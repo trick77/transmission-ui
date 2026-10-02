@@ -176,6 +176,14 @@ test('context menu and labels dialog write labels', async ({ page }) => {
   const row = page.locator(`.row[data-id="${t.id}"]`)
   await row.click({ button: 'right' })
   await shot(page, 'context-menu')
+  // Escape has to close it in a real browser: the app's own key handler writes
+  // the store first, and a menu that re-armed its listeners on that render lost
+  // the keystroke. jsdom never showed it.
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.cmenu')).toHaveCount(0)
+  // ...and it has to outlive a poll.
+  await row.click({ button: 'right' })
+  await page.waitForTimeout(2500)
   await page.locator('.cmenu .it', { hasText: 'Labels…' }).click()
   await page.locator('.modal input').fill('e2e')
   await page.locator('.modal input').press('Enter')

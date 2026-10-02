@@ -509,6 +509,50 @@ describe('list interactions', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Add torrent')
     await screen.findByText(/not a valid \.torrent/)
   })
+
+  it('a drop that misses the zone while Add is open still reaches the dialog', async () => {
+    await mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    const bencoded = 'd8:announce12:http://a/ann4:infod6:lengthi10e4:name4:solo12:piece lengthi1e6:pieces0:ee'
+    const file = new File([new TextEncoder().encode(bencoded)], 'solo.torrent')
+    const drop = new Event('drop', { bubbles: true, cancelable: true })
+    Object.assign(drop, { dataTransfer: { files: [file], types: ['Files'] } })
+    document.dispatchEvent(drop)
+    // not left to the browser, which would navigate to the file
+    expect(drop.defaultPrevented).toBe(true)
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('1 to add'))
+  })
+
+  it('keyboard: Space resumes a mixed selection, like the menu entry it stands for', async () => {
+    await mount()
+    set({ selected: new Set([2, 6]) })   // seeding + stopped
+    fireEvent.keyDown(document, { key: ' ' })
+    await waitFor(() => expect(daemon.of('torrent_start')[0]).toEqual({ ids: [2, 6] }))
+    expect(daemon.of('torrent_stop')).toHaveLength(0)
+  })
+
+  it('keyboard: Space on a focused button is left to the button', async () => {
+    await mount()
+    set({ selected: new Set([2]) })
+    const btn = screen.getByRole('button', { name: 'Add' })
+    const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    btn.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
+    expect(daemon.of('torrent_stop')).toHaveLength(0)
+  })
+
+  it('the notification preference survives a reopen', async () => {
+    vi.stubGlobal('Notification', { permission: 'granted', requestPermission: async () => 'granted' })
+    await mount()
+    const notify = () => screen.getByText('Notify when a download completes').closest('.opt')!.querySelector('.toggle')!
+    act(() => set({ dialog: { kind: 'settings', section: 'interface' } }))
+    fireEvent.click(notify())
+    await waitFor(() => expect(notify()).toHaveAttribute('aria-checked', 'true'))
+    act(() => set({ dialog: { kind: 'none' } }))
+    act(() => set({ dialog: { kind: 'settings', section: 'interface' } }))
+    expect(notify()).toHaveAttribute('aria-checked', 'true')
+    vi.unstubAllGlobals()
+  })
 })
 
 describe('inspector', () => {

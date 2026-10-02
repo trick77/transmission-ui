@@ -21,8 +21,10 @@ fi
 
 # main.go embeds the bundle, so it must exist before the build.
 [[ -d "$ROOT/ui/dist" ]] || { echo "ui/dist missing; run npm run build in ui/ first" >&2; exit 1; }
+# Mirror, not copy: every UI build emits new hashed names, and a plain copy
+# leaves the old bundles behind to be embedded with the new one.
 mkdir -p "$ROOT/backend/dist"
-cp -R "$ROOT/ui/dist/." "$ROOT/backend/dist/"
+rsync -a --delete "$ROOT/ui/dist/" "$ROOT/backend/dist/"
 
 go build -C "$ROOT/backend" -o "$ROOT/scripts/transmission-ui" .
 

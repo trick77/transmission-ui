@@ -6,7 +6,6 @@ package auth
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -44,13 +43,15 @@ type SessionCodec struct {
 	secure    bool
 	ttl       time.Duration
 	keepGroup string // the group requireAuth checks; never trimmed away
-	path      string // cookie Path: the app's prefix, so siblings never see it
+	path      string // cookie Path: the app's prefix, so siblings are not sent it
 }
 
 // NewSessionCodec returns a codec over the given secret. keepGroup is the group
 // the authorization check reads; it is preserved when the group list is capped.
 // basePath scopes the cookie: on a shared host the sibling apps live at other
-// prefixes and have no business receiving this session token.
+// prefixes and have no business receiving this session token. That keeps it out
+// of their requests; it is not isolation, since a page on the same origin can
+// still call this app with the cookie attached.
 func NewSessionCodec(secret string, secure bool, ttl time.Duration, keepGroup, basePath string) *SessionCodec {
 	return &SessionCodec{
 		secret: []byte(secret), secure: secure, ttl: ttl,
@@ -137,8 +138,8 @@ func trimForCookie(claims Claims, keep string) Claims {
 	}
 	trimmed := make([]string, 0, maxCookieGroups)
 	// Append the IdP's own spelling, not the configured one: authorization is
-	// case-insensitive, but /api/auth/me would otherwise report a group name
-	// the IdP never issued.
+	// case-insensitive, and the cookie should not carry a group name the IdP
+	// never issued.
 	for _, g := range claims.Groups {
 		if keep != "" && strings.EqualFold(g, keep) {
 			trimmed = append(trimmed, g)
@@ -161,15 +162,4 @@ func (c *SessionCodec) sign(payload string) string {
 	mac := hmac.New(sha256.New, c.secret)
 	mac.Write([]byte(payload))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-}
-
-// randomToken returns a URL-safe random token, used for OIDC state and nonce.
-func randomToken() string {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		// crypto/rand failing is not recoverable and must never silently
-		// degrade into a predictable state value.
-		panic(fmt.Sprintf("crypto/rand: %v", err))
-	}
-	return base64.RawURLEncoding.EncodeToString(buf)
 }

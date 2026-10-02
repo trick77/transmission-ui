@@ -7,18 +7,13 @@ linters:
   default: standard
   enable:
     - bodyclose
-    - errcheck
     - errorlint
     - gosec
-    - govet
-    - ineffassign
     - misspell
     - nilerr
     - revive
-    - staticcheck
     - unconvert
     - unparam
-    - unused
   settings:
     govet:
       enable-all: true

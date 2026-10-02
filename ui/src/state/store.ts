@@ -2,8 +2,10 @@
 
 import { useSyncExternalStore } from 'react'
 import * as api from '../rpc/methods'
-import type { FreeSpace, Session, SessionStats, TorrentDetail, TorrentSummary } from '../rpc/types'
+import { EXTRA_FIELDS, type FreeSpace, type Session, type SessionStats, type TorrentExtra, type TorrentSummary } from '../rpc/types'
 import type { Adv, SortKey } from '../lib/model'
+import { readLocal, writeLocal } from '../lib/local'
+import { mountOf } from '../lib/paths'
 
 export type Dialog =
   | { kind: 'none' }
@@ -19,7 +21,8 @@ export type Dialog =
 export interface Snapshot {
   torrents: TorrentSummary[]
   byId: Map<number, TorrentSummary>
-  detail: TorrentDetail | null
+  // The focused torrent's inspector-only fields. Its summary half lives in byId.
+  detail: TorrentExtra | null
   session: Session | null
   stats: SessionStats | null
   history: { down: number; up: number }[]
@@ -34,7 +37,7 @@ export interface Snapshot {
   sortDir: 1 | -1
   selected: Set<number>
   focusId: number | null   // the torrent shown in the inspector
-  inspectorTab: 'overview' | 'files' | 'peers' | 'trackers'
+  inspectorTab: InspectorTab
   dialog: Dialog
   dismissed: Set<string>   // tracker-down notices dismissed, "host@since"
   toast: string
@@ -61,6 +64,8 @@ export interface Removing {
   deleteData: boolean
   stopped: boolean
 }
+
+export type InspectorTab = 'overview' | 'files' | 'peers' | 'trackers'
 
 export type Density = 'compact' | 'comfortable'
 
@@ -121,13 +126,12 @@ export function set(patch: Partial<Snapshot> | ((s: Snapshot) => Partial<Snapsho
   emit()
 }
 export function get() { return snap }
+// Module-level, so its identity is stable: an inline subscribe makes React drop and
+// re-add the listener on every render of every hook.
+function subscribe(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb) } }
 export function useStore<T>(sel: (s: Snapshot) => T): T {
-  return useSyncExternalStore(cb => { listeners.add(cb); return () => listeners.delete(cb) }, () => sel(snap))
+  return useSyncExternalStore(subscribe, () => sel(snap))
 }
-export const useSnap = () => useStore(s => s)
-
-function readLocal<T>(k: string, d: T): T { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : d } catch { return d } }
-export function writeLocal(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* private mode */ } }
 
 // ─── URL sync (deep links like the mocks) ───
 export function syncUrl() {
@@ -142,18 +146,53 @@ export function syncUrl() {
 }
 
 // ─── polling ───
-const LIST_MS = 2000, HIDDEN_MS = 5000, FULL_EVERY = 30, SPACE_MS = 30000
+const LIST_MS = 2000, HIDDEN_MS = 5000, FULL_EVERY = 30, SESSION_EVERY = 15, SPACE_MS = 30000, CLOCK_EVERY = 5
 let timer: ReturnType<typeof setTimeout> | null = null
 let ticks = 0
-let haveFull = false
+// The next pass fetches everything: every torrent, the session, free space, and the whole
+// inspector payload. A flag rather than a reset of `ticks`, so a refreshNow() that lands
+// while a poll is in flight still gets its full pass from the follow-up.
+let forceFull = true
 let inFlight = false
 let pollAgain = false
+// startPolling() has just read the session; the first pass need not read it again.
+let sessionFresh = false
 
-function mergeTorrents(list: TorrentSummary[], removed: number[] | undefined, full: boolean) {
+/**
+ * Nothing in the delta leaves `torrents` and `byId` alone, so nothing derived from them
+ * reruns. Some of what is derived also depends on the clock, though: a failing tracker
+ * turns from "issues" into "down" ten minutes in, with no torrent changing. So every few
+ * ticks a quiet list still gets a new array, around the same row objects: the sidebar
+ * and the notices recompute, and no row re-renders.
+ */
+function mergeTorrents(list: TorrentSummary[], removed: number[] | undefined, full: boolean): Partial<Snapshot> {
+  if (!full && !list.length && !removed?.length) return ticks % CLOCK_EVERY === 0 ? { torrents: [...snap.torrents] } : {}
   const byId = full ? new Map<number, TorrentSummary>() : new Map(snap.byId)
   for (const t of list) byId.set(t.id, t)
   for (const id of removed ?? []) byId.delete(id)
-  set({ torrents: [...byId.values()], byId })
+  return { torrents: [...byId.values()], byId }
+}
+
+// What each inspector tab shows that changes between polls. Everything else in
+// EXTRA_FIELDS (file names, limits, metadata) only moves on a user action, and every
+// action ends in refreshNow(), which refetches the lot.
+const EXTRA_LIVE: Record<InspectorTab, (keyof TorrentExtra)[]> = {
+  overview: ['pieces', 'availability', 'have_valid', 'have_unchecked', 'corrupt_ever', 'downloaded_ever', 'seconds_downloading', 'seconds_seeding', 'peers_from'],
+  files: ['file_stats'],
+  peers: ['peers'],
+  trackers: ['peers_from'],
+}
+
+async function refreshDetail(full: boolean) {
+  const id = snap.focusId
+  if (id == null) return
+  // A magnet still fetching its metadata has no file list yet; keep asking until it does.
+  const all = full || snap.detail?.id !== id || (snap.byId.get(id)?.metadata_percent_complete ?? 1) < 1
+  const d = await api.getTorrentFields(id, all ? EXTRA_FIELDS : ['id', ...EXTRA_LIVE[snap.inspectorTab]]).catch(() => undefined)
+  // The user may have focused another torrent while this was in flight.
+  if (!d || snap.focusId !== id) return
+  if (all) set({ detail: d as TorrentExtra })
+  else if (snap.detail?.id === id) set({ detail: { ...snap.detail, ...d } })
 }
 
 // Exactly one poll chain: a call while a poll is in flight only asks for one more pass
@@ -162,28 +201,33 @@ async function pollOnce() {
   if (inFlight) { pollAgain = true; return }
   inFlight = true
   if (timer) { clearTimeout(timer); timer = null }
+  const forced = forceFull
+  forceFull = false
+  const full = forced || ticks % FULL_EVERY === 0
+  let unauthorized = false
   try {
-    const full = !haveFull || ticks % FULL_EVERY === 0
-    const [tr, st] = await Promise.all([api.getTorrents(full ? undefined : 'recently_active'), api.getStats()])
-    mergeTorrents(tr.torrents, tr.removed, full)
-    haveFull = true
+    const [tr, st] = await Promise.all([
+      api.getTorrents(full ? undefined : 'recently_active'), api.getStats(),
+      refreshDetail(full), !sessionFresh && (forced || ticks % SESSION_EVERY === 0) ? refreshSession() : null,
+    ])
+    sessionFresh = false
     const history = [...snap.history, { down: st.download_speed, up: st.upload_speed }].slice(-60)
-    set({ stats: st, history, connection: 'ok', lastError: '' })
-    if (snap.focusId != null) {
-      const d = await api.getTorrentDetail(snap.focusId).catch(() => null)
-      if (d) set({ detail: d })
-      else if (!snap.byId.has(snap.focusId)) set({ focusId: null, detail: null })
-    }
-    if (ticks % 15 === 0) await refreshSession()
-    if (ticks % (SPACE_MS / LIST_MS) === 0) void refreshFreeSpace()
+    set({ ...mergeTorrents(tr.torrents, tr.removed, full), stats: st, history, connection: 'ok', lastError: '' })
+    if (snap.focusId != null && !snap.byId.has(snap.focusId)) { set({ focusId: null, detail: null }); syncUrl() }
+    if (forced || ticks % (SPACE_MS / LIST_MS) === 0) void refreshFreeSpace()
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    set({ connection: msg === 'unauthorized' ? 'unauthorized' : 'error', lastError: msg })
+    unauthorized = msg === 'unauthorized'
+    // A failed full pass is still owed.
+    if (forced) forceFull = true
+    set({ connection: unauthorized ? 'unauthorized' : 'error', lastError: msg })
   } finally {
     ticks++
     inFlight = false
     if (pollAgain) { pollAgain = false; void pollOnce() }
-    else timer = setTimeout(pollOnce, document.hidden ? HIDDEN_MS : LIST_MS)
+    // Signed out, every poll is another 401 until the user signs in again, and that is a
+    // page load. Coming back to the tab still retries once.
+    else if (!unauthorized) timer = setTimeout(pollOnce, document.hidden ? HIDDEN_MS : LIST_MS)
   }
 }
 
@@ -201,25 +245,19 @@ export async function refreshFreeSpace() {
   set({ freeSpace: m })
 }
 
-/** Base download dir if the path is under it, else the path's first two components. */
-function mountOf(dir: string, base: string): string {
-  if (base && (dir === base || dir.startsWith(base + '/'))) return base
-  const parts = dir.split('/').filter(Boolean)
-  return '/' + parts.slice(0, Math.min(2, parts.length)).join('/')
-}
-
 let started = false
 export function startPolling() {
   if (started) return
   started = true
-  void refreshSession().then(() => pollOnce())
+  // The session goes first and alone. It does the 409 session-id handshake once instead
+  // of once per parallel request, and the rows need its download dir to render paths.
+  void refreshSession().then(() => { sessionFresh = snap.session != null; return pollOnce() })
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void pollOnce() })
 }
 
-/** Force the next poll to be a full refresh (after add/remove) and run it now. */
+/** Run a full pass now (after any write): torrents, session, free space, inspector. */
 export function refreshNow() {
-  haveFull = false
-  ticks = 0   // also re-reads session and free space on this pass
+  forceFull = true
   void pollOnce()
 }
 
@@ -227,12 +265,21 @@ export function refreshNow() {
 export function focus(id: number | null) {
   set({ focusId: id, detail: id === snap.detail?.id ? snap.detail : null })
   syncUrl()
-  if (id != null) void api.getTorrentDetail(id).then(d => { if (get().focusId === id) set({ detail: d }) }).catch(() => {})
+  void refreshDetail(true)
 }
 
+/** The tab being opened may hold data from the last time it was open, so refresh it now. */
+export function setInspectorTab(tab: InspectorTab) {
+  set({ inspectorTab: tab })
+  void refreshDetail(false)
+}
+
+let toastTimer: ReturnType<typeof setTimeout> | undefined
 export function toast(msg: string) {
   set({ toast: msg })
-  setTimeout(() => { if (get().toast === msg) set({ toast: '' }) }, 3500)
+  // One timer for the one slot: a repeat of the same text must get its own full 3.5 s.
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => set({ toast: '' }), 3500)
 }
 
 export async function run(label: string, fn: () => Promise<unknown>) {
@@ -262,6 +309,12 @@ const errMsg = (e: unknown) => e instanceof Error ? e.message : String(e)
 let viewOrder: number[] = []
 export function setViewOrder(ids: number[]) { viewOrder = ids }
 
+/** Select everything the list shows; a second time, with all of it selected, clears. */
+export function selectAllVisible() {
+  const ids = viewOrder
+  set(s => ({ selected: ids.length && ids.every(id => s.selected.has(id)) ? new Set() : new Set(ids) }))
+}
+
 let removalToken = 0
 
 export async function removeSequence(ids: number[], deleteData: boolean) {
@@ -277,7 +330,8 @@ export async function removeSequence(ids: number[], deleteData: boolean) {
   // Progress should walk down the screen, so the batch follows the order the rows are
   // displayed in. The caller passes that order (it holds the sorted, filtered list);
   // store order is the fallback, since `selected` is a Set and carries no order at all.
-  const order = (viewOrder.length ? viewOrder : snap.torrents.map(t => t.id)).filter(id => ids.includes(id))
+  const wanted = new Set(ids)
+  const order = (viewOrder.length ? viewOrder : snap.torrents.map(t => t.id)).filter(id => wanted.has(id))
   const batch = order.length === ids.length ? order : [...new Set([...order, ...ids])]
   // The rows are on their way out: drop them from the selection so the sel-bar cannot
   // fire a second remove at torrents that are already going.
@@ -323,7 +377,7 @@ export async function removeSequence(ids: number[], deleteData: boolean) {
       set({ torrents: [...byId.values()], byId })
       // The inspector cannot be left showing a torrent whose files are gone: the poll that
       // would normally notice cannot run until the whole batch is done.
-      if (get().focusId === id) set({ focusId: null, detail: null })
+      if (get().focusId === id) { set({ focusId: null, detail: null }); syncUrl() }
       patch(r => ({ done: r.done + 1, active: null }))
     } catch (e) {
       patch(r => ({ done: r.done + 1, active: null, failed: [...r.failed, { id, msg: errMsg(e) }] }))

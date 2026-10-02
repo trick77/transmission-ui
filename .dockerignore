@@ -1,0 +1,15 @@
+# The image is built from ui/ and backend/ only (see Containerfile). Everything
+# else stays out of the build context: .git, the dev daemon's downloads under
+# scripts/, coverage reports.
+*
+!ui
+!backend
+
+# Build output and host installs. node_modules from a macOS host would land on
+# top of the image's own install and bring the wrong native binaries.
+**/node_modules
+ui/dist
+ui/coverage
+ui/test-results
+ui/playwright-report
+backend/dist

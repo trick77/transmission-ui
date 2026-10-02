@@ -6,10 +6,10 @@ import { SidebarResizer } from './SidebarResizer'
 import { List } from '../list/List'
 import { Inspector } from '../inspector/Inspector'
 import { Dialogs } from '../dialogs/Dialogs'
-import { get, set, useStore } from '../state/store'
+import { get, run, selectAllVisible, set, useStore } from '../state/store'
 import * as api from '../rpc/methods'
 import { basePath } from '../rpc/client'
-import { run } from '../state/store'
+import { anyStopped } from '../list/actions'
 
 function SignIn() {
   return (
@@ -38,10 +38,16 @@ export function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); document.querySelector<HTMLInputElement>('.search input')?.focus(); return }
       if (inField || s.dialog.kind !== 'none') return
       const ids = s.selected.size ? [...s.selected] : s.focusId != null ? [s.focusId] : []
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); document.dispatchEvent(new CustomEvent('tm:select-all')); return }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAllVisible(); return }
       if (e.key === 'Escape') { set({ selected: new Set() }); return }
       if (!ids.length) return
-      if (e.key === ' ') { e.preventDefault(); const t = s.byId.get(ids[0]); if (!t) return; void run(t.status === 0 ? 'Resume' : 'Pause', () => t.status === 0 ? api.start(ids) : api.stop(ids)) }
+      // Space on a focused button is that button's own key.
+      if (e.key === ' ' && !(e.target instanceof Element && e.target.closest('button, a, select, [role="button"]'))) {
+        e.preventDefault()
+        // Same rule as the menu entry it is the shortcut for: resume if anything is stopped.
+        const resume = anyStopped(ids)
+        void run(resume ? 'Resume' : 'Pause', () => resume ? api.start(ids) : api.stop(ids))
+      }
       if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); set({ dialog: { kind: 'confirm-remove', ids, deleteData: !(e.metaKey || e.ctrlKey) } }) }
     }
     document.addEventListener('keydown', onKey)
@@ -53,11 +59,14 @@ export function App() {
     document.documentElement.dataset.density = get().density
     document.documentElement.style.setProperty('--sidebar-pref', get().sidebarW + 'px')
     const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault() }
+    // Also while Add is open: a drop that misses its drop zone lands here, and left
+    // alone the browser navigates to the file. The dialog picks the new array up.
     const drop = (e: DragEvent) => {
-      if (!e.dataTransfer?.files.length || get().dialog.kind === 'add') return
+      if (!e.dataTransfer?.files.length) return
       e.preventDefault()
       const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.torrent'))
-      if (files.length) set({ dialog: { kind: 'add', files } })
+      const d = get().dialog
+      if (files.length) set({ dialog: d.kind === 'add' ? { ...d, files } : { kind: 'add', files } })
     }
     document.addEventListener('dragover', over); document.addEventListener('drop', drop)
     return () => { document.removeEventListener('dragover', over); document.removeEventListener('drop', drop) }

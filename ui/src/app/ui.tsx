@@ -1,5 +1,5 @@
 // Small form primitives that mirror the mock's CSS classes.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from '../icons/Icon'
 
 export function Toggle({ on, onChange, title, disabled }: { on: boolean; onChange: (v: boolean) => void; title?: string; disabled?: boolean }) {
@@ -55,16 +55,24 @@ export function Sec({ children, first }: { children: ReactNode; first?: boolean 
 /** Closes on outside click or Escape. */
 export function useDismiss(onClose: () => void, active = true) {
   const ref = useRef<HTMLDivElement>(null)
+  // Callers pass a fresh closure on most renders. Reading it through a ref keeps the
+  // listeners in place across those: re-arming them on every poll left a window after
+  // each one in which an outside click was missed.
+  const close = useRef(onClose)
+  useEffect(() => { close.current = onClose })
   useEffect(() => {
     if (!active) return
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) close.current() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current() }
     // defer so the click that opened us doesn't close us
     const id = setTimeout(() => { document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey) }, 0)
     return () => { clearTimeout(id); document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
-  }, [onClose, active])
+  }, [active])
   return ref
 }
+
+/** .cmenu.sub's width in app.css, plus its 4 px gap. */
+const SUB_W = 194
 
 export interface MenuItem { icon?: IconName; label: string; k?: string; danger?: boolean; onClick?: () => void; sub?: MenuItem[]; header?: boolean; sep?: boolean }
 
@@ -72,7 +80,11 @@ export function Menu({ x, y, items, onClose, width = 250, alignRight }: { x: num
   const ref = useDismiss(onClose)
   const [open, setOpen] = useState<number | null>(null)
   const left = alignRight ? Math.max(8, x - width) : Math.min(x, window.innerWidth - width - 8)
-  const top = Math.min(y, window.innerHeight - 40 * items.length - 16)
+  // Clamp to the viewport by the menu's real height: items and separators differ, so
+  // an estimate pushed menus near the bottom further up than they had to go.
+  const [height, setHeight] = useState(0)
+  useLayoutEffect(() => { setHeight(ref.current?.offsetHeight ?? 0) }, [ref, items.length])
+  const top = Math.max(8, Math.min(y, window.innerHeight - height - 8))
   return (
     <div ref={ref} className="cmenu" style={{ left, top, width }} role="menu">
       {items.map((it, i) => it.sep ? <div key={i} className="sep" /> : it.header ? (
@@ -86,7 +98,7 @@ export function Menu({ x, y, items, onClose, width = 250, alignRight }: { x: num
           {it.k ? <span className="k">{it.k}</span> : null}
           {it.sub ? <Icon name="chev" className="chev" /> : null}
           {it.sub && open === i ? (
-            <div className="cmenu sub" style={{ left: left + width + 200 > window.innerWidth ? undefined : 'calc(100% + 4px)', right: left + width + 200 > window.innerWidth ? 'calc(100% + 4px)' : undefined }}>
+            <div className="cmenu sub" style={{ left: left + width + SUB_W > window.innerWidth ? undefined : 'calc(100% + 4px)', right: left + width + SUB_W > window.innerWidth ? 'calc(100% + 4px)' : undefined }}>
               {it.sub.map((s, j) => <div key={j} className="it" role="menuitem" onClick={() => { s.onClick?.(); onClose() }}>{s.icon ? <Icon name={s.icon} /> : null}{s.label}</div>)}
             </div>
           ) : null}
