@@ -9,6 +9,7 @@ import (
 	"embed"
 	"html/template"
 	"io/fs"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -182,12 +183,60 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 const (
-	// loginPenalty is how long a failed attempt holds the form before the next
-	// one is judged.
+	// loginPenalty is the gap between two attempts from one client.
 	loginPenalty = 500 * time.Millisecond
-	// loginQueueLen is how many attempts may wait their turn; more are refused.
-	loginQueueLen = 8
+	// loginMaxWait is how far ahead a client may queue attempts before further
+	// ones are refused.
+	loginMaxWait = 5 * time.Second
 )
+
+// loginTurn spaces one client's attempts loginPenalty apart and reports how
+// long this one has to wait, or false when that client already has more queued
+// than loginMaxWait covers.
+//
+// Per client, so that guessing is capped at two tries a second however many
+// connections one address opens, while a flood from that address cannot keep
+// anyone else from signing in: a limit shared by everybody would hand any
+// visitor a way to lock the form.
+func (s *Server) loginTurn(client string) (time.Duration, bool) {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	now := time.Now()
+	// Entries in the past carry no information; drop them before the map can
+	// grow with every address that ever tried.
+	if len(s.loginNext) > 1024 {
+		for k, at := range s.loginNext {
+			if at.Before(now) {
+				delete(s.loginNext, k)
+			}
+		}
+	}
+	at := s.loginNext[client]
+	if at.Before(now) {
+		at = now
+	}
+	if at.Sub(now) > loginMaxWait {
+		return 0, false
+	}
+	s.loginNext[client] = at.Add(s.loginPenalty)
+	return at.Sub(now), true
+}
+
+// clientOf names the client for loginTurn. Behind the reverse proxy every
+// request arrives from the proxy's address, so the last X-Forwarded-For entry,
+// the one the nearest proxy wrote, is the client. Reached directly, the header
+// is the caller's to forge; a forged one only buys a fresh turn per value,
+// which is the unthrottled form this replaced and no worse.
+func clientOf(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return strings.TrimSpace(xff[strings.LastIndex(xff, ",")+1:])
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
 
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	// The route is registered in every mode so the page and its assets resolve,
@@ -203,30 +252,28 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
-	// Attempts are judged one at a time, and a failed one holds the turn for
-	// loginPenalty. That caps guessing at two tries a second however many
-	// connections do it; a delay per request only slowed each connection down.
-	// A correct attempt waits behind whatever is queued and is not refused,
-	// unless the queue is full, which is what a flood looks like.
-	select {
-	case s.loginQueue <- struct{}{}:
-		defer func() { <-s.loginQueue }()
-	default:
+	wait, ok := s.loginTurn(clientOf(r))
+	if !ok {
 		w.Header().Set("Retry-After", "5")
 		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
 		return
 	}
-	s.loginMu.Lock()
+	if wait > 0 {
+		turn := time.NewTimer(wait)
+		defer turn.Stop()
+		select {
+		case <-turn.C:
+		case <-r.Context().Done():
+			// The client gave up; nobody is left to answer.
+			return
+		}
+	}
+
 	// Constant time on both halves, over digests: comparing with == would leak
 	// the username and password a byte at a time to anyone who can measure the
 	// response, and ConstantTimeCompare on the raw values returns early when
 	// the lengths differ, which leaks the lengths.
-	ok := sameSecret(user, s.cfg.RPCUser) && sameSecret(pass, s.cfg.RPCPass)
-	if !ok {
-		time.Sleep(s.loginPenalty)
-	}
-	s.loginMu.Unlock()
-	if !ok {
+	if !sameSecret(user, s.cfg.RPCUser) || !sameSecret(pass, s.cfg.RPCPass) {
 		// The same message either way, so a wrong username is indistinguishable
 		// from a wrong password.
 		s.log.Warn("failed form login", "user", user, "remote", r.RemoteAddr)

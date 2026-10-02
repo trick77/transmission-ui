@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -101,17 +102,17 @@ func TestLoginPageDoesNotBounceARefusedSession(t *testing.T) {
 	}
 }
 
-// Parallel connections must not multiply the guessing rate: failed attempts
-// take their penalty one after another, not side by side.
-func TestFormLoginJudgesOneAttemptAtATime(t *testing.T) {
+// Parallel connections from one client must not multiply the guessing rate:
+// its attempts are judged a penalty apart, not side by side.
+func TestFormLoginSpacesOneClientsAttempts(t *testing.T) {
 	srv, _ := formServer(t)
+	srv.loginPenalty = 100 * time.Millisecond
 	try := func(pass string) int {
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, post(url.Values{"username": {"daemonuser"}, "password": {pass}}))
 		return rec.Code
 	}
-	const guesses = 3
-	srv.loginPenalty = 100 * time.Millisecond
+	const guesses = 4
 	start := time.Now()
 	codes := make(chan int, guesses)
 	for range guesses {
@@ -122,8 +123,9 @@ func TestFormLoginJudgesOneAttemptAtATime(t *testing.T) {
 			t.Fatalf("want 401, got %d", got)
 		}
 	}
-	if took := time.Since(start); took < guesses*srv.loginPenalty {
-		t.Fatalf("%d parallel guesses took %v, want at least %v", guesses, took, guesses*srv.loginPenalty)
+	// The first is judged at once, each further one a penalty later.
+	if took, want := time.Since(start), (guesses-1)*srv.loginPenalty; took < want {
+		t.Fatalf("%d parallel guesses took %v, want at least %v", guesses, took, want)
 	}
 	// A correct attempt right after is judged, not turned away.
 	if got := try("daemonpass"); got != http.StatusFound {
@@ -131,25 +133,41 @@ func TestFormLoginJudgesOneAttemptAtATime(t *testing.T) {
 	}
 }
 
-func TestFormLoginRefusesAFlood(t *testing.T) {
+// One address flooding the form is refused past its own queue, and must not
+// keep anybody else from signing in.
+func TestFormLoginFloodDoesNotLockOthersOut(t *testing.T) {
 	srv, _ := formServer(t)
-	srv.loginPenalty = 20 * time.Millisecond
-	codes := make(chan int, loginQueueLen*3)
-	for range cap(codes) {
+	from := func(client, pass string) *http.Request {
+		r := post(url.Values{"username": {"daemonuser"}, "password": {pass}})
+		r.Header.Set("X-Forwarded-For", "203.0.113.9, "+client)
+		return r
+	}
+	const flood = 40 // far past loginMaxWait / loginPenalty
+	codes := make(chan int, flood)
+	for range flood {
 		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
 			rec := httptest.NewRecorder()
-			srv.Handler().ServeHTTP(rec, post(url.Values{"username": {"daemonuser"}, "password": {"nope"}}))
+			srv.Handler().ServeHTTP(rec, from("198.51.100.7", "nope").WithContext(ctx))
 			codes <- rec.Code
 		}()
 	}
 	refused := 0
-	for range cap(codes) {
+	for range flood {
 		if <-codes == http.StatusTooManyRequests {
 			refused++
 		}
 	}
 	if refused == 0 {
-		t.Fatal("a flood past the queue length was all queued, none refused")
+		t.Fatal("a flood from one address was all queued, none refused")
+	}
+
+	start := time.Now()
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, from("198.51.100.8", "daemonpass"))
+	if rec.Code != http.StatusFound || time.Since(start) > loginPenalty/2 {
+		t.Fatalf("another client during the flood: want a prompt sign-in, got %d after %v", rec.Code, time.Since(start))
 	}
 }
 

@@ -42,9 +42,9 @@ type Server struct {
 	index     []byte
 	indexETag string
 
-	// Form login is judged one attempt at a time; see handleLoginSubmit.
+	// Form login: when each client's next attempt may be judged; see loginTurn.
 	loginMu      sync.Mutex
-	loginQueue   chan struct{}
+	loginNext    map[string]time.Time
 	loginPenalty time.Duration
 }
 
@@ -55,7 +55,7 @@ const baseMeta = `<meta name="tmui-base" content="">`
 // RPC at the origin root and miss the reverse proxy's route.
 func New(cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fs.FS, log *slog.Logger) (*Server, error) {
 	s := &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log,
-		loginQueue: make(chan struct{}, loginQueueLen), loginPenalty: loginPenalty}
+		loginNext: map[string]time.Time{}, loginPenalty: loginPenalty}
 	index, err := fs.ReadFile(ui, "index.html")
 	if err != nil {
 		return nil, errors.New("the UI bundle has no index.html")
