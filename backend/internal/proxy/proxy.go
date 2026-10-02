@@ -10,7 +10,7 @@ package proxy
 import (
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -22,6 +22,7 @@ type Config struct {
 	Upstream string // e.g. http://transmission:9091
 	User     string
 	Pass     string
+	Log      *slog.Logger // nil logs to slog.Default()
 }
 
 // New returns a handler proxying to the daemon's RPC endpoint.
@@ -32,6 +33,10 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	if target.Scheme == "" || target.Host == "" {
 		return nil, fmt.Errorf("upstream %q needs a scheme and host", cfg.Upstream)
+	}
+	log := cfg.Log
+	if log == nil {
+		log = slog.Default()
 	}
 
 	rp := &httputil.ReverseProxy{
@@ -45,9 +50,7 @@ func New(cfg Config) (http.Handler, error) {
 			// Whatever the browser sent, the daemon gets our credentials. This
 			// also strips any Authorization header a client tried to smuggle in.
 			r.Out.Header.Del("Authorization")
-			if cfg.User != "" {
-				r.Out.SetBasicAuth(cfg.User, cfg.Pass)
-			}
+			r.Out.SetBasicAuth(cfg.User, cfg.Pass)
 			// The session cookie is ours, not the daemon's.
 			r.Out.Header.Del("Cookie")
 		},
@@ -64,9 +67,9 @@ func New(cfg Config) (http.Handler, error) {
 				// soon as it runs in its own container. Naming the wrong one
 				// sends the operator to the wrong setting.
 				if resp.StatusCode == http.StatusForbidden {
-					log.Printf("transmission refused the RPC connection (403); its rpc-whitelist likely does not include this container's address")
+					log.Error("transmission refused the RPC connection (403); its rpc-whitelist likely does not include this container's address")
 				} else {
-					log.Printf("transmission rejected our RPC credentials (401); check TM_USER/TM_PASS")
+					log.Error("transmission rejected our RPC credentials (401); check TM_USER/TM_PASS")
 				}
 				resp.Header.Del("WWW-Authenticate")
 				_ = resp.Body.Close()
@@ -79,7 +82,9 @@ func New(cfg Config) (http.Handler, error) {
 			}
 			return nil
 		},
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+			// Refused, unresolvable, timed out: the one place the reason exists.
+			log.Error("transmission is unreachable", "upstream", cfg.Upstream, "err", err)
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		},
 	}

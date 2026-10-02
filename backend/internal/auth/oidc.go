@@ -1,10 +1,12 @@
-// OIDC relying party: authorization code flow against Authelia, with state and
-// nonce carried in short-lived cookies. Ported from peeq's internal/auth, minus
+// OIDC relying party: authorization code flow with PKCE against Authelia, with
+// state, nonce and the PKCE verifier carried in short-lived cookies. Ported from peeq's internal/auth, minus
 // the parts that needed a database.
 package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,6 +20,7 @@ import (
 const (
 	oidcStateCookieName = "tmui_oidc_state"
 	oidcNonceCookieName = "tmui_oidc_nonce"
+	oidcPKCECookieName  = "tmui_oidc_pkce"
 )
 
 // Errors returned when an OIDC callback fails its anti-forgery checks: the
@@ -51,40 +54,22 @@ func (c Claims) HasGroup(group string) bool {
 	return false
 }
 
-// VerifiedClaims contains claims plus the ID token nonce after verification.
-type VerifiedClaims struct {
-	Claims Claims
-	Nonce  string
-}
-
-// OIDCBackend is the testable seam over oauth2 and go-oidc behavior.
-type OIDCBackend interface {
-	AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string
-	Exchange(context.Context, string) (*oauth2.Token, error)
-	VerifyClaims(context.Context, *oauth2.Token) (VerifiedClaims, error)
-}
-
 // OIDCServiceConfig configures OIDC login and callback handling.
 type OIDCServiceConfig struct {
 	Issuer       string
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
-	Backend      OIDCBackend
 	SecureCookie bool
 	BasePath     string
 }
 
 // OIDCService handles OIDC redirects and callback validation.
 type OIDCService struct {
-	backend OIDCBackend
-	secure  bool
-	path    string
-}
-
-// NewOIDCService creates a service from a pre-built backend (a fake, in tests).
-func NewOIDCService(cfg OIDCServiceConfig) *OIDCService {
-	return &OIDCService{backend: cfg.Backend, secure: cfg.SecureCookie, path: cookiePath(cfg.BasePath)}
+	oauth    oauth2.Config
+	verifier *oidc.IDTokenVerifier
+	secure   bool
+	path     string
 }
 
 // NewOIDCServiceFromDiscovery discovers the configured provider.
@@ -93,32 +78,34 @@ func NewOIDCServiceFromDiscovery(ctx context.Context, cfg OIDCServiceConfig) (*O
 	if err != nil {
 		return nil, fmt.Errorf("discover oidc provider: %w", err)
 	}
-	oauthConfig := oauth2.Config{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-		RedirectURL:  cfg.RedirectURL,
-		Endpoint:     provider.Endpoint(),
-		// "groups" is what the allowed-group check reads; Authelia only emits
-		// the claim when the scope is requested.
-		Scopes: []string{oidc.ScopeOpenID, "profile", "email", "groups"},
-	}
 	return &OIDCService{
-		backend: realOIDCBackend{
-			oauthConfig: oauthConfig,
-			verifier:    provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
+		oauth: oauth2.Config{
+			ClientID:     cfg.ClientID,
+			ClientSecret: cfg.ClientSecret,
+			RedirectURL:  cfg.RedirectURL,
+			Endpoint:     provider.Endpoint(),
+			// "groups" is what the allowed-group check reads; Authelia only emits
+			// the claim when the scope is requested.
+			Scopes: []string{oidc.ScopeOpenID, "profile", "email", "groups"},
 		},
-		secure: cfg.SecureCookie,
-		path:   cookiePath(cfg.BasePath),
+		verifier: provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
+		secure:   cfg.SecureCookie,
+		path:     cookiePath(cfg.BasePath),
 	}, nil
 }
 
-// StartLogin redirects to the provider and stores state/nonce cookies.
+// StartLogin redirects to the provider and stores the state, nonce and PKCE
+// verifier in cookies for the callback.
 func (s *OIDCService) StartLogin(w http.ResponseWriter, r *http.Request) {
 	state := randomToken()
 	nonce := randomToken()
+	// PKCE on top of the client secret: an authorization code lifted off the
+	// redirect is useless without the verifier, which never leaves this cookie.
+	verifier := oauth2.GenerateVerifier()
 	http.SetCookie(w, s.transientCookie(oidcStateCookieName, state))
 	http.SetCookie(w, s.transientCookie(oidcNonceCookieName, nonce))
-	http.Redirect(w, r, s.backend.AuthCodeURL(state, oidc.Nonce(nonce)), http.StatusFound)
+	http.SetCookie(w, s.transientCookie(oidcPKCECookieName, verifier))
+	http.Redirect(w, r, s.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), http.StatusFound)
 }
 
 // HandleCallback validates callback state, verifies tokens, and returns claims.
@@ -131,18 +118,22 @@ func (s *OIDCService) HandleCallback(r *http.Request) (Claims, error) {
 	if err != nil || nonceCookie.Value == "" {
 		return Claims{}, ErrInvalidNonce
 	}
-	token, err := s.backend.Exchange(r.Context(), r.URL.Query().Get("code"))
+	pkceCookie, err := r.Cookie(oidcPKCECookieName)
+	if err != nil || pkceCookie.Value == "" {
+		return Claims{}, ErrInvalidState
+	}
+	token, err := s.oauth.Exchange(r.Context(), r.URL.Query().Get("code"), oauth2.VerifierOption(pkceCookie.Value))
 	if err != nil {
 		return Claims{}, fmt.Errorf("exchange oidc code: %w", err)
 	}
-	verified, err := s.backend.VerifyClaims(r.Context(), token)
+	claims, nonce, err := s.verify(r.Context(), token)
 	if err != nil {
 		return Claims{}, fmt.Errorf("verify oidc claims: %w", err)
 	}
-	if verified.Nonce == "" || verified.Nonce != nonceCookie.Value {
+	if nonce == "" || nonce != nonceCookie.Value {
 		return Claims{}, ErrInvalidNonce
 	}
-	return verified.Claims, nil
+	return claims, nil
 }
 
 func (s *OIDCService) transientCookie(name, value string) *http.Cookie {
@@ -157,10 +148,11 @@ func (s *OIDCService) transientCookie(name, value string) *http.Cookie {
 	}
 }
 
-// ClearTransientCookies clears the state and nonce cookies set by StartLogin.
+// ClearTransientCookies clears the cookies set by StartLogin.
 func (s *OIDCService) ClearTransientCookies(w http.ResponseWriter) {
-	http.SetCookie(w, s.expiredCookie(oidcStateCookieName))
-	http.SetCookie(w, s.expiredCookie(oidcNonceCookieName))
+	for _, name := range []string{oidcStateCookieName, oidcNonceCookieName, oidcPKCECookieName} {
+		http.SetCookie(w, s.expiredCookie(name))
+	}
 }
 
 func (s *OIDCService) expiredCookie(name string) *http.Cookie {
@@ -176,27 +168,15 @@ func (s *OIDCService) expiredCookie(name string) *http.Cookie {
 	}
 }
 
-type realOIDCBackend struct {
-	oauthConfig oauth2.Config
-	verifier    *oidc.IDTokenVerifier
-}
-
-func (b realOIDCBackend) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
-	return b.oauthConfig.AuthCodeURL(state, opts...)
-}
-
-func (b realOIDCBackend) Exchange(ctx context.Context, code string) (*oauth2.Token, error) {
-	return b.oauthConfig.Exchange(ctx, code)
-}
-
-func (b realOIDCBackend) VerifyClaims(ctx context.Context, token *oauth2.Token) (VerifiedClaims, error) {
+// verify checks the ID token and returns its claims and nonce.
+func (s *OIDCService) verify(ctx context.Context, token *oauth2.Token) (Claims, string, error) {
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		return VerifiedClaims{}, fmt.Errorf("missing id_token")
+		return Claims{}, "", errors.New("missing id_token")
 	}
-	idToken, err := b.verifier.Verify(ctx, rawIDToken)
+	idToken, err := s.verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		return VerifiedClaims{}, err
+		return Claims{}, "", err
 	}
 	var oidcClaims struct {
 		PreferredUsername string   `json:"preferred_username"`
@@ -207,7 +187,7 @@ func (b realOIDCBackend) VerifyClaims(ctx context.Context, token *oauth2.Token) 
 		Groups            []string `json:"groups"`
 	}
 	if err := idToken.Claims(&oidcClaims); err != nil {
-		return VerifiedClaims{}, err
+		return Claims{}, "", err
 	}
 	// Prefer given_name + family_name so the full name (incl. last name) is
 	// shown, but only when BOTH are present: composing from one half would turn
@@ -218,14 +198,22 @@ func (b realOIDCBackend) VerifyClaims(ctx context.Context, token *oauth2.Token) 
 	} else if name == "" {
 		name = strings.TrimSpace(oidcClaims.GivenName + " " + oidcClaims.FamilyName)
 	}
-	return VerifiedClaims{
-		Claims: Claims{
-			Subject:           idToken.Subject,
-			PreferredUsername: oidcClaims.PreferredUsername,
-			Email:             oidcClaims.Email,
-			Name:              name,
-			Groups:            oidcClaims.Groups,
-		},
-		Nonce: idToken.Nonce,
-	}, nil
+	return Claims{
+		Subject:           idToken.Subject,
+		PreferredUsername: oidcClaims.PreferredUsername,
+		Email:             oidcClaims.Email,
+		Name:              name,
+		Groups:            oidcClaims.Groups,
+	}, idToken.Nonce, nil
+}
+
+// randomToken returns a URL-safe random token, used for OIDC state and nonce.
+func randomToken() string {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		// crypto/rand failing is not recoverable and must never silently
+		// degrade into a predictable state value.
+		panic(fmt.Sprintf("crypto/rand: %v", err))
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
 }

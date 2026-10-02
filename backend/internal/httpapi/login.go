@@ -4,11 +4,13 @@
 package httpapi
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/trick77/transmission-ui/backend/internal/auth"
@@ -137,67 +139,99 @@ func (s *Server) renderLogin(w http.ResponseWriter, status int, msg string) {
 	}{msg, s.cfg.BasePath, s.cfg.AuthMode == config.AuthModeOIDC})
 }
 
-// loginAssetHandler serves the page's embedded background and fonts. They are
-// immutable for the life of the binary, so they cache hard.
+// loginAssetHandler serves the page's embedded background, fonts and icon. The
+// names carry no content hash, so they must not be cached as immutable: a
+// redeploy that changes one would keep serving the old copy for a year. Each
+// gets a validator instead, and a revisit costs a 304.
 func loginAssetHandler(basePath string) http.Handler {
 	sub, err := fs.Sub(loginAssets, "assets")
 	if err != nil {
 		panic(err) // the embed is compile-time; a failure here is a build bug
 	}
+	etags := map[string]string{}
+	err = fs.WalkDir(sub, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		body, err := fs.ReadFile(sub, name)
+		etags[name] = etagOf(body)
+		return err
+	})
+	if err != nil {
+		panic(err)
+	}
 	files := http.FileServer(http.FS(sub))
 	return http.StripPrefix(basePath+"/login-assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		if tag, ok := etags[strings.TrimPrefix(r.URL.Path, "/")]; ok {
+			w.Header().Set("ETag", tag)
+		}
+		w.Header().Set("Cache-Control", "no-cache")
 		files.ServeHTTP(w, r)
 	}))
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	// Already signed in: no reason to show the form again.
-	if _, err := s.sessions.Decode(r); err == nil {
+	// Already signed in: no reason to show the form again. The same judgment
+	// as the shell's gate, or a session the shell refuses would bounce between
+	// the two forever.
+	if s.authorize(r) == http.StatusOK {
 		http.Redirect(w, r, s.cfg.BasePath+"/", http.StatusFound)
 		return
 	}
 	s.renderLogin(w, http.StatusOK, "")
 }
 
-// handleLoginSubmitGuard rejects a form POST when no form is on offer. The route
-// is registered in every mode so the assets and page resolve, but only form mode
-// has credentials to check.
-func (s *Server) handleLoginSubmitGuard(w http.ResponseWriter, r *http.Request) {
+// loginCooldown is how long the form refuses every attempt after a failed one.
+const loginCooldown = 500 * time.Millisecond
+
+func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
+	// The route is registered in every mode so the page and its assets resolve,
+	// but only form mode has credentials to check.
 	if s.cfg.AuthMode != config.AuthModeForm {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	s.handleLoginSubmit(w, r)
-}
-
-func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderLogin(w, http.StatusBadRequest, "Could not read the form.")
+		return
+	}
+	// A failed attempt closes the form to everyone for a moment, and an attempt
+	// that arrives in that window is turned away unjudged. That caps guessing
+	// at two tries a second however many connections do it; a per-request
+	// delay alone only slowed each connection down. The price is that someone
+	// hammering the form can keep a real user out while they do.
+	s.loginMu.Lock()
+	wait := time.Until(s.loginLocked)
+	s.loginMu.Unlock()
+	if wait > 0 {
+		w.Header().Set("Retry-After", "1")
+		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
 		return
 	}
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
-	// Constant time on both halves: comparing with == would leak the username
-	// and password a byte at a time to anyone who can measure the response.
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.RPCUser)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.RPCPass)) == 1
-	if !userOK || !passOK {
-		// Same delay and the same message either way, so a wrong username is
-		// indistinguishable from a wrong password.
-		time.Sleep(500 * time.Millisecond)
+	// Constant time on both halves, over digests: comparing with == would leak
+	// the username and password a byte at a time to anyone who can measure the
+	// response, and ConstantTimeCompare on the raw values returns early when
+	// the lengths differ, which leaks the lengths.
+	if !sameSecret(user, s.cfg.RPCUser) || !sameSecret(pass, s.cfg.RPCPass) {
+		s.loginMu.Lock()
+		s.loginLocked = time.Now().Add(loginCooldown)
+		s.loginMu.Unlock()
+		// The same message either way, so a wrong username is indistinguishable
+		// from a wrong password.
 		s.log.Warn("failed form login", "user", user, "remote", r.RemoteAddr)
 		s.renderLogin(w, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}
 
-	s.issueSession(w, r, auth.Claims{
-		Subject:           user,
-		PreferredUsername: user,
-		Name:              user,
-		// Form mode has no group source; the credential check is the whole
-		// authorization decision, so satisfy the configured group directly.
-		Groups: []string{s.cfg.OIDCAllowedGroup},
-	})
+	// Form mode has no group source; the credential check is the whole
+	// authorization decision (config clears the allowed group in this mode).
+	s.issueSession(w, r, auth.Claims{Subject: user, PreferredUsername: user, Name: user})
+}
+
+func sameSecret(got, want string) bool {
+	a, b := sha256.Sum256([]byte(got)), sha256.Sum256([]byte(want))
+	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }

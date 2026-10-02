@@ -114,3 +114,36 @@ func TestUnknownAuthModeRejected(t *testing.T) {
 		t.Fatalf("dev mode should be gone, got %v", err)
 	}
 }
+
+// Nothing can supply a group in form mode, so the setting must not gate it:
+// left in force, it shut out sessions issued before it was last changed.
+func TestFormModeIgnoresAllowedGroup(t *testing.T) {
+	os.Clearenv()
+	withEnv(t, map[string]string{
+		"BACKEND_AUTH_MODE":          "form",
+		"BACKEND_OIDC_ALLOWED_GROUP": "media",
+		"TM_USER":                    "u",
+		"TM_PASS":                    "p",
+	})
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.OIDCAllowedGroup != "" {
+		t.Fatalf("allowed group still in force in form mode: %q", cfg.OIDCAllowedGroup)
+	}
+}
+
+// The missing settings are listed in the same order on every start.
+func TestMissingOIDCSettingsAreListedInOrder(t *testing.T) {
+	os.Clearenv()
+	withEnv(t, map[string]string{"BACKEND_AUTH_MODE": "oidc", "TM_USER": "u"})
+	_, err := Load()
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	issuer, redirect := strings.Index(err.Error(), "BACKEND_OIDC_ISSUER"), strings.Index(err.Error(), "BACKEND_OIDC_REDIRECT_URL")
+	if issuer < 0 || redirect < issuer {
+		t.Fatalf("want issuer listed before redirect URL: %v", err)
+	}
+}

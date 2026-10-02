@@ -48,6 +48,7 @@ func main() {
 		Upstream: cfg.RPCUpstream,
 		User:     cfg.RPCUser,
 		Pass:     cfg.RPCPass,
+		Log:      log,
 	})
 	if err != nil {
 		log.Error("rpc proxy", "err", err)
@@ -77,8 +78,10 @@ func main() {
 	// TLS-terminating proxy in front. Without one the browser drops the session
 	// cookie and the user loops between / and /login with nothing in the log to
 	// explain it, so say so at startup.
-	if cfg.SecureCookies && cfg.PublicURL != "" && !strings.HasPrefix(cfg.PublicURL, "https://") {
-		log.Warn("BACKEND_PUBLIC_URL is not https: the session cookie is marked Secure and the browser will drop it, so sign-in will loop",
+	// An unset URL counts too: it leaves the cookie Secure, which is right
+	// behind a TLS proxy and a silent loop on a plain-http LAN address.
+	if cfg.SecureCookies && !strings.HasPrefix(cfg.PublicURL, "https://") {
+		log.Warn("BACKEND_PUBLIC_URL is not https: the session cookie is marked Secure, so over plain http the browser drops it and sign-in loops",
 			"public_url", cfg.PublicURL)
 	}
 
@@ -87,12 +90,19 @@ func main() {
 	}
 
 	sessions := auth.NewSessionCodec(cfg.SessionSecret, cfg.SecureCookies, cfg.SessionTTL, cfg.OIDCAllowedGroup, cfg.BasePath)
-	srv := httpapi.New(cfg, oidcService, sessions, rpc, ui, log)
+	srv, err := httpapi.New(cfg, oidcService, sessions, rpc, ui, log)
+	if err != nil {
+		log.Error("ui bundle", "err", err)
+		os.Exit(1)
+	}
 
 	server := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		// The UI polls every 2 s, so a live tab never idles this long; it only
+		// reaps the connections of tabs that are gone.
+		IdleTimeout: 2 * time.Minute,
 	}
 	log.Info("listening", "addr", cfg.Addr, "auth", cfg.AuthMode, "upstream", cfg.RPCUpstream)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -115,11 +125,9 @@ func healthcheck() int {
 	// Probe the app's own mount point: under a base path nothing is served at
 	// "/", so probing that reports every prefixed deployment as unhealthy and
 	// the reverse proxy drops it from routing.
-	cfg, err := config.Load()
-	base := ""
-	if err == nil {
-		base = cfg.BasePath
-	}
+	// Only the path is needed. A full config.Load() here would also mint a
+	// throwaway session secret on every probe.
+	base := config.BasePathOf(os.Getenv("BACKEND_PUBLIC_URL"))
 	client := &http.Client{
 		Timeout: 4 * time.Second,
 		// A redirect is a healthy answer (signed-out form mode sends / to

@@ -27,13 +27,27 @@ func (f *fakeOIDC) ClearTransientCookies(http.ResponseWriter)         {}
 
 func newTestServer(t *testing.T, mode config.AuthMode, group string, oidc OIDC) (*Server, *auth.SessionCodec) {
 	t.Helper()
-	cfg := config.Config{AuthMode: mode, OIDCAllowedGroup: group, SessionTTL: time.Hour}
+	return newTestServerAt(t, mode, group, oidc, "")
+}
+
+func newTestServerAt(t *testing.T, mode config.AuthMode, group string, oidc OIDC, basePath string) (*Server, *auth.SessionCodec) {
+	t.Helper()
+	cfg := config.Config{AuthMode: mode, OIDCAllowedGroup: group, SessionTTL: time.Hour, BasePath: basePath}
 	sessions := auth.NewSessionCodec("test-secret", false, time.Hour, group, "")
 	rpc := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("reached-daemon"))
 	})
 	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte(`<html><meta name="tmui-base" content="">ui</html>`)}}
-	return New(cfg, oidc, sessions, rpc, ui, slog.New(slog.DiscardHandler)), sessions
+	return mustNew(t, cfg, oidc, sessions, rpc, ui), sessions
+}
+
+func mustNew(t *testing.T, cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fstest.MapFS) *Server {
+	t.Helper()
+	srv, err := New(cfg, oidc, sessions, rpc, ui, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	return srv
 }
 
 // The bundle itself is privileged: serving it to an anonymous visitor renders the
@@ -253,20 +267,6 @@ func TestRPCPathRejectsNonPost(t *testing.T) {
 	}
 }
 
-// /api/auth/me must apply the same group check as the RPC guard, or a revoked
-// user still reads as signed in while every RPC call returns 403.
-func TestMeRejectsWrongGroup(t *testing.T) {
-	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
-	cookie, _ := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"Other"}})
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
-	req.AddCookie(cookie)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d", rec.Code)
-	}
-}
-
 func TestStaticFallsBackToIndex(t *testing.T) {
 	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	// The shell is gated, so this needs a session: without one the fallback is
@@ -308,9 +308,7 @@ func TestIconSvgIsServed(t *testing.T) {
 		"index.html": &fstest.MapFile{Data: []byte("<html>ui</html>")},
 		"icon.svg":   &fstest.MapFile{Data: []byte("<svg/>")},
 	}
-	srv := New(cfg, &fakeOIDC{},
-		auth.NewSessionCodec("test-secret", false, time.Hour, "", ""),
-		http.NotFoundHandler(), ui, slog.New(slog.DiscardHandler))
+	srv := mustNew(t, cfg, &fakeOIDC{}, auth.NewSessionCodec("test-secret", false, time.Hour, "", ""), http.NotFoundHandler(), ui)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/icon.svg", nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != "<svg/>" {
@@ -327,9 +325,7 @@ func TestWebmanifestContentType(t *testing.T) {
 		"index.html":       &fstest.MapFile{Data: []byte("<html>ui</html>")},
 		"site.webmanifest": &fstest.MapFile{Data: []byte(`{"name":"transmission-ui"}`)},
 	}
-	srv := New(cfg, &fakeOIDC{},
-		auth.NewSessionCodec("test-secret", false, time.Hour, "", ""),
-		http.NotFoundHandler(), ui, slog.New(slog.DiscardHandler))
+	srv := mustNew(t, cfg, &fakeOIDC{}, auth.NewSessionCodec("test-secret", false, time.Hour, "", ""), http.NotFoundHandler(), ui)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/site.webmanifest", nil))
 	if got := rec.Header().Get("Content-Type"); got != "application/manifest+json" {

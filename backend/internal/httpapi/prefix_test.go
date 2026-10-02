@@ -15,8 +15,7 @@ import (
 // route has to answer under it and every redirect has to stay inside it.
 func prefixServer(t *testing.T) (*Server, *auth.SessionCodec) {
 	t.Helper()
-	srv, sessions := newTestServer(t, config.AuthModeForm, "media", nil)
-	srv.cfg.BasePath = "/transmission"
+	srv, sessions := newTestServerAt(t, config.AuthModeForm, "", nil, "/transmission")
 	srv.cfg.RPCUser = "u"
 	srv.cfg.RPCPass = "p"
 	return srv, sessions
@@ -35,10 +34,8 @@ func TestPrefixServesRoutes(t *testing.T) {
 		{"app shell", http.MethodGet, "/transmission/", true, http.StatusOK},
 		{"rpc", http.MethodPost, "/transmission/transmission/rpc", true, http.StatusOK},
 		{"rpc unauthenticated", http.MethodPost, "/transmission/transmission/rpc", false, http.StatusUnauthorized},
-		{"me", http.MethodGet, "/transmission/api/auth/me", true, http.StatusOK},
 		// Outside the prefix nothing is mounted.
 		{"unprefixed login", http.MethodGet, "/login", false, http.StatusNotFound},
-		{"unprefixed me", http.MethodGet, "/api/auth/me", true, http.StatusNotFound},
 		// "/transmission/rpc" without the prefix collides with the prefixed
 		// GET route's pattern, so the mux answers 405 rather than 404. Either
 		// way the daemon is not reached.
