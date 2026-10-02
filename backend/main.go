@@ -74,17 +74,6 @@ func main() {
 		oidcService = svc
 	}
 
-	// Secure cookies are set unless the public URL is loopback, which assumes a
-	// TLS-terminating proxy in front. Without one the browser drops the session
-	// cookie and the user loops between / and /login with nothing in the log to
-	// explain it, so say so at startup.
-	// An unset URL counts too: it leaves the cookie Secure, which is right
-	// behind a TLS proxy and a silent loop on a plain-http LAN address.
-	if cfg.SecureCookies && !strings.HasPrefix(cfg.PublicURL, "https://") {
-		log.Warn("BACKEND_PUBLIC_URL is not https: the session cookie is marked Secure, so over plain http the browser drops it and sign-in loops",
-			"public_url", cfg.PublicURL)
-	}
-
 	if cfg.GeneratedSessionSecret {
 		log.Warn("BACKEND_SESSION_SECRET is unset: generated a per-process one, so every restart signs everyone out")
 	}
