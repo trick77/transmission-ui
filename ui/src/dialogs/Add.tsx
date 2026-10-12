@@ -99,7 +99,7 @@ export function Add({
   const known = labelCounts(torrents).map((l) => l.label);
   const single =
     sources.length === 1 && sources[0].kind === "file" ? sources[0] : null;
-  const files = single ? single.info.files : [];
+  const files = useMemo(() => (single ? single.info.files : []), [single]);
   const selectedBytes = useMemo(
     () => files.reduce((a, f, i) => a + (unwanted.has(i) ? 0 : f.length), 0),
     [files, unwanted],
@@ -345,7 +345,8 @@ export function Add({
                   onClick={() =>
                     setUnwanted((s) => {
                       const n = new Set(s);
-                      n.has(i) ? n.delete(i) : n.add(i);
+                      if (n.has(i)) n.delete(i);
+                      else n.add(i);
                       return n;
                     })
                   }

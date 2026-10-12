@@ -125,7 +125,6 @@ function advance(state: SimState, t: TorrentDetail, f: SimFields, want: { down: 
       materializeMetadata(t, pick.name, pick.size, pick.files, pick.comment, f.swarm)
       f.baseDown = 1.6e6
       f.baseUp = 60e3
-      changed = true
     }
     return true
   }
@@ -143,7 +142,6 @@ function advance(state: SimState, t: TorrentDetail, f: SimFields, want: { down: 
       // what the daemon does and what keeps the running count inside the queue size.
       t.status = (f.prevStatus === ST.Stopped ? ST.Stopped
         : t.percent_done >= 1 ? ST.SeedWait : ST.DownloadWait) as TorrentDetail['status']
-      changed = true
     }
     return true
   }

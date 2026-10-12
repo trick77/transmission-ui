@@ -174,7 +174,8 @@ export function List() {
     if ((e.target as HTMLElement).closest(".chk") || e.metaKey || e.ctrlKey) {
       set((s) => {
         const n = new Set(s.selected);
-        n.has(id) ? n.delete(id) : n.add(id);
+        if (n.has(id)) n.delete(id);
+        else n.add(id);
         return { selected: n };
       });
     } else if (e.shiftKey && (focusId != null || selected.size)) {
