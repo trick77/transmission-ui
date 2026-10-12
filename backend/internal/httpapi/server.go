@@ -13,18 +13,60 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/trick77/transmission-ui/backend/internal/auth"
+	"github.com/trick77/ship/kit/auth"
+	"github.com/trick77/ship/kit/httpx"
+	"github.com/trick77/ship/kit/logging"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
-// OIDC is the part of auth.OIDCService the server uses, so tests can fake it.
+// OIDC is the part of auth.OIDC the server uses, so tests can fake it.
 type OIDC interface {
-	StartLogin(http.ResponseWriter, *http.Request)
-	HandleCallback(*http.Request) (auth.Claims, error)
-	ClearTransientCookies(http.ResponseWriter)
+	Start(http.ResponseWriter, *http.Request)
+	Callback(http.ResponseWriter, *http.Request) (auth.Claims, error)
+}
+
+// cookiePrefix names every cookie this app sets, so a sibling app on the same
+// parent domain cannot overwrite them.
+const cookiePrefix = "tmui_"
+
+// SessionCookieName is the name of the browser cookie carrying the session.
+const SessionCookieName = cookiePrefix + "session"
+
+// cookiePath scopes the cookies to the app's prefix: on a shared host the
+// sibling apps live at other prefixes and have no business receiving them.
+func cookiePath(basePath string) string {
+	return basePath + "/"
+}
+
+// NewSessions is the signed-cookie session store for cfg. The claims travel in
+// the cookie, so there is no session table; rotating BACKEND_SESSION_SECRET
+// signs everyone out.
+func NewSessions(cfg config.Config) (*auth.Sessions, error) {
+	return auth.NewSessions(auth.SessionConfig{
+		Name:      SessionCookieName,
+		Key:       cfg.SessionKey,
+		TTL:       cfg.SessionTTL,
+		Path:      cookiePath(cfg.BasePath),
+		Secure:    cfg.SecureCookies,
+		KeepGroup: cfg.OIDCAllowedGroup,
+	})
+}
+
+// OIDCConfig is the relying party's configuration for cfg. The group is checked
+// at the callback here and again on every request by authorize.
+func OIDCConfig(cfg config.Config) auth.OIDCConfig {
+	return auth.OIDCConfig{
+		Issuer:       cfg.OIDCIssuer,
+		ClientID:     cfg.OIDCClientID,
+		ClientSecret: cfg.OIDCClientSecret,
+		RedirectURL:  cfg.OIDCRedirectURL,
+		Group:        cfg.OIDCAllowedGroup,
+		CookiePrefix: cookiePrefix,
+		CookiePath:   cookiePath(cfg.BasePath),
+		Secure:       cfg.SecureCookies,
+	}
 }
 
 // Server holds everything the HTTP routes need: configuration, the auth
@@ -32,20 +74,20 @@ type OIDC interface {
 type Server struct {
 	cfg      config.Config
 	oidc     OIDC
-	sessions *auth.SessionCodec
+	sessions *auth.Sessions
 	rpc      http.Handler
 	ui       fs.FS
 	log      *slog.Logger
+	// ready are the readiness checks /readyz runs.
+	ready []httpx.Check
 
 	// index.html with the base path filled in, and its validator. The bundle is
 	// embedded, so both are fixed for the life of the process.
 	index     []byte
 	indexETag string
 
-	// Form login: when each client's next attempt may be judged; see loginTurn.
-	loginMu      sync.Mutex
-	loginNext    map[string]time.Time
-	loginPenalty time.Duration
+	// Form login: spaces one client's attempts apart; see handleLoginSubmit.
+	throttle *httpx.Throttle
 }
 
 const baseMeta = `<meta name="tmui-base" content="">`
@@ -53,9 +95,13 @@ const baseMeta = `<meta name="tmui-base" content="">`
 // New builds a Server from its dependencies. It fails when the bundle cannot
 // be told where it is mounted: under a base path the UI would then call the
 // RPC at the origin root and miss the reverse proxy's route.
-func New(cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fs.FS, log *slog.Logger) (*Server, error) {
-	s := &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log,
-		loginNext: map[string]time.Time{}, loginPenalty: loginPenalty}
+func New(cfg config.Config, oidc OIDC, sessions *auth.Sessions, rpc http.Handler, ui fs.FS, log *slog.Logger,
+	ready ...httpx.Check) (*Server, error) {
+	if log == nil {
+		log = slog.Default()
+	}
+	s := &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log, ready: ready,
+		throttle: httpx.NewThrottle(loginGap, loginMaxWait)}
 	index, err := fs.ReadFile(ui, "index.html")
 	if err != nil {
 		return nil, errors.New("the UI bundle has no index.html")
@@ -99,11 +145,19 @@ func (s *Server) Handler() http.Handler {
 		}
 		return method + " " + s.cfg.BasePath + rest
 	}
-	// The session cookie is SameSite=Lax, which already keeps it off cross-site
-	// POSTs. This refuses them outright, by Sec-Fetch-Site or Origin, so a
-	// cross-site page can neither drive the daemon nor sign a visitor in as
-	// someone else. Requests without either header (curl, scripts) pass.
-	sameOrigin := http.NewCrossOriginProtection()
+	// The session cookie is SameSite=Lax, which still sends it on a form POST
+	// from a sibling subdomain. CrossOrigin refuses cross-site POSTs outright,
+	// by Sec-Fetch-Site or Origin, so a cross-site page can neither drive the
+	// daemon nor sign a visitor in as someone else. Requests without either
+	// header (curl, scripts) pass.
+
+	// Liveness and readiness, under the prefix like every other route: the
+	// container healthcheck probes BasePath+"/healthz", so a misrouted mount
+	// fails it.
+	probes := http.NewServeMux()
+	httpx.Health(probes, s.log, s.ready...)
+	mux.Handle(p("GET /healthz"), http.StripPrefix(s.cfg.BasePath, probes))
+	mux.Handle(p("GET /readyz"), http.StripPrefix(s.cfg.BasePath, probes))
 
 	mux.HandleFunc(p("GET /api/auth/login"), s.handleLogin)
 	mux.HandleFunc(p("GET /api/auth/callback"), s.handleCallback)
@@ -114,15 +168,15 @@ func (s *Server) Handler() http.Handler {
 	// Registered in every mode: oidc serves the same page without the form, and
 	// its fonts, background and icon come from /login-assets/ either way.
 	mux.HandleFunc(p("GET /login"), s.handleLoginPage)
-	mux.Handle(p("POST /login"), sameOrigin.Handler(http.HandlerFunc(s.handleLoginSubmit)))
+	mux.Handle(p("POST /login"), httpx.CrossOrigin(http.HandlerFunc(s.handleLoginSubmit)))
 	mux.Handle(p("GET /login-assets/"), loginAssetHandler(s.cfg.BasePath))
-	mux.Handle(p("POST /transmission/rpc"), sameOrigin.Handler(s.requireAuth(s.rpc)))
+	mux.Handle(p("POST /transmission/rpc"), httpx.CrossOrigin(s.requireAuth(s.rpc)))
 	// Without this, a GET on the RPC path falls through to the SPA handler and
 	// answers 200 with index.html. The daemon's RPC is POST-only. A methodless
 	// pattern here would conflict with "GET /", so spell the method out.
 	mux.HandleFunc(p("GET /transmission/rpc"), func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Allow", "POST")
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	})
 	mux.Handle(p("GET /"), s.staticHandler())
 	return mux
@@ -133,8 +187,8 @@ func (s *Server) Handler() http.Handler {
 // one that lacks the group (revoked since, or issued under a laxer setting).
 // Every gate asks here, so no two of them can disagree about who is signed in.
 func (s *Server) authorize(r *http.Request) int {
-	claims, err := s.sessions.Decode(r)
-	if err != nil {
+	claims, ok := s.sessions.Read(r)
+	if !ok {
 		return http.StatusUnauthorized
 	}
 	if !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
@@ -148,7 +202,7 @@ func (s *Server) authorize(r *http.Request) int {
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if status := s.authorize(r); status != http.StatusOK {
-			http.Error(w, strings.ToLower(http.StatusText(status)), status)
+			httpx.WriteError(w, status, strings.ToLower(http.StatusText(status)))
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -161,47 +215,45 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.cfg.BasePath+"/login", http.StatusFound)
 		return
 	}
-	s.oidc.StartLogin(w, r)
+	s.oidc.Start(w, r)
 }
 
 func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	// Only oidc mode has a provider; s.oidc is nil otherwise, and a stale
 	// bookmark hitting this route would panic.
 	if s.oidc == nil {
-		http.NotFound(w, r)
+		httpx.WriteError(w, http.StatusNotFound, "not found")
 		return
 	}
-	claims, err := s.oidc.HandleCallback(r)
-	s.oidc.ClearTransientCookies(w)
-	if err != nil {
-		s.log.Warn("oidc callback failed", "err", err)
-		http.Error(w, "authentication failed", http.StatusUnauthorized)
+	// Callback clears the transient cookies whatever the outcome, and refuses a
+	// user outside the allowed group.
+	claims, err := s.oidc.Callback(w, r)
+	switch {
+	case errors.Is(err, auth.ErrNotInGroup):
+		s.log.Warn("login rejected: missing group", "required", s.cfg.OIDCAllowedGroup)
+		httpx.WriteError(w, http.StatusForbidden, "forbidden")
 		return
-	}
-	if !claims.HasGroup(s.cfg.OIDCAllowedGroup) {
-		s.log.Warn("login rejected: missing group",
-			"subject", claims.Subject, "required", s.cfg.OIDCAllowedGroup)
-		http.Error(w, "forbidden", http.StatusForbidden)
+	case err != nil:
+		s.log.Warn("oidc callback failed", logging.Err(err))
+		httpx.WriteError(w, http.StatusUnauthorized, "authentication failed")
 		return
 	}
 	s.issueSession(w, r, claims)
 }
 
 func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
-	cookie, err := s.sessions.Encode(claims)
-	if err != nil {
-		s.log.Error("encode session", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+	if err := s.sessions.Issue(w, claims); err != nil {
+		s.log.Error("issue session", logging.Err(err))
+		httpx.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	http.SetCookie(w, cookie)
 	http.Redirect(w, r, s.cfg.BasePath+"/", http.StatusFound)
 }
 
 // handleLogout ends this app's session. It does not end the identity
 // provider's: the next sign-in may go straight through.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, s.sessions.ClearCookie())
+	s.sessions.Clear(w)
 	target := s.cfg.OIDCPostLogoutRedirectURL
 	if s.cfg.AuthMode == config.AuthModeForm {
 		// Root would just bounce off the session check and back to the form;
@@ -246,8 +298,8 @@ func (s *Server) staticHandler() http.Handler {
 			// only "/" -- otherwise a deep link still rendered the shell.
 			//
 			// Form mode redirects to the page that owns the form. OIDC renders
-			// the same card without one, with 200 and not 401: the container
-			// healthcheck probes "/" and counts >= 400 as unhealthy.
+			// the same card without one, with 200 and not 401: it is a page a
+			// browser lands on, not an API answer.
 			if s.authorize(r) != http.StatusOK {
 				if s.cfg.AuthMode == config.AuthModeForm {
 					http.Redirect(w, r, s.cfg.BasePath+"/login", http.StatusFound)

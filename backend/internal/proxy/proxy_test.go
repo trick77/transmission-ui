@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,7 +113,7 @@ func TestProxyUpstreamRefusalIsBadGateway(t *testing.T) {
 		if got := rec.Header().Get("WWW-Authenticate"); got != "" {
 			t.Fatalf("daemon %d: WWW-Authenticate leaked: %q", code, got)
 		}
-		if body := rec.Body.String(); body != "upstream refused the request" {
+		if body := rec.Body.String(); body != `{"error":"upstream refused the request"}` {
 			t.Fatalf("daemon %d: body %q", code, body)
 		}
 	}
@@ -132,5 +133,58 @@ func TestProxyUpstreamDown(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/transmission/rpc", nil))
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("want 502, got %d", rec.Code)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != `{"error":"upstream unavailable"}` {
+		t.Fatalf("want the JSON error body, got %q", body)
+	}
+}
+
+// Readiness: any daemon answer but a refusal or a 5xx, the 409 handshake
+// included, with our credentials on the probe.
+func TestReady(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		ok     bool
+	}{
+		{http.StatusConflict, true},
+		{http.StatusOK, true},
+		{http.StatusUnauthorized, false},
+		{http.StatusForbidden, false},
+		{http.StatusServiceUnavailable, false},
+	} {
+		var gotUser, gotPath string
+		daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotUser, _, _ = r.BasicAuth()
+			gotPath = r.URL.Path
+			w.WriteHeader(tc.status)
+		}))
+		t.Cleanup(daemon.Close)
+		ready, err := Ready(Config{Upstream: daemon.URL + "/ignored", User: "daemon", Pass: "p"})
+		if err != nil {
+			t.Fatalf("ready: %v", err)
+		}
+		err = ready(context.Background())
+		if (err == nil) != tc.ok {
+			t.Fatalf("daemon %d: want ok=%v, got err=%v", tc.status, tc.ok, err)
+		}
+		if gotUser != "daemon" || gotPath != "/transmission/rpc" {
+			t.Fatalf("daemon %d: probed %q as %q", tc.status, gotPath, gotUser)
+		}
+	}
+}
+
+func TestReadyDaemonDown(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := down.URL
+	down.Close()
+	ready, err := Ready(Config{Upstream: url})
+	if err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := ready(context.Background()); err == nil {
+		t.Fatal("an unreachable daemon reported ready")
+	}
+	if _, err := Ready(Config{Upstream: "/relative"}); err == nil {
+		t.Fatal("accepted a bad upstream")
 	}
 }

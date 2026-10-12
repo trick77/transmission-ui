@@ -25,6 +25,8 @@ fi
 # leaves the old bundles behind to be embedded with the new one.
 mkdir -p "$ROOT/backend/dist"
 rsync -a --delete "$ROOT/ui/dist/" "$ROOT/backend/dist/"
+# The mirror drops the tracked .gitkeep (ui/dist has none); put it back.
+touch "$ROOT/backend/dist/.gitkeep"
 
 go build -C "$ROOT/backend" -o "$ROOT/scripts/transmission-ui" .
 
@@ -33,7 +35,7 @@ go build -C "$ROOT/backend" -o "$ROOT/scripts/transmission-ui" .
 BACKEND_ADDR="127.0.0.1:$PORT" \
 BACKEND_AUTH_MODE=form \
 BACKEND_PUBLIC_URL="http://127.0.0.1:$PORT" \
-BACKEND_SESSION_SECRET=e2e-only-not-a-real-secret \
+BACKEND_SESSION_SECRET=e2e-only-not-a-real-secret-32-bytes-or-more \
 TM_RPC_UPSTREAM="${TM_RPC_UPSTREAM:-http://127.0.0.1:9091}" \
 TM_USER="${TM_USER:-dev}" \
 TM_PASS="${TM_PASS:-devpass}" \
@@ -42,7 +44,7 @@ echo $! > "$PIDFILE"
 
 # Wait for the listener rather than sleeping a fixed amount.
 for _ in $(seq 1 50); do
-  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/login"; then
+  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/healthz"; then
     echo "backend on http://127.0.0.1:$PORT (form mode, $(cat "$PIDFILE"))"
     exit 0
   fi

@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// The container healthcheck probes the app's own mount point: 2xx and 3xx are
-// healthy (signed-out form mode redirects to /login), a 4xx is the misrouting
-// the probe exists to catch, and no listener at all is unhealthy too.
+// The container healthcheck probes the liveness route under the app's own
+// mount point: 2xx only (a redirect means the probe is misrouted), and no
+// listener at all is unhealthy too.
 func TestHealthcheck(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -18,10 +18,10 @@ func TestHealthcheck(t *testing.T) {
 		status    int
 		want      int
 	}{
-		{"ok", "", "/", http.StatusOK, 0},
-		{"redirect to login", "", "/", http.StatusFound, 0},
-		{"not mounted here", "", "/", http.StatusNotFound, 1},
-		{"under a base path", "https://seedbox.example.com/transmission", "/transmission/", http.StatusOK, 0},
+		{"ok", "", "/healthz", http.StatusOK, 0},
+		{"redirect is misrouted", "", "/healthz", http.StatusFound, 1},
+		{"not mounted here", "", "/healthz", http.StatusNotFound, 1},
+		{"under a base path", "https://seedbox.example.com/transmission", "/transmission/healthz", http.StatusOK, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,5 +58,23 @@ func TestHealthcheckNoListener(t *testing.T) {
 
 	if got := healthcheck(); got != 1 {
 		t.Fatalf("healthcheck() = %d, want 1", got)
+	}
+}
+
+// A bad LOG_LEVEL stops the start instead of logging at a silent default.
+func TestRunRejectsUnknownLogLevel(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "verbose")
+	if err := run(); err == nil {
+		t.Fatal("want an error for LOG_LEVEL=verbose")
+	}
+}
+
+// Config faults surface from run, all at once.
+func TestRunRejectsBadConfig(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "error")
+	t.Setenv("BACKEND_PUBLIC_URL", "")
+	t.Setenv("BACKEND_AUTH_MODE", "form")
+	if err := run(); err == nil {
+		t.Fatal("want a config error")
 	}
 }

@@ -16,10 +16,14 @@ COPY backend/ ./
 # The bundle is embedded (//go:embed all:dist), so it has to be in place before
 # the build, not copied into the runtime image.
 COPY --from=ui /src/dist ./dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/transmission-ui .
+# Declared in this stage: an ARG is scoped to the stage it is declared in, and
+# one declared elsewhere leaves ${VERSION} empty here without a word.
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w -X github.com/trick77/ship/kit/version.Version=${VERSION}" \
+    -o /out/transmission-ui .
 
 FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=backend /out/transmission-ui /transmission-ui
 EXPOSE 8080
-USER nonroot:nonroot
 ENTRYPOINT ["/transmission-ui"]

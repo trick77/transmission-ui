@@ -48,13 +48,16 @@ services:
       TM_RPC_UPSTREAM: "${TM_RPC_UPSTREAM:-http://transmission:9091}"
       TM_USER: "${TM_USER}"
       TM_PASS: "${TM_PASS}"
+      # debug, info, warn or error; anything else stops the start.
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
 
     healthcheck:
-      # Probes the app's own mount point, which is BACKEND_PUBLIC_URL's path
-      # when it has one. 2xx and 3xx pass, because signed-out form mode answers
-      # with a redirect to the login page; a 404 means the app is not mounted
-      # where it thinks it is. The image is distroless, so the binary probes
-      # itself rather than shelling out to curl or wget.
+      # Probes the liveness route <BACKEND_PUBLIC_URL's path>/healthz; only a
+      # 2xx passes, so a 404 or a redirect means the app is not mounted where
+      # it thinks it is. The daemon is not probed here (<path>/readyz does
+      # that), so a daemon restart does not mark the UI unhealthy. The image
+      # is distroless, so the binary probes itself rather than shelling out
+      # to curl or wget.
       test: ["CMD", "/transmission-ui", "-healthcheck"]
       interval: 60s
       timeout: 5s
