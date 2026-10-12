@@ -21,7 +21,10 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    build: { outDir: "dist", sourcemap: false },
+    // Built straight into the Go embed directory, which also holds a tracked
+    // .gitkeep so `//go:embed all:dist` always has something to embed.
+    // emptyOutDir:true would delete it; the Makefile's fe-build clears the rest.
+    build: { outDir: "../backend/dist", emptyOutDir: false, sourcemap: false },
     // Component tests render views and fire DOM events via @testing-library/react, so jsdom.
     test: {
       environment: "jsdom",

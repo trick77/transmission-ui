@@ -19,14 +19,8 @@ if [[ "${1:-start}" == "stop" ]]; then
   exit 0
 fi
 
-# main.go embeds the bundle, so it must exist before the build.
-[[ -d "$ROOT/ui/dist" ]] || { echo "ui/dist missing; run npm run build in ui/ first" >&2; exit 1; }
-# Mirror, not copy: every UI build emits new hashed names, and a plain copy
-# leaves the old bundles behind to be embedded with the new one.
-mkdir -p "$ROOT/backend/dist"
-rsync -a --delete "$ROOT/ui/dist/" "$ROOT/backend/dist/"
-# The mirror drops the tracked .gitkeep (ui/dist has none); put it back.
-touch "$ROOT/backend/dist/.gitkeep"
+# main.go embeds the bundle vite builds into backend/dist, so it must exist before the build.
+[[ -f "$ROOT/backend/dist/index.html" ]] || { echo "backend/dist has no bundle; run make fe-build first" >&2; exit 1; }
 
 go build -C "$ROOT/backend" -o "$ROOT/scripts/transmission-ui" .
 

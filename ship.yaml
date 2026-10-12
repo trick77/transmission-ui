@@ -4,7 +4,7 @@ go:
   # Attributes coverage across package boundaries.
   coverpkg: ./...
 ui:
-  # make fe-build syncs ui/dist into backend/dist: main.go embeds it, so go build needs it first.
+  # vite builds into backend/dist: main.go embeds it, so go build needs it first.
   build: cd .. && make fe-build
   embed: backend/dist
   lint: npm run lint

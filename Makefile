@@ -23,12 +23,11 @@ fe-test:
 fe-e2e:
 	cd ui && npm run e2e
 
-# main.go embeds backend/dist: rsync --delete, a plain cp keeps stale hashed bundles, which get embedded.
-# The sync drops the tracked .gitkeep (ui/dist has none); the touch puts it back.
+# vite builds into backend/dist (main.go embeds it) with emptyOutDir:false so the tracked .gitkeep survives; the
+# stale build is cleared here instead, everything but .gitkeep, so an old hashed bundle never stays embedded.
 fe-build:
+	find backend/dist -mindepth 1 ! -name '.gitkeep' -delete
 	cd ui && npm ci && npm run build
-	rsync -a --delete ui/dist/ backend/dist/
-	touch backend/dist/.gitkeep
 
 build: fe-build
 
