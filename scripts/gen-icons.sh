@@ -132,4 +132,4 @@ if [[ "$fav_warm" != "1" ]]; then
 fi
 
 [[ "$fail" == 0 ]] || exit 1
-echo "gen-icons: wrote $(cd "$OUT" && ls icon-*.png apple-touch-icon.png | tr '\n' ' ')"
+echo "gen-icons: wrote $(cd "$OUT" && printf '%s ' icon-*.png apple-touch-icon.png)"
