@@ -73,7 +73,7 @@ func Load() (Config, error) {
 		SessionTTL:                24 * time.Hour,
 		OIDCPostLogoutRedirectURL: r.String("BACKEND_OIDC_POST_LOGOUT_REDIRECT_URL", ""),
 		OIDCAllowedGroup:          r.String("BACKEND_OIDC_ALLOWED_GROUP", ""),
-		RPCUpstream:               r.String("TM_RPC_UPSTREAM", "http://transmission:9091"),
+		RPCUpstream:               r.String("TRANSMISSION_RPC_UPSTREAM", "http://transmission:9091"),
 	}
 	secret := r.String("BACKEND_SESSION_SECRET", "")
 	// Deployments sit behind a TLS-terminating proxy (see compose.yaml), but
@@ -112,7 +112,7 @@ func Load() (Config, error) {
 			r.Fail("BACKEND_OIDC_REDIRECT_URL (%s) must sit under BACKEND_PUBLIC_URL (%s)",
 				cfg.OIDCRedirectURL, cfg.PublicURL)
 		}
-		cfg.RPCPass = r.String("TM_PASS", "")
+		cfg.RPCPass = r.String("TRANSMISSION_PASSWORD", "")
 	case AuthModeForm:
 		// There is no group source in this mode: the credential check is the
 		// whole decision. Leaving the setting in force would shut out every
@@ -128,7 +128,7 @@ func Load() (Config, error) {
 		}
 		// The form checks the daemon's RPC credentials, so a blank password
 		// would let anyone in with just the username.
-		cfg.RPCPass = r.Required("TM_PASS")
+		cfg.RPCPass = r.Required("TRANSMISSION_PASSWORD")
 	default:
 		r.Fail("BACKEND_AUTH_MODE must be %q or %q, got %q", AuthModeOIDC, AuthModeForm, cfg.AuthMode)
 	}
@@ -140,7 +140,7 @@ func Load() (Config, error) {
 		}
 		cfg.SessionKey = []byte(secret)
 	}
-	cfg.RPCUser = r.Required("TM_USER")
+	cfg.RPCUser = r.Required("TRANSMISSION_USER")
 
 	if err := r.Err(); err != nil {
 		return Config{}, err

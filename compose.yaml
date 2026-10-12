@@ -12,11 +12,11 @@
 #   - proxies /transmission/rpc to the daemon, attaching the daemon's basic auth
 #     on the way out, so the browser never sees those credentials.
 #
-#   cp .env.example .env   # fill in the OIDC block, TM_* and the session secret
+#   cp .env.example .env   # fill in the OIDC block, TRANSMISSION_* and the session secret
 #   docker compose up -d                 # pulls ghcr.io/trick77/transmission-ui
 #   docker compose up -d --build         # or build locally from the Containerfile
 #
-# The daemon itself is NOT in this image. TM_RPC_UPSTREAM points at it; it keeps
+# The daemon itself is NOT in this image. TRANSMISSION_RPC_UPSTREAM points at it; it keeps
 # its own RPC port for transmission-remote and the *arr apps.
 #
 # 4.1.x speaks JSON-RPC 2.0 with snake_case keys (rpc_version 19); the UI targets that and
@@ -35,7 +35,7 @@ services:
       BACKEND_PUBLIC_URL: "${BACKEND_PUBLIC_URL}"
       BACKEND_SESSION_SECRET: "${BACKEND_SESSION_SECRET:?generate one, e.g. openssl rand -base64 48}"
       # oidc (an identity provider) or form (a login page checked against
-      # TM_USER/TM_PASS, for setups with no IdP).
+      # TRANSMISSION_USER/TRANSMISSION_PASSWORD, for setups with no IdP).
       BACKEND_AUTH_MODE: "${BACKEND_AUTH_MODE:-oidc}"
       BACKEND_OIDC_ISSUER: "${BACKEND_OIDC_ISSUER}"
       BACKEND_OIDC_CLIENT_ID: "${BACKEND_OIDC_CLIENT_ID}"
@@ -45,9 +45,9 @@ services:
       # Empty = no group check; every authenticated user gets in.
       BACKEND_OIDC_ALLOWED_GROUP: "${BACKEND_OIDC_ALLOWED_GROUP:-}"
       # The daemon: where it is, and the RPC credentials to present to it.
-      TM_RPC_UPSTREAM: "${TM_RPC_UPSTREAM:-http://transmission:9091}"
-      TM_USER: "${TM_USER}"
-      TM_PASS: "${TM_PASS}"
+      TRANSMISSION_RPC_UPSTREAM: "${TRANSMISSION_RPC_UPSTREAM:-http://transmission:9091}"
+      TRANSMISSION_USER: "${TRANSMISSION_USER}"
+      TRANSMISSION_PASSWORD: "${TRANSMISSION_PASSWORD}"
       # debug, info, warn or error; anything else stops the start.
       LOG_LEVEL: "${LOG_LEVEL:-info}"
 

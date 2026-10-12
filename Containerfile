@@ -1,6 +1,6 @@
 # The shipped image: the UI bundle embedded in a Go binary that terminates OIDC
 # and proxies RPC to a transmission-daemon running elsewhere. It does NOT
-# contain a daemon; point TM_RPC_UPSTREAM at yours.
+# contain a daemon; point TRANSMISSION_RPC_UPSTREAM at yours.
 FROM node:26-alpine AS ui
 WORKDIR /src/ui
 COPY ui/package.json ui/package-lock.json ./

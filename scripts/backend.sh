@@ -32,9 +32,9 @@ BACKEND_ADDR="127.0.0.1:$PORT" \
 BACKEND_AUTH_MODE=form \
 BACKEND_PUBLIC_URL="http://127.0.0.1:$PORT" \
 BACKEND_SESSION_SECRET=e2e-only-not-a-real-secret-32-bytes-or-more \
-TM_RPC_UPSTREAM="${TM_RPC_UPSTREAM:-http://127.0.0.1:9091}" \
-TM_USER="${TM_USER:-dev}" \
-TM_PASS="${TM_PASS:-devpass}" \
+TRANSMISSION_RPC_UPSTREAM="${TRANSMISSION_RPC_UPSTREAM:-http://127.0.0.1:9091}" \
+TRANSMISSION_USER="${TRANSMISSION_USER:-dev}" \
+TRANSMISSION_PASSWORD="${TRANSMISSION_PASSWORD:-devpass}" \
   "$ROOT/scripts/transmission-ui" > "$ROOT/scripts/backend.log" 2>&1 &
 echo $! > "$PIDFILE"
 
