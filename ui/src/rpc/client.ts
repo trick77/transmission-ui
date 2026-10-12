@@ -47,6 +47,21 @@ function rpcEndpoint(): string {
   }
   return endpoint;
 }
+// The backend answers its own failures (daemon unreachable, daemon refusing our credentials)
+// as {"error": "..."}. Anything else -- a reverse proxy's HTML page, the daemon's own text --
+// has nothing worth showing, so the status alone stands in.
+async function httpErrorMessage(res: Response): Promise<string> {
+  const status = `HTTP ${res.status}`;
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (typeof body.error === "string" && body.error)
+      return `${body.error} (${status})`;
+  } catch {
+    /* not JSON */
+  }
+  return status;
+}
+
 let sessionId: string | null = null;
 let id = 0;
 
@@ -85,7 +100,7 @@ export async function rpc<T = Record<string, unknown>>(
   // 204 is the JSON-RPC notification response. We never send notifications, so a 204 means
   // the request lost its id somewhere and there is nothing to parse.
   if (res.status === 204) throw new RpcError("empty response", method);
-  if (!res.ok) throw new RpcError(`HTTP ${res.status}`, method);
+  if (!res.ok) throw new RpcError(await httpErrorMessage(res), method);
   const body = (await res.json()) as RpcResponse<T>;
   if (body.error)
     throw new RpcError(

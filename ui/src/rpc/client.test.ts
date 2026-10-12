@@ -90,6 +90,19 @@ describe("rpc", () => {
     await expect(rpc("x")).rejects.toThrow("HTTP 500");
   });
 
+  it("shows the backend's {error} message, else the bare status", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      res(502, { error: "upstream unavailable" }),
+    );
+    await expect(rpc("x")).rejects.toThrow(
+      /^upstream unavailable \(HTTP 502\)$/,
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("<html>Bad Gateway</html>", { status: 502 }),
+    );
+    await expect(rpc("x")).rejects.toThrow(/^HTTP 502$/);
+  });
+
   it("carries the error data through, so a failed port test says which family failed", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       res(200, {
