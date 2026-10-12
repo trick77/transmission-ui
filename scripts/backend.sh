@@ -14,7 +14,9 @@ PORT="${TM_APP_PORT:-8127}"
 PIDFILE="$ROOT/scripts/backend.pid"
 
 if [[ "${1:-start}" == "stop" ]]; then
-  [[ -f "$PIDFILE" ]] && kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  if [[ -f "$PIDFILE" ]]; then
+    kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  fi
   rm -f "$PIDFILE"
   exit 0
 fi
