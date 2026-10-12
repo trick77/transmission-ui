@@ -50,11 +50,10 @@ func TestHealthcheck(t *testing.T) {
 	}
 }
 
+// Port 0 never accepts a connection; a closed httptest port could be rebound by
+// a parallel test.
 func TestHealthcheckNoListener(t *testing.T) {
-	srv := httptest.NewServer(http.NotFoundHandler())
-	addr := srv.Listener.Addr().String()
-	srv.Close()
-	t.Setenv("BACKEND_ADDR", addr)
+	t.Setenv("BACKEND_ADDR", ":0")
 	t.Setenv("BACKEND_PUBLIC_URL", "")
 
 	if got := healthcheck(); got != 1 {

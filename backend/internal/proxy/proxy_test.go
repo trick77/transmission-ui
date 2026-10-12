@@ -96,16 +96,15 @@ func TestProxyUpstreamRefusalIsBadGateway(t *testing.T) {
 	for _, code := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Transmission"`)
-			w.WriteHeader(code)
-			_, _ = io.WriteString(w, "<h1>401: Unauthorized</h1>")
+			http.Error(w, http.StatusText(code), code)
 		}))
+		t.Cleanup(daemon.Close)
 		h, err := New(Config{Upstream: daemon.URL, User: "u", Pass: "wrong"})
 		if err != nil {
 			t.Fatalf("new: %v", err)
 		}
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/transmission/rpc", nil))
-		daemon.Close()
 
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("daemon %d: want 502, got %d", code, rec.Code)
