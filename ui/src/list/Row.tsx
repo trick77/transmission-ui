@@ -1,107 +1,229 @@
-import { memo } from 'react'
-import { Icon } from '../icons/Icon'
-import { ago, bytes, compact, date, eta, percent, rateParts, ratio, ratioOwed } from '../lib/format'
-import { hostOf, relDir, statusView, swarmOf } from '../lib/model'
-import { trackerName } from '../lib/trackers'
-import { Status, type TorrentSummary } from '../rpc/types'
+import { memo } from "react";
+import { Icon } from "../icons/Icon";
+import {
+  ago,
+  bytes,
+  compact,
+  date,
+  eta,
+  percent,
+  rateParts,
+  ratio,
+  ratioOwed,
+} from "../lib/format";
+import { hostOf, relDir, statusView, swarmOf } from "../lib/model";
+import { trackerName } from "../lib/trackers";
+import { Status, type TorrentSummary } from "../rpc/types";
 
-function Speed({ bps, dir }: { bps: number; dir: 'dl' | 'ul' }) {
-  if (bps <= 0) return <span className="spd zero num">—</span>
-  const [n, u] = rateParts(bps)
-  return <span className={'spd num ' + dir}><Icon name={dir === 'dl' ? 'down' : 'up'} className="arrow" />{n} {u}</span>
+function Speed({ bps, dir }: { bps: number; dir: "dl" | "ul" }) {
+  if (bps <= 0) return <span className="spd zero num">—</span>;
+  const [n, u] = rateParts(bps);
+  return (
+    <span className={"spd num " + dir}>
+      <Icon name={dir === "dl" ? "down" : "up"} className="arrow" />
+      {n} {u}
+    </span>
+  );
 }
 
 /** A row's part in a bulk removal: queued behind others, being deleted now, or failed. */
-export type RowRemoval = { kind: 'queued' | 'active' | 'failed'; text: string } | null
+export type RowRemoval = {
+  kind: "queued" | "active" | "failed";
+  text: string;
+} | null;
 
-export const Row = memo(function Row({ t, selected, focused, base, compactRow, removal, menuOpen, onMore }: { t: TorrentSummary; selected: boolean; focused: boolean; base: string; compactRow: boolean; removal?: RowRemoval; menuOpen: boolean; onMore: (id: number, trigger: HTMLElement) => void }) {
-  const s = statusView(t)
-  const { seeds, leechers } = swarmOf(t)
-  const swarm = seeds + leechers
-  const peers = t.peers_connected === 0 ? (swarm ? `No peers · ${compact(swarm)} in swarm` : 'No peers')
-    : `${t.peers_sending_to_us + t.peers_getting_from_us} of ${t.peers_connected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ''}`
+export const Row = memo(function Row({
+  t,
+  selected,
+  focused,
+  base,
+  compactRow,
+  removal,
+  menuOpen,
+  onMore,
+}: {
+  t: TorrentSummary;
+  selected: boolean;
+  focused: boolean;
+  base: string;
+  compactRow: boolean;
+  removal?: RowRemoval;
+  menuOpen: boolean;
+  onMore: (id: number, trigger: HTMLElement) => void;
+}) {
+  const s = statusView(t);
+  const { seeds, leechers } = swarmOf(t);
+  const swarm = seeds + leechers;
+  const peers =
+    t.peers_connected === 0
+      ? swarm
+        ? `No peers · ${compact(swarm)} in swarm`
+        : "No peers"
+      : `${t.peers_sending_to_us + t.peers_getting_from_us} of ${t.peers_connected} peers${swarm ? ` · ${compact(swarm)} in swarm` : ""}`;
   // A removal in progress outranks the usual status line: it is the only thing about this
   // row that is still changing, and the row is on its way off screen.
-  const sub = removal ? <span className="rm-st">{removal.text}</span>
-    : t.error !== 0 ? <span style={{ color: 'var(--err)' }}>{t.error_string || 'Error'}</span>
-    : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
-    : peers
+  const sub = removal ? (
+    <span className="rm-st">{removal.text}</span>
+  ) : t.error !== 0 ? (
+    <span style={{ color: "var(--err)" }}>{t.error_string || "Error"}</span>
+  ) : t.status === Status.Check ? (
+    `Verifying local data · ${percent(t.recheck_progress)}`
+  ) : (
+    peers
+  );
   // `failed` keeps full opacity: it is the one state the user still has to act on.
-  const rmCls = removal ? ' pending' + (removal.kind === 'failed' ? ' failed' : '') : ''
-  const dir = relDir(t.download_dir, base)
+  const rmCls = removal
+    ? " pending" + (removal.kind === "failed" ? " failed" : "")
+    : "";
+  const dir = relDir(t.download_dir, base);
   // Pause moved into the context menu, where it is the first entry: the column holds one
   // trigger and keeps a fixed width, so it lands in the same place on every row.
   const acts = (
     <span className="acts">
-      <button className="more" title="More" onClick={e => { e.stopPropagation(); onMore(t.id, e.currentTarget) }}><Icon name="more" size={13} /></button>
+      <button
+        className="more"
+        title="More"
+        onClick={(e) => {
+          e.stopPropagation();
+          onMore(t.id, e.currentTarget);
+        }}
+      >
+        <Icon name="more" size={13} />
+      </button>
     </span>
-  )
-  const rowCls = (selected ? ' sel' : '') + (focused ? ' focus' : '') + (menuOpen ? ' menu-open' : '') + rmCls
+  );
+  const rowCls =
+    (selected ? " sel" : "") +
+    (focused ? " focus" : "") +
+    (menuOpen ? " menu-open" : "") +
+    rmCls;
 
   if (compactRow) {
-    const host = t.tracker_stats.length ? hostOf(t.tracker_stats[0].announce) : ''
+    const host = t.tracker_stats.length
+      ? hostOf(t.tracker_stats[0].announce)
+      : "";
     // The cell shows the name; the announce host stays one hover away.
-    const trkName = host ? trackerName(host) : ''
+    const trkName = host ? trackerName(host) : "";
     // The second line is gone, so what it carried moves into tooltips: the status word and
     // the peer counts onto the dot. The labels stay on screen as chips.
-    const why = t.error !== 0 ? (t.error_string || 'Error')
-      : t.status === Status.Check ? `Verifying local data · ${percent(t.recheck_progress)}`
-      : `${s.label} · ${peers}`
-    const nameTitle = removal ? removal.text : t.error !== 0 ? why : t.name
+    const why =
+      t.error !== 0
+        ? t.error_string || "Error"
+        : t.status === Status.Check
+          ? `Verifying local data · ${percent(t.recheck_progress)}`
+          : `${s.label} · ${peers}`;
+    const nameTitle = removal ? removal.text : t.error !== 0 ? why : t.name;
     return (
-      <div className={'row one' + rowCls + (t.error !== 0 ? ' is-err' : '')} data-id={t.id}>
+      <div
+        className={"row one" + rowCls + (t.error !== 0 ? " is-err" : "")}
+        data-id={t.id}
+      >
         <span className="chk" role="checkbox" aria-checked={selected} />
         {/* Its own track: as a child of .name the name's left edge moved with whatever sat
             beside it, and on a pending row the removal text changes width live. */}
-        <span className={'sdot ' + s.kind} title={removal ? removal.text : why} />
+        <span
+          className={"sdot " + s.kind}
+          title={removal ? removal.text : why}
+        />
         <div className="name">
-          <span className="t" title={nameTitle}>{t.name}{removal ? <span className="rm-st"> · {removal.text}</span> : null}</span>
-          {t.labels.map(l => <span key={l} className="chip lbl">{l}</span>)}
+          <span className="t" title={nameTitle}>
+            {t.name}
+            {removal ? <span className="rm-st"> · {removal.text}</span> : null}
+          </span>
+          {t.labels.map((l) => (
+            <span key={l} className="chip lbl">
+              {l}
+            </span>
+          ))}
         </div>
         {acts}
         <span className="num r muted">{bytes(t.size_when_done)}</span>
         <div className="prog">
-          <div className={'bar ' + s.bar} style={{ ['--p' as string]: percent(t.percent_done, 1) }}><i /></div>
+          <div
+            className={"bar " + s.bar}
+            style={{ ["--p" as string]: percent(t.percent_done, 1) }}
+          >
+            <i />
+          </div>
           <span className="num pv">{percent(t.percent_done)}</span>
         </div>
-        <span className={'num r' + (seeds ? '' : ' faint')}>{seeds ? compact(seeds) : '—'}</span>
+        <span className={"num r" + (seeds ? "" : " faint")}>
+          {seeds ? compact(seeds) : "—"}
+        </span>
         {/* Below 1.0 is the interesting case — those still owe the swarm and need seeding —
             so they keep the full ink and the settled ones fade back. */}
-        <span className={'num r' + (ratioOwed(t.upload_ratio) ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
+        <span className={"num r" + (ratioOwed(t.upload_ratio) ? "" : " muted")}>
+          {ratio(t.upload_ratio)}
+        </span>
         <span className="num r muted">{bytes(t.uploaded_ever, 1)}</span>
         {/* Relative like Last active; the exact date stays one hover away. */}
-        <span className="num r muted" title={date(t.added_date)}>{ago(t.added_date)}</span>
+        <span className="num r muted" title={date(t.added_date)}>
+          {ago(t.added_date)}
+        </span>
         <span className="num r muted">{ago(t.activity_date)}</span>
-        <span className={'tcell' + (host ? '' : ' faint')} title={host}>{trkName || '—'}</span>
-        <span className={'tcell' + (dir ? '' : ' faint')} title={dir}>{dir ? dir + '/' : '—'}</span>
+        <span className={"tcell" + (host ? "" : " faint")} title={host}>
+          {trkName || "—"}
+        </span>
+        <span className={"tcell" + (dir ? "" : " faint")} title={dir}>
+          {dir ? dir + "/" : "—"}
+        </span>
       </div>
-    )
+    );
   }
 
   return (
-    <div className={'row' + rowCls} data-id={t.id}>
+    <div className={"row" + rowCls} data-id={t.id}>
       <span className="chk" role="checkbox" aria-checked={selected} />
       <div className="name">
         <div className="t">
           <span>{t.name}</span>
-          {t.labels.map(l => <span key={l} className="chip lbl">{l}</span>)}
+          {t.labels.map((l) => (
+            <span key={l} className="chip lbl">
+              {l}
+            </span>
+          ))}
         </div>
         <div className="m">
-          <span className={'chip ' + s.kind}><span className="dot" />{s.label}</span>
-          <span className="sep" /><span>{sub}</span>
-          {dir ? <><span className="sep" /><span>{dir}/</span></> : null}
+          <span className={"chip " + s.kind}>
+            <span className="dot" />
+            {s.label}
+          </span>
+          <span className="sep" />
+          <span>{sub}</span>
+          {dir ? (
+            <>
+              <span className="sep" />
+              <span>{dir}/</span>
+            </>
+          ) : null}
         </div>
       </div>
       {acts}
       <span className="num r muted">{bytes(t.size_when_done)}</span>
       <div className="prog">
-        <div className={'bar ' + s.bar} style={{ ['--p' as string]: percent(t.percent_done, 1) }}><i /></div>
-        <span className="num"><span>{percent(t.percent_done)}</span>{seeds ? <span className="av" title="Seeds in swarm">{compact(seeds)} seeds</span> : null}</span>
+        <div
+          className={"bar " + s.bar}
+          style={{ ["--p" as string]: percent(t.percent_done, 1) }}
+        >
+          <i />
+        </div>
+        <span className="num">
+          <span>{percent(t.percent_done)}</span>
+          {seeds ? (
+            <span className="av" title="Seeds in swarm">
+              {compact(seeds)} seeds
+            </span>
+          ) : null}
+        </span>
       </div>
       <Speed bps={t.rate_download} dir="dl" />
       <Speed bps={t.rate_upload} dir="ul" />
-      <span className={'num r' + (ratioOwed(t.upload_ratio) ? '' : ' muted')}>{ratio(t.upload_ratio)}</span>
-      <span className="num r muted">{eta(t.eta, t.status === Status.Seed || t.status === Status.SeedWait)}</span>
+      <span className={"num r" + (ratioOwed(t.upload_ratio) ? "" : " muted")}>
+        {ratio(t.upload_ratio)}
+      </span>
+      <span className="num r muted">
+        {eta(t.eta, t.status === Status.Seed || t.status === Status.SeedWait)}
+      </span>
     </div>
-  )
-})
+  );
+});

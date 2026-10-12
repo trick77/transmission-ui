@@ -1,113 +1,159 @@
-import { describe, expect, it } from 'vitest'
-import { ago, bytes, compact, date, dateTime, daysSince, duration, eta, gb, inFuture, percent, rateParts, ratio, ratioOwed, ratioValue, RATIO_INF, RATIO_NA } from './format'
+import { describe, expect, it } from "vitest";
+import {
+  ago,
+  bytes,
+  compact,
+  date,
+  dateTime,
+  daysSince,
+  duration,
+  eta,
+  gb,
+  inFuture,
+  percent,
+  rateParts,
+  ratio,
+  ratioOwed,
+  ratioValue,
+  RATIO_INF,
+  RATIO_NA,
+} from "./format";
 
-describe('bytes', () => {
-  it('formats SI units with sensible digits', () => {
-    expect(bytes(0)).toBe('0 B')
-    expect(bytes(999)).toBe('999 B')
-    expect(bytes(1000)).toBe('1.00 kB')
-    expect(bytes(12_345)).toBe('12.3 kB')
-    expect(bytes(123_456_789)).toBe('123 MB')
-    expect(bytes(4.71e9)).toBe('4.71 GB')
-    expect(bytes(1.3e12)).toBe('1.30 TB')
-    expect(bytes(-1)).toBe('—')
-    expect(bytes(NaN)).toBe('—')
-  })
-  it('honours explicit digits', () => { expect(bytes(1536, 0)).toBe('2 kB') })
-  it('one digit is always shown, so the Uploaded column keeps its decimal point', () => {
+describe("bytes", () => {
+  it("formats SI units with sensible digits", () => {
+    expect(bytes(0)).toBe("0 B");
+    expect(bytes(999)).toBe("999 B");
+    expect(bytes(1000)).toBe("1.00 kB");
+    expect(bytes(12_345)).toBe("12.3 kB");
+    expect(bytes(123_456_789)).toBe("123 MB");
+    expect(bytes(4.71e9)).toBe("4.71 GB");
+    expect(bytes(1.3e12)).toBe("1.30 TB");
+    expect(bytes(-1)).toBe("—");
+    expect(bytes(NaN)).toBe("—");
+  });
+  it("honours explicit digits", () => {
+    expect(bytes(1536, 0)).toBe("2 kB");
+  });
+  it("one digit is always shown, so the Uploaded column keeps its decimal point", () => {
     // The adaptive default drops the decimal above 100, which is why 773 MB read bare.
-    expect(bytes(773e6)).toBe('773 MB')
-    expect(bytes(773e6, 1)).toBe('773.0 MB')
-    expect(bytes(0, 1)).toBe('0.0 B')
-    expect(bytes(21.94e9, 1)).toBe('21.9 GB')
-  })
-  it('gb converts', () => { expect(gb(2e9)).toBe(2) })
-})
+    expect(bytes(773e6)).toBe("773 MB");
+    expect(bytes(773e6, 1)).toBe("773.0 MB");
+    expect(bytes(0, 1)).toBe("0.0 B");
+    expect(bytes(21.94e9, 1)).toBe("21.9 GB");
+  });
+  it("gb converts", () => {
+    expect(gb(2e9)).toBe(2);
+  });
+});
 
-describe('rates', () => {
-  it('rateParts splits number and unit', () => { expect(rateParts(1_210_000)).toEqual(['1.21', 'MB/s']) })
-})
+describe("rates", () => {
+  it("rateParts splits number and unit", () => {
+    expect(rateParts(1_210_000)).toEqual(["1.21", "MB/s"]);
+  });
+});
 
-describe('ratio / eta / duration', () => {
-  it('ratio handles the daemon sentinels: -1 n/a, -2 infinite', () => {
-    expect(ratio(-1)).toBe('—'); expect(ratio(-2)).toBe('∞'); expect(ratio(3.4167)).toBe('3.42')
-    expect(ratioValue(-1)).toBe(0); expect(ratioValue(-2)).toBe(Infinity); expect(ratioValue(1.5)).toBe(1.5)
-  })
-  it('only a real debt is owed: the sentinels are not', () => {
-    expect(ratioOwed(0.98)).toBe(true)
-    expect(ratioOwed(0)).toBe(true)
-    expect(ratioOwed(1)).toBe(false)
-    expect(ratioOwed(3.42)).toBe(false)
+describe("ratio / eta / duration", () => {
+  it("ratio handles the daemon sentinels: -1 n/a, -2 infinite", () => {
+    expect(ratio(-1)).toBe("—");
+    expect(ratio(-2)).toBe("∞");
+    expect(ratio(3.4167)).toBe("3.42");
+    expect(ratioValue(-1)).toBe(0);
+    expect(ratioValue(-2)).toBe(Infinity);
+    expect(ratioValue(1.5)).toBe(1.5);
+  });
+  it("only a real debt is owed: the sentinels are not", () => {
+    expect(ratioOwed(0.98)).toBe(true);
+    expect(ratioOwed(0)).toBe(true);
+    expect(ratioOwed(1)).toBe(false);
+    expect(ratioOwed(3.42)).toBe(false);
     // ratioValue flattens n/a to 0, which would otherwise ink an unknown ratio
     // as loudly as a genuine debt. Infinite owes nothing either.
-    expect(ratioOwed(RATIO_NA)).toBe(false)
-    expect(ratioOwed(RATIO_INF)).toBe(false)
-  })
-  it('eta', () => { expect(eta(-1)).toBe('—'); expect(eta(10, true)).toBe('∞'); expect(eta(192)).toBe('3m 12s') })
-  it('duration', () => {
-    expect(duration(5)).toBe('5 s')
-    expect(duration(3600 * 2 + 60 * 5)).toBe('2h 5m')
-    expect(duration(86400 * 2 + 3600 * 4)).toBe('2d 4h')
-  })
-  it('ago / inFuture', () => {
-    const now = Date.now() / 1000
-    expect(ago(0)).toBe('—')
-    expect(ago(now - 120)).toMatch(/^2m/)
-    expect(inFuture(now - 1)).toBe('now')
-    expect(inFuture(now + 300)).toMatch(/^in 5m/)
-  })
-  it('ago climbs one unit at a time, and never mixes two', () => {
-    const now = Date.now() / 1000
-    const H = 3600, D = 86400
-    expect(ago(now - 55 * 60)).toBe('55m ago')
-    expect(ago(now - 23 * H)).toBe('23h ago')
+    expect(ratioOwed(RATIO_NA)).toBe(false);
+    expect(ratioOwed(RATIO_INF)).toBe(false);
+  });
+  it("eta", () => {
+    expect(eta(-1)).toBe("—");
+    expect(eta(10, true)).toBe("∞");
+    expect(eta(192)).toBe("3m 12s");
+  });
+  it("duration", () => {
+    expect(duration(5)).toBe("5 s");
+    expect(duration(3600 * 2 + 60 * 5)).toBe("2h 5m");
+    expect(duration(86400 * 2 + 3600 * 4)).toBe("2d 4h");
+  });
+  it("ago / inFuture", () => {
+    const now = Date.now() / 1000;
+    expect(ago(0)).toBe("—");
+    expect(ago(now - 120)).toMatch(/^2m/);
+    expect(inFuture(now - 1)).toBe("now");
+    expect(inFuture(now + 300)).toMatch(/^in 5m/);
+  });
+  it("ago climbs one unit at a time, and never mixes two", () => {
+    const now = Date.now() / 1000;
+    const H = 3600,
+      D = 86400;
+    expect(ago(now - 55 * 60)).toBe("55m ago");
+    expect(ago(now - 23 * H)).toBe("23h ago");
     // The hour stops being interesting the moment a day has passed.
-    expect(ago(now - D - 7 * H)).toBe('1 day ago')
-    expect(ago(now - 3 * D)).toBe('3 days ago')
-    expect(ago(now - 7 * D)).toBe('1 week ago')
-    expect(ago(now - 20 * D)).toBe('2 weeks ago')
-    expect(ago(now - 30 * D)).toBe('1 month ago')
-    expect(ago(now - 150 * D)).toBe('5 months ago')
-    expect(ago(now - 365 * D)).toBe('1 year ago')
-    expect(ago(now - 800 * D)).toBe('2 years ago')
-  })
-  it('ago flips singular to plural exactly at two', () => {
-    const now = Date.now() / 1000, D = 86400
-    expect(ago(now - D)).toBe('1 day ago')
-    expect(ago(now - 2 * D)).toBe('2 days ago')
-    expect(ago(now - 14 * D)).toBe('2 weeks ago')
-    expect(ago(now - 60 * D)).toBe('2 months ago')
-  })
-  it('ago flips at the exact hour and day boundaries', () => {
-    const now = Date.now() / 1000, H = 3600
-    expect(ago(now - 59 * 60)).toBe('59m ago')
-    expect(ago(now - 60 * 60)).toBe('1h ago')
-    expect(ago(now - 24 * H)).toBe('1 day ago')
-  })
-  it('ago keeps seconds: activity_date ticks constantly on a busy list', () => {
-    const now = Date.now() / 1000
-    expect(ago(now - 5)).toBe('5s ago')
-    expect(ago(now - 59)).toBe('59s ago')
-    expect(ago(now - 60)).toBe('1m ago')
+    expect(ago(now - D - 7 * H)).toBe("1 day ago");
+    expect(ago(now - 3 * D)).toBe("3 days ago");
+    expect(ago(now - 7 * D)).toBe("1 week ago");
+    expect(ago(now - 20 * D)).toBe("2 weeks ago");
+    expect(ago(now - 30 * D)).toBe("1 month ago");
+    expect(ago(now - 150 * D)).toBe("5 months ago");
+    expect(ago(now - 365 * D)).toBe("1 year ago");
+    expect(ago(now - 800 * D)).toBe("2 years ago");
+  });
+  it("ago flips singular to plural exactly at two", () => {
+    const now = Date.now() / 1000,
+      D = 86400;
+    expect(ago(now - D)).toBe("1 day ago");
+    expect(ago(now - 2 * D)).toBe("2 days ago");
+    expect(ago(now - 14 * D)).toBe("2 weeks ago");
+    expect(ago(now - 60 * D)).toBe("2 months ago");
+  });
+  it("ago flips at the exact hour and day boundaries", () => {
+    const now = Date.now() / 1000,
+      H = 3600;
+    expect(ago(now - 59 * 60)).toBe("59m ago");
+    expect(ago(now - 60 * 60)).toBe("1h ago");
+    expect(ago(now - 24 * H)).toBe("1 day ago");
+  });
+  it("ago keeps seconds: activity_date ticks constantly on a busy list", () => {
+    const now = Date.now() / 1000;
+    expect(ago(now - 5)).toBe("5s ago");
+    expect(ago(now - 59)).toBe("59s ago");
+    expect(ago(now - 60)).toBe("1m ago");
     // A clock running ahead of the daemon must not produce a negative reading.
-    expect(ago(now + 30)).toBe('0s ago')
-  })
-})
+    expect(ago(now + 30)).toBe("0s ago");
+  });
+});
 
-describe('misc', () => {
-  it('percent', () => { expect(percent(0.632)).toBe('63%'); expect(percent(0.632, 1)).toBe('63.2%') })
-  it('compact', () => { expect(compact(12)).toBe('12'); expect(compact(1204)).toBe('1.2k'); expect(compact(12_040)).toBe('12k'); expect(compact(2_500_000)).toBe('2.5M') })
-  it('daysSince', () => { expect(daysSince(0)).toBe(Infinity); expect(daysSince(Date.now() / 1000 - 86400 * 3)).toBeCloseTo(3, 1) })
-  it('dateTime', () => {
-    expect(dateTime(0)).toBe('—')
-    expect(dateTime(Date.now() / 1000)).toMatch(/^Today, /)
-    expect(dateTime(1_600_000_000)).toMatch(/2020/)
-  })
-  it('date is numeric and fixed width, so the compact row cannot wrap', () => {
-    expect(date(0)).toBe('—')
-    expect(date(1_600_000_000)).toMatch(/2020/)
+describe("misc", () => {
+  it("percent", () => {
+    expect(percent(0.632)).toBe("63%");
+    expect(percent(0.632, 1)).toBe("63.2%");
+  });
+  it("compact", () => {
+    expect(compact(12)).toBe("12");
+    expect(compact(1204)).toBe("1.2k");
+    expect(compact(12_040)).toBe("12k");
+    expect(compact(2_500_000)).toBe("2.5M");
+  });
+  it("daysSince", () => {
+    expect(daysSince(0)).toBe(Infinity);
+    expect(daysSince(Date.now() / 1000 - 86400 * 3)).toBeCloseTo(3, 1);
+  });
+  it("dateTime", () => {
+    expect(dateTime(0)).toBe("—");
+    expect(dateTime(Date.now() / 1000)).toMatch(/^Today, /);
+    expect(dateTime(1_600_000_000)).toMatch(/2020/);
+  });
+  it("date is numeric and fixed width, so the compact row cannot wrap", () => {
+    expect(date(0)).toBe("—");
+    expect(date(1_600_000_000)).toMatch(/2020/);
     // no localised month name, whatever the runtime locale
-    expect(date(1_600_000_000)).not.toMatch(/[A-Za-z]/)
-    expect(date(1_600_000_000).length).toBe(date(1_000_000_000).length)
-  })
-})
+    expect(date(1_600_000_000)).not.toMatch(/[A-Za-z]/);
+    expect(date(1_600_000_000).length).toBe(date(1_000_000_000).length);
+  });
+});

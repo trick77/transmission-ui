@@ -28,5 +28,5 @@ export function BrandMark() {
         <path d="M3.2 14.9h3v3.6h11.6v-3.6h3v6.6H3.2z" />
       </g>
     </svg>
-  )
+  );
 }
