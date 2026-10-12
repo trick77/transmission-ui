@@ -7,11 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trick77/transmission-ui/backend/internal/auth"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
-func formServer(t *testing.T) (*Server, *auth.SessionCodec) {
+func formServer(t *testing.T) (*Server, testSessions) {
 	t.Helper()
 	// No group: config.Load clears it in form mode, where nothing could supply one.
 	srv, sessions := newTestServer(t, config.AuthModeForm, "", nil)
@@ -47,7 +46,7 @@ func TestFormLoginAcceptsDaemonCredentials(t *testing.T) {
 	}
 	var session *http.Cookie
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == auth.SessionCookieName {
+		if c.Name == SessionCookieName {
 			session = c
 		}
 	}
@@ -79,7 +78,7 @@ func TestFormLoginRejectsBadCredentials(t *testing.T) {
 				t.Fatalf("want 401, got %d", rec.Code)
 			}
 			for _, c := range rec.Result().Cookies() {
-				if c.Name == auth.SessionCookieName && c.Value != "" {
+				if c.Name == SessionCookieName && c.Value != "" {
 					t.Fatal("session issued for bad credentials")
 				}
 			}
@@ -94,7 +93,7 @@ func TestFormSessionReachesDaemon(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, post(url.Values{"username": {"daemonuser"}, "password": {"daemonpass"}}))
 	var session *http.Cookie
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == auth.SessionCookieName {
+		if c.Name == SessionCookieName {
 			session = c
 		}
 	}
@@ -139,7 +138,7 @@ func TestLoginPageHasNoFormInOIDCMode(t *testing.T) {
 }
 
 // The login page is served before the bundle loads, so it cannot reach the
-// bundle's /icon.svg behind staticHandler. Its icon is embedded and served from
+// bundle's /icon.svg. Its icon is embedded and served from
 // /login-assets/ like the fonts; if that asset stops resolving the sign-in tab
 // silently loses its icon, which no other test would catch.
 func TestLoginPageServesItsIcon(t *testing.T) {

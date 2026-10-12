@@ -14,17 +14,15 @@ PORT="${TM_APP_PORT:-8127}"
 PIDFILE="$ROOT/scripts/backend.pid"
 
 if [[ "${1:-start}" == "stop" ]]; then
-  [[ -f "$PIDFILE" ]] && kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  if [[ -f "$PIDFILE" ]]; then
+    kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  fi
   rm -f "$PIDFILE"
   exit 0
 fi
 
-# main.go embeds the bundle, so it must exist before the build.
-[[ -d "$ROOT/ui/dist" ]] || { echo "ui/dist missing; run npm run build in ui/ first" >&2; exit 1; }
-# Mirror, not copy: every UI build emits new hashed names, and a plain copy
-# leaves the old bundles behind to be embedded with the new one.
-mkdir -p "$ROOT/backend/dist"
-rsync -a --delete "$ROOT/ui/dist/" "$ROOT/backend/dist/"
+# main.go embeds the bundle vite builds into backend/dist, so it must exist before the build.
+[[ -f "$ROOT/backend/dist/index.html" ]] || { echo "backend/dist has no bundle; run make fe-build first" >&2; exit 1; }
 
 go build -C "$ROOT/backend" -o "$ROOT/scripts/transmission-ui" .
 
@@ -33,7 +31,7 @@ go build -C "$ROOT/backend" -o "$ROOT/scripts/transmission-ui" .
 BACKEND_ADDR="127.0.0.1:$PORT" \
 BACKEND_AUTH_MODE=form \
 BACKEND_PUBLIC_URL="http://127.0.0.1:$PORT" \
-BACKEND_SESSION_SECRET=e2e-only-not-a-real-secret \
+BACKEND_SESSION_SECRET=e2e-only-not-a-real-secret-32-bytes-or-more \
 TM_RPC_UPSTREAM="${TM_RPC_UPSTREAM:-http://127.0.0.1:9091}" \
 TM_USER="${TM_USER:-dev}" \
 TM_PASS="${TM_PASS:-devpass}" \
@@ -42,7 +40,7 @@ echo $! > "$PIDFILE"
 
 # Wait for the listener rather than sleeping a fixed amount.
 for _ in $(seq 1 50); do
-  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/login"; then
+  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/healthz"; then
     echo "backend on http://127.0.0.1:$PORT (form mode, $(cat "$PIDFILE"))"
     exit 0
   fi

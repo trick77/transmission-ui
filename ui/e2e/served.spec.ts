@@ -1,5 +1,5 @@
-// The ship path: the daemon itself serves ui/dist at /transmission/web/ behind its basic auth.
-// Needs `npm run build` and the compose daemon (TRANSMISSION_WEB_HOME=/web mounts ui/dist).
+// The ship path: the daemon itself serves the bundle at /transmission/web/ behind its basic auth.
+// Needs `npm run build` and the compose daemon (TRANSMISSION_WEB_HOME=/web mounts backend/dist).
 import { test, expect } from '@playwright/test'
 
 const WEB = process.env.TM_WEB || 'http://localhost:9091/transmission/web/'

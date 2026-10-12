@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,30 +11,69 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/trick77/transmission-ui/backend/internal/auth"
+	"github.com/trick77/ship/kit/auth"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
 type fakeOIDC struct {
 	claims auth.Claims
+	group  string
 	err    error
 }
 
-func (f *fakeOIDC) StartLogin(w http.ResponseWriter, r *http.Request) {
+func (f *fakeOIDC) Start(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "https://idp.example/authorize", http.StatusFound)
 }
-func (f *fakeOIDC) HandleCallback(*http.Request) (auth.Claims, error) { return f.claims, f.err }
-func (f *fakeOIDC) ClearTransientCookies(http.ResponseWriter)         {}
 
-func newTestServer(t *testing.T, mode config.AuthMode, group string, oidc OIDC) (*Server, *auth.SessionCodec) {
+// Callback stands in for kit's group check: the real one refuses a user
+// outside the configured group with ErrNotInGroup and the verified claims.
+func (f *fakeOIDC) Callback(http.ResponseWriter, *http.Request) (auth.Claims, error) {
+	if f.err == nil && !f.claims.HasGroup(f.group) {
+		return f.claims, auth.ErrNotInGroup
+	}
+	return f.claims, f.err
+}
+
+// testSessions mints and reads cookies the way a browser round-trip would.
+type testSessions struct{ *auth.Sessions }
+
+func (s testSessions) Encode(c auth.Claims) (*http.Cookie, error) {
+	rec := httptest.NewRecorder()
+	if err := s.Issue(rec, c); err != nil {
+		return nil, err
+	}
+	return rec.Result().Cookies()[0], nil
+}
+
+func (s testSessions) Decode(r *http.Request) (auth.Claims, error) {
+	c, ok := s.Read(r)
+	if !ok {
+		return auth.Claims{}, errors.New("invalid session")
+	}
+	return c, nil
+}
+
+const testKey = "test-key-0123456789abcdef-0123456789"
+
+func newSessions(t *testing.T, cfg config.Config) testSessions {
+	t.Helper()
+	cfg.SessionKey = []byte(testKey)
+	sessions, err := NewSessions(cfg)
+	if err != nil {
+		t.Fatalf("sessions: %v", err)
+	}
+	return testSessions{sessions}
+}
+
+func newTestServer(t *testing.T, mode config.AuthMode, group string, oidc OIDC) (*Server, testSessions) {
 	t.Helper()
 	return newTestServerAt(t, mode, group, oidc, "")
 }
 
-func newTestServerAt(t *testing.T, mode config.AuthMode, group string, oidc OIDC, basePath string) (*Server, *auth.SessionCodec) {
+func newTestServerAt(t *testing.T, mode config.AuthMode, group string, oidc OIDC, basePath string) (*Server, testSessions) {
 	t.Helper()
 	cfg := config.Config{AuthMode: mode, OIDCAllowedGroup: group, SessionTTL: time.Hour, BasePath: basePath}
-	sessions := auth.NewSessionCodec("test-secret", false, time.Hour, group, "")
+	sessions := newSessions(t, cfg)
 	rpc := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("reached-daemon"))
 	})
@@ -41,9 +81,9 @@ func newTestServerAt(t *testing.T, mode config.AuthMode, group string, oidc OIDC
 	return mustNew(t, cfg, oidc, sessions, rpc, ui), sessions
 }
 
-func mustNew(t *testing.T, cfg config.Config, oidc OIDC, sessions *auth.SessionCodec, rpc http.Handler, ui fstest.MapFS) *Server {
+func mustNew(t *testing.T, cfg config.Config, oidc OIDC, sessions testSessions, rpc http.Handler, ui fstest.MapFS) *Server {
 	t.Helper()
-	srv, err := New(cfg, oidc, sessions, rpc, ui, slog.New(slog.DiscardHandler))
+	srv, err := New(cfg, oidc, sessions.Sessions, rpc, ui, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -52,14 +92,13 @@ func mustNew(t *testing.T, cfg config.Config, oidc OIDC, sessions *auth.SessionC
 
 // The bundle itself is privileged: serving it to an anonymous visitor renders the
 // whole shell and leaks the layout, with only the RPC refusing. oidc mode answers
-// the login card instead, and with 200, because the container healthcheck probes
-// this route and counts >= 400 as unhealthy.
+// the login card instead, and with 200: it is a page a browser lands on.
 func TestAppShellHiddenWhenSignedOut(t *testing.T) {
 	srv, _ := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("want 200 so the healthcheck stays green, got %d", rec.Code)
+		t.Fatalf("want the 200 sign-in card, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 	if strings.Contains(body, "tmui-base") {
@@ -73,7 +112,7 @@ func TestAppShellHiddenWhenSignedOut(t *testing.T) {
 	}
 }
 
-// staticHandler rewrites every unknown extensionless path to index.html for the
+// The shell answers every unknown extensionless path, for the
 // SPA's client-side routes, so gating only "/" leaves the shell reachable at
 // /settings, /detail or any made-up path. Deep links are the regression this
 // guards: an earlier version of the gate passed the "/" tests while leaking here.
@@ -86,7 +125,7 @@ func TestAppShellHiddenOnDeepLinks(t *testing.T) {
 			t.Errorf("%s served the app bundle to an anonymous visitor", path)
 		}
 		if rec.Code != http.StatusOK {
-			t.Errorf("%s: want 200 so the healthcheck stays green, got %d", path, rec.Code)
+			t.Errorf("%s: want the 200 sign-in card, got %d", path, rec.Code)
 		}
 	}
 }
@@ -118,6 +157,36 @@ func TestAppShellDeepLinkServedWithSession(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), "tmui-base") {
 		t.Fatalf("signed-in deep link did not get the bundle: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// An unknown /api path is a 404, not the shell: a JSON caller must not get HTML.
+// /index.html is the shell under its own name, so the gate covers it too.
+func TestShellFallbackEdges(t *testing.T) {
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"media"}})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/nope", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatalf("/api/nope: want a 404, got %d %q", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/index.html", nil))
+	if strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatal("/index.html served the app bundle to an anonymous visitor")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/index.html", nil)
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatalf("/index.html signed in: want the shell, got %d %q", rec.Code, rec.Body.String())
 	}
 }
 
@@ -219,7 +288,9 @@ func TestRPCRejectsWrongGroup(t *testing.T) {
 
 func TestCallbackRejectsWrongGroup(t *testing.T) {
 	srv, _ := newTestServer(t, config.AuthModeOIDC, "media",
-		&fakeOIDC{claims: auth.Claims{Subject: "u3", Groups: []string{"Nope"}}})
+		&fakeOIDC{claims: auth.Claims{Subject: "u3", PreferredUsername: "mallory", Groups: []string{"Nope"}}, group: "media"})
+	var logs strings.Builder
+	srv.log = slog.New(slog.NewTextHandler(&logs, nil))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/auth/callback?code=x", nil))
 	if rec.Code != http.StatusForbidden {
@@ -227,6 +298,11 @@ func TestCallbackRejectsWrongGroup(t *testing.T) {
 	}
 	if len(rec.Result().Cookies()) > 0 && rec.Result().Cookies()[0].Value != "" {
 		t.Fatal("session issued to a user outside the group")
+	}
+	// The refusal names who was turned away, so an operator can act on it.
+	if out := logs.String(); !strings.Contains(out, "level=WARN") ||
+		!strings.Contains(out, "subject=u3") || !strings.Contains(out, "username=mallory") {
+		t.Fatalf("refusal log does not name the user: %q", out)
 	}
 }
 
@@ -240,7 +316,7 @@ func TestCallbackIssuesSession(t *testing.T) {
 	}
 	var session *http.Cookie
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == auth.SessionCookieName {
+		if c.Name == SessionCookieName {
 			session = c
 		}
 	}
@@ -288,7 +364,7 @@ func TestStaticFallsBackToIndex(t *testing.T) {
 // No favicon.ico ships: the app declares an SVG icon, and the clients that
 // still probe this path are RSS readers, Windows bookmark thumbnails and old
 // IE. It must 404 rather than fall back to index.html, or those clients get
-// HTML where they expect an image. isAssetRequest already covers it — anything
+// HTML where they expect an image. appRoute already covers it — anything
 // with an extension is an asset — so this is a regression guard on that rule,
 // not on a route of its own.
 func TestFaviconIcoIsNotFound(t *testing.T) {
@@ -308,7 +384,7 @@ func TestIconSvgIsServed(t *testing.T) {
 		"index.html": &fstest.MapFile{Data: []byte("<html>ui</html>")},
 		"icon.svg":   &fstest.MapFile{Data: []byte("<svg/>")},
 	}
-	srv := mustNew(t, cfg, &fakeOIDC{}, auth.NewSessionCodec("test-secret", false, time.Hour, "", ""), http.NotFoundHandler(), ui)
+	srv := mustNew(t, cfg, &fakeOIDC{}, newSessions(t, cfg), http.NotFoundHandler(), ui)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/icon.svg", nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != "<svg/>" {
@@ -325,7 +401,7 @@ func TestWebmanifestContentType(t *testing.T) {
 		"index.html":       &fstest.MapFile{Data: []byte("<html>ui</html>")},
 		"site.webmanifest": &fstest.MapFile{Data: []byte(`{"name":"transmission-ui"}`)},
 	}
-	srv := mustNew(t, cfg, &fakeOIDC{}, auth.NewSessionCodec("test-secret", false, time.Hour, "", ""), http.NotFoundHandler(), ui)
+	srv := mustNew(t, cfg, &fakeOIDC{}, newSessions(t, cfg), http.NotFoundHandler(), ui)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/site.webmanifest", nil))
 	if got := rec.Header().Get("Content-Type"); got != "application/manifest+json" {

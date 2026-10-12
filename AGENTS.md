@@ -1,46 +1,38 @@
 # transmission-ui
 
-Web client for transmission-daemon. Static bundle served by the daemon itself.
-
 ## Layout
-- `design/` locked mockups = the spec. `design/build.sh` assembles them from `design/src/`.
-- `ui/` Vite + React 19 + TS, plain CSS. `ui/src/styles/app.css` is ported from `design/src/head.html`: edit the mock first, then copy the `<style>` block over (fonts → `../assets/fonts/`).
-- `scripts/` local daemon state, `fixtures.sh` (seeds every torrent state).
-- `ui/sim/` standalone fake daemon (`node ui/sim/server.ts`, `:9092`). Node runs it with built-in type stripping, so keep it erasable: no enum, no parameter properties, `.ts` on every relative import, `import type { … }` in statement form only.
-- `backend/` Go: serves the embedded `ui/dist`, OIDC RP at `/api/auth/*` (signed-cookie session, no DB), reverse-proxies `/transmission/rpc` to the daemon with its basic auth attached. Ported from peeq's `internal/auth`.
-- Auth modes (`BACKEND_AUTH_MODE`): `oidc` | `form` (server-rendered `/login`, checks `TM_USER`/`TM_PASS`). Local work uses `form`; there is no auto-login mode. The app shell is gated in both: signed out, form mode 302s to `/login` and oidc renders the same card without the form. The check sits inside `staticHandler` after the SPA-fallback switch, NOT on the `GET /` route -- every unknown extensionless path is rewritten to index.html, so gating the route alone leaves the shell reachable at `/settings` or any deep link. It answers **200, never 4xx** -- the container healthcheck probes that exact route and counts >= 400 as unhealthy. `/login`, `POST /login` and `/login-assets/` mount in every mode; the POST 404s outside form mode. An upstream 401 becomes a 502, never a passthrough: forwarding `WWW-Authenticate` would pop the browser dialog the backend exists to remove.
-- A path in `BACKEND_PUBLIC_URL` is the prefix the proxy forwards (it is NOT stripped); every route mounts under it and every redirect keeps it.
-- `compose.yaml` = production stack (Containerfile image, `.env` from `.env.example`), proxy-agnostic: no published port, no Traefik or other proxy config. The reverse proxy is the user's (README "Reverse proxy"); never add one here. `compose.dev.yaml` = throwaway local daemon.
-- Startup fails unless `BACKEND_PUBLIC_URL` is https; loopback http is the one exception (local runs, `scripts/backend.sh`).
+- `design/` mockups = spec. CSS: edit mock (`design/src/head.html`) first, copy `<style>` to `ui/src/styles/app.css` (fonts → `../assets/fonts/`), `npm run format`.
+- `ui/sim/` fake daemon, Node type stripping: no enum, no parameter properties, `.ts` on relative imports, `import type` statement form only.
+- `backend/`: kit / kit/auth for shell, sessions, OIDC, env, logging, probes, errors; no own copies. Errors `httpx.WriteError` `{"error"}` (UI banner reads it). `<base>/healthz` 2xx only; `<base>/readyz` = daemon RPC answers. `BACKEND_SESSION_SECRET` ≥ 32 bytes. Empty env = unset.
+- Auth (`BACKEND_AUTH_MODE`): `oidc` | `form` (`TM_USER`/`TM_PASS`); no auto-login. Gate = `kit/spa` `Gate` on every shell answer, NOT the `GET /` route (unknown paths get the shell: `/settings` would leak). Shell, login, RPC all judge by `Sessions.Authorize`. Signed out: **200 (oidc card) or 302 (form), never 4xx**. `/login`, `POST /login`, `/login-assets/` mount in every mode; POST 404s outside form. Upstream 401 → 502, never passthrough (`WWW-Authenticate` pops the browser dialog).
+- `BACKEND_PUBLIC_URL` path = prefix the proxy forwards, NOT stripped; every route and redirect keeps it. Must be https; loopback http only exception.
+- `compose.yaml` proxy-agnostic: no published port, no proxy config; never add one. `compose.dev.yaml` = throwaway daemon.
 
 ## Daemon
-- Target = **4.1.3** (`rpc_version` 19, `rpc_version_semver` 6.0.1). JSON-RPC 2.0 envelope, snake_case keys, no 4.0.x compatibility. A version that trackers blacklist shows as "client rejected" in the sidebar within one announce cycle.
-- Real daemon: Docker on the user's server, RPC user/pass, direct `:9091`. Never point tests, fixtures or compose at it.
-- Local: `docker compose -f compose.dev.yaml up -d` → `lscr.io/linuxserver/transmission:4.1.3-r0-ls360` on `:9091`, creds `dev:devpass`, state in `scripts/state`. Seed with `scripts/fixtures.sh`.
+- Target **4.1.3** (`rpc_version` 19, semver 6.0.1). JSON-RPC 2.0, snake_case, no 4.0.x compat.
+- Real daemon (user's server, `:9091`): never point tests, fixtures or compose at it.
+- Local: `docker compose -f compose.dev.yaml up -d`, creds `dev:devpass`, seed `scripts/fixtures.sh`.
 
 ## Dev / test / ship
-- `make dev` or `cd ui && npm run dev` → `:5173`, proxies `/transmission/rpc`. Target/auth from `ui/.env.local` (gitignored; see `ui/.env.example`); default = local daemon.
-- `make sim` → dev server against `ui/sim/`, no container, no fixtures. Needs Node ≥ 23.6. ~29 torrents that actually move; knobs `TM_SIM_SEED`, `TM_SIM_COUNT`, `TM_SIM_SPEED` (0 freezes, 30 races), `TM_SIM_PORT`. Dataset names stay copyright-safe: distros, Blender open movies, documented PD/CC0, NASA, open data dumps.
-- Gate = `make check` (ship master, unpinned; `ship.yaml`; local ship: `SHIP_CMD=<binary>`, hook too); 75 % floors (Go, UI) + patch. Hook: `make hooks` once per clone, again when ship says it is stale. GitHub never first to find a failure. `make lint` = golangci-lint at ship's version. `[skip patch-coverage]` skips patch only. No eslint/prettier unless asked.
+- `make dev` → `:5173`; target/auth from `ui/.env.local`. `make sim` needs Node ≥ 23.6; knobs `TM_SIM_SEED`, `TM_SIM_COUNT`, `TM_SIM_SPEED`, `TM_SIM_PORT`. Sim names copyright-safe: distros, Blender, PD/CC0, NASA, open data.
+- Gate `make check` (ship master unpinned; local `SHIP_CMD=<binary>`). 75 % floors + patch. `make hooks` once per clone. GitHub never first to find a failure. `[skip patch-coverage]` skips patch only. `sim/`, `e2e/` linted, not prettier-formatted.
 - Commit subjects + PR titles: Go style `area: what` (`ui: …`, `backend: …`, `sim: …`, `design: …`, `ci: …`), gated by ship; release notes list them by area.
-- Unit + component tests: `ui/src/**/*.test.{ts,tsx}`, jsdom + @testing-library. Components run against `ui/src/test/fakeDaemon.ts` (in-memory RPC behind `fetch`); assert on the RPC calls it records, not on internals. New source file → a test that imports it, coverage `include` counts untested files.
-- e2e: not in CI, not in the gate. `make fe-e2e` by hand before a UI-behaviour PR (Playwright, needs dev server + seeded local daemon; `e2e/served.spec.ts` needs `npm run build`). Screenshots in `ui/test-results/`.
+- Tests against `ui/src/test/fakeDaemon.ts`; assert recorded RPC calls, not internals. New source file → a test importing it (coverage counts untested files).
+- e2e not in CI or gate: `make fe-e2e` by hand before a UI-behaviour PR.
 - Visible change → drive the running app, compare to `design/*.html` in Safari.
-- Ship: `docker compose up -d --build` with `compose.yaml`. The image is UI + backend and contains no daemon; `TM_RPC_UPSTREAM` points at one. Bundle-only path still works (build `ui/dist` yourself, mount at `/web`, `TRANSMISSION_WEB_HOME=/web`; no release asset) but has no OIDC.
-- Release by hand only: `gh workflow run Release -f bump=patch` (or `auto`: patch unless a `Release: minor|major` + `Release-note:` line). Merges ship nothing. Tags plain `X.Y.Z`; image tags version, sha, X.Y, X, latest. Release runs ship master unpinned with write access (tags, releases, ghcr): ship's master is the only guard.
-- Backend build: `make fe-build` first (npm build + `rsync -a --delete ui/dist/ backend/dist/`; a plain `cp` keeps stale hashed bundles, which get embedded) — `main.go` embeds the bundle and `backend/dist/` is gitignored, so a fresh checkout cannot build without it. Local run: `scripts/backend.sh` (form mode against the compose daemon).
+- Release by hand only: `gh workflow run Release -f bump=patch`. Merges ship nothing. Ship's master is the only guard.
+- `backend/dist`: vite outDir, tracked `.gitkeep` only (`emptyOutDir: false`, vite config clears the rest). Binary refuses to start without `index.html`: `make fe-build` first. Local run `scripts/backend.sh`.
 
 ## Conventions
-- All RPC calls go through `ui/src/rpc/methods.ts`; method and field names are the daemon's, snake_case throughout (rpc 18+). Take spellings from the upstream `docs/rpc-spec.md`, never from memory.
-- Derived views (filters, sort, folders, tracker health) live in `ui/src/lib/model.ts`, mirrored from `design/src/rows.html`. One Error filter covers both a daemon error and a failing tracker; `filterFn` still maps the retired `trackererr` key onto it so old links work.
-- Bulk actions = one RPC with an id array. Remove vs remove+delete are always two separate, differently worded actions. Remove+delete is the default (⌫, sel-bar button, first menu entry); remove-only is ⌘⌫. Do not "fix" that inversion.
-- **Exception: remove+delete sends one `torrent_remove` per torrent** (`removeSequence`, `state/store.ts`). `torrent-remove` is a sync handler on the daemon's session thread and the RPC server shares that event loop, so while it unlinks it answers nothing -- polls included -- and its 200 means the files are gone, not that it started. One call with 10 ids = one opaque freeze; one call each = real progress (`.rm-bar` pill, `.row.pending`). Cost is O(file count), not bytes. The loop lives in the browser, so closing the tab mid-run leaves the rest. Remove-from-list stays one call; it never touches the disk. Failed rows and the summary persist until dismissed -- never let a failed removal vanish silently.
-- Store `detail` holds only the inspector's extras (`EXTRA_FIELDS`); the summary half comes from `byId`. A delta poll asks for the open tab's `EXTRA_LIVE` fields only, so a new inspector field must go in one of the two lists. Everything else refreshes on `refreshNow()`.
-- An empty delta must leave `torrents`/`byId` untouched (every 5th tick the array alone is renewed, for clock-driven tracker health) and `List` must hand `Row` stable props: one fresh closure per row re-renders every row every 2 s (`list/rowMemo.test.tsx` guards it). Per-torrent derived values are cached on the row object (`perRow` in `model.ts`); never mutate a row.
-- Static caching: only hashed `/assets/*` is `immutable`. Anything with an unversioned name (index.html, `/login-assets/*`) gets an ETag + `no-cache`. No compression in the backend: the user's reverse proxy does it.
-- `POST /login` and the RPC proxy sit behind `http.CrossOriginProtection`. Logout stays GET: the UI has no sign-out control. Form mode ignores `BACKEND_OIDC_ALLOWED_GROUP`.
-- Colour rules: accent only for active download + controls, red only for errors, everything else neutral.
-- Row grids come in pairs: a `grid-template-columns` change needs the matching `>:nth-child(n+N){display:none}`, or leftover cells auto-place into an implicit second row and double the row height. Two-line rows have 8 children, compact 11. Below 1200px the tail columns drop (at 1194px Name was at its 180px floor, 24 of 29 names clipped).
-- No `text-transform:uppercase` anywhere: headings and table headers are sentence case, no tracking (`.side-h` 14px/400, `.cols`/`.tbl th`/`.pop th` 12px/500, `.sec` 13px/500). Label strings are already written in sentence case; the CSS was shouting them. `.side-h` and `.sec` are shared with Settings and Add.
-- Node ≥ 22 ships a fake `localStorage` global: `ui/src/test-setup.ts` replaces it; don't remove that.
-- `compose.yaml` / `Containerfile` naming; default branch `master`; remote `trick77/transmission-ui` — CI (ship check) on every PR, forks included; release by hand.
+- All RPC via `ui/src/rpc/methods.ts`; daemon's snake_case names, spellings from upstream `docs/rpc-spec.md`, never memory.
+- Derived views in `ui/src/lib/model.ts`. One Error filter = daemon error + failing tracker; `filterFn` maps retired `trackererr` onto it.
+- Bulk = one RPC with id array. Remove vs remove+delete: always two differently worded actions; remove+delete is default (⌫), remove-only ⌘⌫. Do not "fix" that inversion.
+- **Remove+delete = one `torrent_remove` per torrent** (`removeSequence`): sync on the daemon's session thread, answers nothing while it unlinks (polls included), 200 = files gone; cost O(file count). Closing the tab mid-run leaves the rest. Remove-from-list stays one call. Failed rows persist until dismissed, never vanish silently.
+- New inspector field → `EXTRA_FIELDS` or `EXTRA_LIVE`, else it never refreshes.
+- Empty delta leaves `torrents`/`byId` untouched (every 5th tick renews the array, for clock-driven tracker health); `List` hands `Row` stable props (`rowMemo.test.tsx`). Never mutate a row (`perRow` cache).
+- Only hashed `/assets/*` is `immutable`; unversioned names get ETag + `no-cache`. No compression in the backend.
+- `POST /login` + RPC proxy behind `http.CrossOriginProtection`. Logout stays GET. Form mode ignores `BACKEND_OIDC_ALLOWED_GROUP`.
+- Colour: accent only active download + controls, red only errors, rest neutral.
+- Row grids in pairs: a `grid-template-columns` change needs the matching `>:nth-child(n+N){display:none}` (two-line 8 children, compact 11), else row height doubles. Below 1200px tail columns drop (at 1194px 24 of 29 names clipped).
+- No `text-transform:uppercase`: sentence case, no tracking.
+- `ui/src/test/setup.ts` replaces Node ≥ 22's fake `localStorage`; keep it.

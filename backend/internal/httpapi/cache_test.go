@@ -10,7 +10,8 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/trick77/transmission-ui/backend/internal/auth"
+	"github.com/trick77/ship/kit/auth"
+	"github.com/trick77/ship/kit/httpx"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
@@ -53,7 +54,7 @@ func TestHashedAssetsAreImmutable(t *testing.T) {
 		"assets/index-abc1.js": &fstest.MapFile{Data: []byte("console.log(1)")},
 		"icon.svg":             &fstest.MapFile{Data: []byte("<svg/>")},
 	}
-	srv := mustNew(t, cfg, &fakeOIDC{}, auth.NewSessionCodec("test-secret", false, time.Hour, "", ""), http.NotFoundHandler(), ui)
+	srv := mustNew(t, cfg, &fakeOIDC{}, newSessions(t, cfg), http.NotFoundHandler(), ui)
 	asset := get(srv, "/assets/index-abc1.js", nil)
 	if asset.Code != http.StatusOK || asset.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
 		t.Fatalf("hashed asset: got %d %q", asset.Code, asset.Header().Get("Cache-Control"))
@@ -81,7 +82,7 @@ func TestLoginAssetsRevalidate(t *testing.T) {
 func TestNewRefusesBundleWithoutBaseTag(t *testing.T) {
 	cfg := config.Config{AuthMode: config.AuthModeForm, BasePath: "/transmission"}
 	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html>ui</html>")}}
-	if _, err := New(cfg, nil, auth.NewSessionCodec("s", false, time.Hour, "", ""), http.NotFoundHandler(), ui, nil); err == nil {
+	if _, err := New(cfg, nil, newSessions(t, cfg).Sessions, http.NotFoundHandler(), ui, nil); err == nil {
 		t.Fatal("want an error: the UI could not be told its base path")
 	}
 	if _, err := New(config.Config{}, nil, nil, nil, fstest.MapFS{}, nil); err == nil {
@@ -106,7 +107,8 @@ func TestLoginPageDoesNotBounceARefusedSession(t *testing.T) {
 // its attempts are judged a penalty apart, not side by side.
 func TestFormLoginSpacesOneClientsAttempts(t *testing.T) {
 	srv, _ := formServer(t)
-	srv.loginPenalty = 100 * time.Millisecond
+	const gap = 100 * time.Millisecond
+	srv.throttle = httpx.NewThrottle(gap, loginMaxWait)
 	try := func(pass string) int {
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, post(url.Values{"username": {"daemonuser"}, "password": {pass}}))
@@ -124,7 +126,7 @@ func TestFormLoginSpacesOneClientsAttempts(t *testing.T) {
 		}
 	}
 	// The first is judged at once, each further one a penalty later.
-	if took, want := time.Since(start), (guesses-1)*srv.loginPenalty; took < want {
+	if took, want := time.Since(start), (guesses-1)*gap; took < want {
 		t.Fatalf("%d parallel guesses took %v, want at least %v", guesses, took, want)
 	}
 	// A correct attempt right after is judged, not turned away.
@@ -142,7 +144,7 @@ func TestFormLoginFloodDoesNotLockOthersOut(t *testing.T) {
 		r.Header.Set("X-Forwarded-For", "203.0.113.9, "+client)
 		return r
 	}
-	const flood = 40 // far past loginMaxWait / loginPenalty
+	const flood = 40 // far past loginMaxWait / loginGap
 	codes := make(chan int, flood)
 	for range flood {
 		go func() {
@@ -166,7 +168,7 @@ func TestFormLoginFloodDoesNotLockOthersOut(t *testing.T) {
 	start := time.Now()
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, from("198.51.100.8", "daemonpass"))
-	if rec.Code != http.StatusFound || time.Since(start) > loginPenalty/2 {
+	if rec.Code != http.StatusFound || time.Since(start) > loginGap/2 {
 		t.Fatalf("another client during the flood: want a prompt sign-in, got %d after %v", rec.Code, time.Since(start))
 	}
 }

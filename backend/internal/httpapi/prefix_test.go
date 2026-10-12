@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trick77/transmission-ui/backend/internal/auth"
+	"github.com/trick77/ship/kit/auth"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
 // The reverse proxy forwards the prefix rather than stripping it, so every
 // route has to answer under it and every redirect has to stay inside it.
-func prefixServer(t *testing.T) (*Server, *auth.SessionCodec) {
+func prefixServer(t *testing.T) (*Server, testSessions) {
 	t.Helper()
 	srv, sessions := newTestServerAt(t, config.AuthModeForm, "", nil, "/transmission")
 	srv.cfg.RPCUser = "u"

@@ -8,14 +8,24 @@
 package proxy
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
+	"strconv"
+
+	"github.com/trick77/ship/kit/httpx"
+	"github.com/trick77/ship/kit/logging"
 )
+
+// rpcPath is where the daemon serves RPC, whatever the upstream URL's path.
+const rpcPath = "/transmission/rpc"
 
 // Config describes the upstream daemon.
 type Config struct {
@@ -25,14 +35,22 @@ type Config struct {
 	Log      *slog.Logger // nil logs to slog.Default()
 }
 
-// New returns a handler proxying to the daemon's RPC endpoint.
-func New(cfg Config) (http.Handler, error) {
+func (cfg Config) target() (*url.URL, error) {
 	target, err := url.Parse(cfg.Upstream)
 	if err != nil {
 		return nil, fmt.Errorf("parse upstream %q: %w", cfg.Upstream, err)
 	}
 	if target.Scheme == "" || target.Host == "" {
 		return nil, fmt.Errorf("upstream %q needs a scheme and host", cfg.Upstream)
+	}
+	return target, nil
+}
+
+// New returns a handler proxying to the daemon's RPC endpoint.
+func New(cfg Config) (http.Handler, error) {
+	target, err := cfg.target()
+	if err != nil {
+		return nil, err
 	}
 	log := cfg.Log
 	if log == nil {
@@ -45,7 +63,7 @@ func New(cfg Config) (http.Handler, error) {
 			// SetURL joins paths; the daemon serves RPC at a fixed path and the
 			// inbound path is already /transmission/rpc, so pin it explicitly
 			// rather than depending on how the upstream URL was written.
-			r.Out.URL.Path = "/transmission/rpc"
+			r.Out.URL.Path = rpcPath
 			r.Out.Host = r.In.Host
 			// Whatever the browser sent, the daemon gets our credentials. This
 			// also strips any Authorization header a client tried to smuggle in.
@@ -61,32 +79,73 @@ func New(cfg Config) (http.Handler, error) {
 		// remove -- and the UI would read the 401 as a dead session and loop
 		// through sign-in forever. Report it as the upstream misconfig it is.
 		ModifyResponse: func(resp *http.Response) error {
-			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-				// 401 is bad credentials; 403 is the daemon's rpc-whitelist,
-				// which defaults to 127.0.0.1 and so rejects this backend as
-				// soon as it runs in its own container. Naming the wrong one
-				// sends the operator to the wrong setting.
-				if resp.StatusCode == http.StatusForbidden {
-					log.Error("transmission refused the RPC connection (403); its rpc-whitelist likely does not include this container's address")
-				} else {
-					log.Error("transmission rejected our RPC credentials (401); check TM_USER/TM_PASS")
-				}
+			if err := refusal(resp.StatusCode); err != nil {
+				log.Error("transmission refused the RPC request", logging.Err(err))
 				resp.Header.Del("WWW-Authenticate")
 				_ = resp.Body.Close()
+				// No ResponseWriter here, so httpx.WriteError's body by hand.
+				body, _ := json.Marshal(map[string]string{"error": "upstream refused the request"})
 				resp.StatusCode = http.StatusBadGateway
 				resp.Status = "502 Bad Gateway"
-				resp.Body = io.NopCloser(strings.NewReader("upstream refused the request"))
-				resp.ContentLength = -1
-				resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
-				resp.Header.Del("Content-Length")
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				resp.ContentLength = int64(len(body))
+				resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+				resp.Header.Set("Content-Type", "application/json")
 			}
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 			// Refused, unresolvable, timed out: the one place the reason exists.
-			log.Error("transmission is unreachable", "upstream", cfg.Upstream, "err", err)
-			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			log.Error("transmission is unreachable", "upstream", cfg.Upstream, logging.Err(err))
+			httpx.WriteError(w, http.StatusBadGateway, "upstream unavailable")
 		},
 	}
 	return rp, nil
+}
+
+// refusal names a daemon answer that means this backend is misconfigured. 401
+// is bad credentials; 403 is the daemon's rpc-whitelist, which defaults to
+// 127.0.0.1 and so rejects this backend as soon as it runs in its own
+// container. Naming the wrong one sends the operator to the wrong setting.
+func refusal(status int) error {
+	switch status {
+	case http.StatusUnauthorized:
+		return errors.New("daemon rejected the RPC credentials (401): check TM_USER/TM_PASS")
+	case http.StatusForbidden:
+		return errors.New("daemon refused the connection (403): its rpc-whitelist likely does not include this container's address")
+	}
+	return nil
+}
+
+// Ready is the readiness check: the daemon answers RPC and accepts our
+// credentials: the 409 session-id handshake (what an unauthenticated-session
+// POST gets) or a 2xx. Anything else, a 404 or 405 included, is not a
+// Transmission RPC endpoint, so the UI cannot work against it.
+func Ready(cfg Config) (func(context.Context) error, error) {
+	target, err := cfg.target()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := url.URL{Scheme: target.Scheme, Host: target.Host, Path: rpcPath}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	return func(ctx context.Context) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), nil)
+		if err != nil {
+			return err
+		}
+		req.SetBasicAuth(cfg.User, cfg.Pass)
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if err := refusal(resp.StatusCode); err != nil {
+			return err
+		}
+		if resp.StatusCode != http.StatusConflict && (resp.StatusCode < 200 || resp.StatusCode > 299) {
+			return fmt.Errorf("daemon answered %d, not a Transmission RPC endpoint", resp.StatusCode)
+		}
+		return nil
+	}, nil
 }

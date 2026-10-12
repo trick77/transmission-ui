@@ -1,15 +1,15 @@
-import { useEffect } from 'react'
-import { Header } from './Header'
-import { BrandMark } from '../icons/BrandMark'
-import { Sidebar } from './Sidebar'
-import { SidebarResizer } from './SidebarResizer'
-import { List } from '../list/List'
-import { Inspector } from '../inspector/Inspector'
-import { Dialogs } from '../dialogs/Dialogs'
-import { get, run, selectAllVisible, set, useStore } from '../state/store'
-import * as api from '../rpc/methods'
-import { basePath } from '../rpc/client'
-import { anyStopped } from '../list/actions'
+import { useEffect } from "react";
+import { Header } from "./Header";
+import { BrandMark } from "../icons/BrandMark";
+import { Sidebar } from "./Sidebar";
+import { SidebarResizer } from "./SidebarResizer";
+import { List } from "../list/List";
+import { Inspector } from "../inspector/Inspector";
+import { Dialogs } from "../dialogs/Dialogs";
+import { get, run, selectAllVisible, set, useStore } from "../state/store";
+import * as api from "../rpc/methods";
+import { basePath } from "../rpc/client";
+import { anyStopped } from "../list/actions";
 
 function SignIn() {
   return (
@@ -18,81 +18,160 @@ function SignIn() {
         <BrandMark />
         <h1>Sign in</h1>
         <p className="sub">Your session has ended.</p>
-        <button className="btn primary" onClick={() => { location.href = `${basePath()}/api/auth/login` }}>Sign in</button>
+        <button
+          className="btn primary"
+          onClick={() => {
+            location.href = `${basePath()}/api/auth/login`;
+          }}
+        >
+          Sign in
+        </button>
       </div>
     </div>
-  )
+  );
 }
 
 export function App() {
-  const focusId = useStore(s => s.focusId)
-  const connection = useStore(s => s.connection)
-  const lastError = useStore(s => s.lastError)
-  const toastMsg = useStore(s => s.toast)
+  const focusId = useStore((s) => s.focusId);
+  const connection = useStore((s) => s.connection);
+  const lastError = useStore((s) => s.lastError);
+  const toastMsg = useStore((s) => s.toast);
 
   // global keys: ⌘F search, ⌘A select all, Space pause/resume, ⌫ remove, Esc clear
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const s = get()
-      const inField = e.target instanceof Element && e.target.closest('input, textarea, [contenteditable]')
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); document.querySelector<HTMLInputElement>('.search input')?.focus(); return }
-      if (inField || s.dialog.kind !== 'none') return
-      const ids = s.selected.size ? [...s.selected] : s.focusId != null ? [s.focusId] : []
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAllVisible(); return }
-      if (e.key === 'Escape') { set({ selected: new Set() }); return }
-      if (!ids.length) return
-      // Space on a focused button is that button's own key.
-      if (e.key === ' ' && !(e.target instanceof Element && e.target.closest('button, a, select, [role="button"]'))) {
-        e.preventDefault()
-        // Same rule as the menu entry it is the shortcut for: resume if anything is stopped.
-        const resume = anyStopped(ids)
-        void run(resume ? 'Resume' : 'Pause', () => resume ? api.start(ids) : api.stop(ids))
+      const s = get();
+      const inField =
+        e.target instanceof Element &&
+        e.target.closest("input, textarea, [contenteditable]");
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>(".search input")?.focus();
+        return;
       }
-      if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); set({ dialog: { kind: 'confirm-remove', ids, deleteData: !(e.metaKey || e.ctrlKey) } }) }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [])
+      if (inField || s.dialog.kind !== "none") return;
+      const ids = s.selected.size
+        ? [...s.selected]
+        : s.focusId != null
+          ? [s.focusId]
+          : [];
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        selectAllVisible();
+        return;
+      }
+      if (e.key === "Escape") {
+        set({ selected: new Set() });
+        return;
+      }
+      if (!ids.length) return;
+      // Space on a focused button is that button's own key.
+      if (
+        e.key === " " &&
+        !(
+          e.target instanceof Element &&
+          e.target.closest('button, a, select, [role="button"]')
+        )
+      ) {
+        e.preventDefault();
+        // Same rule as the menu entry it is the shortcut for: resume if anything is stopped.
+        const resume = anyStopped(ids);
+        void run(resume ? "Resume" : "Pause", () =>
+          resume ? api.start(ids) : api.stop(ids),
+        );
+      }
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        set({
+          dialog: {
+            kind: "confirm-remove",
+            ids,
+            deleteData: !(e.metaKey || e.ctrlKey),
+          },
+        });
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   // drop .torrent files anywhere → Add dialog; saved density and sidebar width
   useEffect(() => {
-    document.documentElement.dataset.density = get().density
-    document.documentElement.style.setProperty('--sidebar-pref', get().sidebarW + 'px')
-    const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault() }
+    document.documentElement.dataset.density = get().density;
+    document.documentElement.style.setProperty(
+      "--sidebar-pref",
+      get().sidebarW + "px",
+    );
+    const over = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
     // Also while Add is open: a drop that misses its drop zone lands here, and left
     // alone the browser navigates to the file. The dialog picks the new array up.
     const drop = (e: DragEvent) => {
-      if (!e.dataTransfer?.files.length) return
-      e.preventDefault()
-      const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.torrent'))
-      const d = get().dialog
-      if (files.length) set({ dialog: d.kind === 'add' ? { ...d, files } : { kind: 'add', files } })
-    }
-    document.addEventListener('dragover', over); document.addEventListener('drop', drop)
-    return () => { document.removeEventListener('dragover', over); document.removeEventListener('drop', drop) }
-  }, [])
+      if (!e.dataTransfer?.files.length) return;
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer.files).filter((f) =>
+        f.name.endsWith(".torrent"),
+      );
+      const d = get().dialog;
+      if (files.length)
+        set({
+          dialog: d.kind === "add" ? { ...d, files } : { kind: "add", files },
+        });
+    };
+    document.addEventListener("dragover", over);
+    document.addEventListener("drop", drop);
+    return () => {
+      document.removeEventListener("dragover", over);
+      document.removeEventListener("drop", drop);
+    };
+  }, []);
 
   // A missing session gets the sign-in screen, not the shell with a footnote.
   // 'error' is a reachability problem, not an auth one, and keeps the shell.
-  if (connection === 'unauthorized') return <SignIn />
+  if (connection === "unauthorized") return <SignIn />;
 
   return (
     <div className="app">
       <Header />
       <Sidebar />
       <SidebarResizer />
-      <div className={'main' + (focusId != null ? ' has-insp' : '')}>
+      <div className={"main" + (focusId != null ? " has-insp" : "")}>
         <List />
         {focusId != null ? <Inspector /> : null}
       </div>
       <Dialogs />
-      {connection === 'error' ? (
-        <div className="notice" style={{ position: 'fixed', left: 'calc(var(--sidebar-w) + 16px)', bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>
+      {connection === "error" ? (
+        <div
+          className="notice"
+          style={{
+            position: "fixed",
+            left: "calc(var(--sidebar-w) + 16px)",
+            bottom: 14,
+            zIndex: 50,
+            background: "var(--surface-3)",
+          }}
+        >
           <span className="st" />
-          <span><b>Can't reach the daemon.</b> {lastError} · retrying</span>
+          <span>
+            <b>Can't reach the daemon.</b> {lastError} · retrying
+          </span>
         </div>
       ) : null}
-      {toastMsg ? <div className="notice" style={{ position: 'fixed', right: 16, bottom: 14, zIndex: 50, background: 'var(--surface-3)' }}>{toastMsg}</div> : null}
+      {toastMsg ? (
+        <div
+          className="notice"
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 14,
+            zIndex: 50,
+            background: "var(--surface-3)",
+          }}
+        >
+          {toastMsg}
+        </div>
+      ) : null}
     </div>
-  )
+  );
 }

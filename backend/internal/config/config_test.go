@@ -16,7 +16,7 @@ func withEnv(t *testing.T, kv map[string]string) {
 func oidcEnv(extra map[string]string) map[string]string {
 	e := map[string]string{
 		"BACKEND_AUTH_MODE":          "oidc",
-		"BACKEND_SESSION_SECRET":     "s",
+		"BACKEND_SESSION_SECRET":     "0123456789abcdef0123456789abcdef",
 		"BACKEND_PUBLIC_URL":         "https://host.example/transmission",
 		"BACKEND_OIDC_ISSUER":        "https://idp.example",
 		"BACKEND_OIDC_CLIENT_ID":     "id",
@@ -92,8 +92,8 @@ func TestFormModeGeneratesSessionSecret(t *testing.T) {
 	if !cfg.GeneratedSessionSecret {
 		t.Fatal("generated secret not flagged")
 	}
-	if cfg.SessionSecret == "" {
-		t.Fatal("no secret generated")
+	if len(cfg.SessionKey) < 32 {
+		t.Fatalf("no usable key generated: %d bytes", len(cfg.SessionKey))
 	}
 }
 
@@ -196,5 +196,34 @@ func TestPublicURLMustBeHTTPSInOIDCModeToo(t *testing.T) {
 	}))
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "must be https") {
 		t.Fatalf("want an https complaint, got %v", err)
+	}
+}
+
+// kit's session signer refuses a key under 32 bytes; say so with the others at
+// startup rather than failing later with a name-less error.
+func TestShortSessionSecretRejected(t *testing.T) {
+	withEnv(t, oidcEnv(map[string]string{"BACKEND_SESSION_SECRET": "short"}))
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "at least 32 bytes") {
+		t.Fatalf("want a secret length complaint, got %v", err)
+	}
+}
+
+// An unfilled .env line arrives as an empty string: the same fault as unset.
+func TestEmptyRequiredVarIsAFault(t *testing.T) {
+	withEnv(t, oidcEnv(map[string]string{"BACKEND_OIDC_ISSUER": "", "TM_USER": ""}))
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "BACKEND_OIDC_ISSUER is required") || !strings.Contains(err.Error(), "TM_USER is required") {
+		t.Fatalf("want both empty vars reported, got %v", err)
+	}
+}
+
+func TestConfiguredSecretIsTheKey(t *testing.T) {
+	withEnv(t, oidcEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if string(cfg.SessionKey) != "0123456789abcdef0123456789abcdef" || cfg.GeneratedSessionSecret {
+		t.Fatalf("configured secret not used as the key: %q", cfg.SessionKey)
 	}
 }

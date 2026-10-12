@@ -23,7 +23,7 @@ mk Apollo.11.Flight.Journal 16 sonarr/docs
 
 for t in debian-13.1.0-amd64-DVD-1:iso Big.Buck.Bunny.2008.2160p:radarr Sintel.2010.1080p:radarr Cosmos.Laundromat.2015.2160p:buffer Blender.4.5.LTS.all.platforms:buffer Pride.and.Prejudice.LibriVox:audiobooks Apollo.11.Flight.Journal:sonarr/docs; do
   n=${t%%:*}; d=${t#*:}
-  $R -a /downloads/torrents/$n.torrent -w /downloads/complete/$d >/dev/null || true
+  $R -a "/downloads/torrents/$n.torrent" -w "/downloads/complete/$d" >/dev/null || true
 done
 sleep 2
 

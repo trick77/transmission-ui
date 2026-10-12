@@ -1,7 +1,8 @@
 name: Release
 
-# By hand only: gh workflow run Release -f bump=patch. Tags X.Y.Z, builds and pushes the image (version, sha, X.Y,
-# X, latest), GitHub release with notes from the commit subjects. auto: patch unless a Release: minor/major line.
+# By hand only (Actions minutes): gh workflow run Release -f bump=patch. auto: patch, or what the commits since the
+# last tag ask for (Release: minor|major). The only way to release: images are built and signed on GitHub-hosted
+# runners, never from a laptop.
 on:
   workflow_dispatch:
     inputs:
@@ -20,3 +21,5 @@ jobs:
     permissions:
       contents: write
       packages: write
+      # cosign keyless signing: the job's OIDC token is the signing identity.
+      id-token: write

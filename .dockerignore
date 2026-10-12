@@ -1,15 +1,18 @@
-# The image is built from ui/ and backend/ only (see Containerfile). Everything
-# else stays out of the build context: .git, the dev daemon's downloads under
-# scripts/, coverage reports.
+# ship:begin (owned by ship init; repo-specific lines go below the end marker)
+# Allowlist: the images build from the dirs below only. A new root-level file stays out of the context without anyone
+# having to remember this list. BuildKit reads the -f Containerfile outside these rules.
 *
-!ui
 !backend
-
-# Build output and host installs. node_modules from a macOS host would land on
-# top of the image's own install and bring the wrong native binaries.
-**/node_modules
+!ui
+# The host's node_modules (darwin native binaries) would land on top of the image's own install; the image builds
+# dist itself.
+ui/node_modules
 ui/dist
 ui/coverage
+# ship:end
+
+# Test output, and the host's embed copy: the image embeds the ui stage's own dist.
+**/node_modules
 ui/test-results
 ui/playwright-report
 backend/dist

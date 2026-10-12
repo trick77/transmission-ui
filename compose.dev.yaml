@@ -6,7 +6,7 @@
 #   cd ui && npm run dev                   # UI on http://localhost:5173, proxies RPC here
 #   docker compose -f compose.dev.yaml down
 #
-# ui/dist is mounted as the daemon's web home so `npm run build` can be checked at
+# backend/dist (the bundle `npm run build` writes) is mounted as the daemon's web home so `npm run build` can be checked at
 # http://localhost:9091/transmission/web/ (creds dev / devpass), the same way the server serves it.
 services:
   transmission:
@@ -25,7 +25,7 @@ services:
       - ./scripts/state:/config
       - ./scripts/downloads:/downloads
       - ./scripts/watch:/watch
-      - ./ui/dist:/web:ro
+      - ./backend/dist:/web:ro
     ports:
       - "9091:9091"
       - "51413:51413"

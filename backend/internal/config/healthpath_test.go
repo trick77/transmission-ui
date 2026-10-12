@@ -2,9 +2,9 @@ package config
 
 import "testing"
 
-// The container healthcheck probes BasePath+"/". If BasePath were dropped the
-// probe would hit "/", which serves nothing under a prefix, and the reverse
-// proxy would drop a perfectly healthy container from its routing table.
+// The container healthcheck probes BasePath+"/healthz". If BasePath were
+// dropped the probe would miss the prefixed mount and report a healthy
+// container as down.
 func TestBasePathDrivesHealthProbe(t *testing.T) {
 	for _, tc := range []struct{ publicURL, want string }{
 		{"https://host.example/transmission", "/transmission"},
