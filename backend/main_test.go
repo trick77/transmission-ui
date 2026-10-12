@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -66,6 +67,17 @@ func TestRunRejectsUnknownLogLevel(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "verbose")
 	if err := run(); err == nil {
 		t.Fatal("want an error for LOG_LEVEL=verbose")
+	}
+}
+
+// A bad LOG_LEVEL does not hide the config faults: one start lists them all.
+func TestRunJoinsLogLevelAndConfigFaults(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "verbose")
+	t.Setenv("BACKEND_PUBLIC_URL", "")
+	t.Setenv("BACKEND_AUTH_MODE", "form")
+	err := run()
+	if err == nil || !strings.Contains(err.Error(), "verbose") || !strings.Contains(err.Error(), "BACKEND_PUBLIC_URL") {
+		t.Fatalf("want the LOG_LEVEL and BACKEND_PUBLIC_URL faults together, got %v", err)
 	}
 }
 

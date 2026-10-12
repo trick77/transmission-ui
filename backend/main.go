@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"embed"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -37,13 +38,15 @@ func main() {
 }
 
 func run() error {
+	cfg, cfgErr := config.Load()
+	// Logging first, so the config faults go out in the configured shape; a bad LOG_LEVEL joins them, so every
+	// fault is listed at once.
 	log, err := logging.Setup(logging.Options{Level: os.Getenv("LOG_LEVEL")})
 	if err != nil {
-		return err
+		return errors.Join(err, cfgErr)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		return err
+	if cfgErr != nil {
+		return cfgErr
 	}
 	ui, err := fs.Sub(distFS, "dist")
 	if err != nil {
