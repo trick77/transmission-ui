@@ -28,7 +28,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 - Visible change → drive the running app, compare to `design/*.html` in Safari.
 - Ship: `docker compose up -d --build` with `compose.yaml`. The image is UI + backend and contains no daemon; `TM_RPC_UPSTREAM` points at one. Bundle-only path still works (build `ui/dist` yourself, mount at `/web`, `TRANSMISSION_WEB_HOME=/web`; no release asset) but has no OIDC.
 - Release by hand only: `gh workflow run Release -f bump=patch` (or `auto`: patch unless a `Release: minor|major` + `Release-note:` line). Merges ship nothing. Tags plain `X.Y.Z`; image tags version, sha, X.Y, X, latest. Release runs ship master unpinned with write access (tags, releases, ghcr): ship's master is the only guard.
-- Backend build: `make fe-build` first (npm build + `rsync -a --delete ui/dist/ backend/dist/`; a plain `cp` keeps stale hashed bundles, which get embedded) — `main.go` embeds the bundle and `backend/dist/` is gitignored, so a fresh checkout cannot build without it. Local run: `scripts/backend.sh` (form mode against the compose daemon).
+- Backend build: `make fe-build` first (npm build + `rsync -a --delete ui/dist/ backend/dist/`; a plain `cp` keeps stale hashed bundles, which get embedded) — `main.go` embeds the bundle. `backend/dist/` holds only a tracked `.gitkeep` in a fresh clone (= `ui.embed`): Go builds and tests, but the binary refuses to start without `index.html`. Local run: `scripts/backend.sh` (form mode against the compose daemon).
 
 ## Conventions
 - All RPC calls go through `ui/src/rpc/methods.ts`; method and field names are the daemon's, snake_case throughout (rpc 18+). Take spellings from the upstream `docs/rpc-spec.md`, never from memory.

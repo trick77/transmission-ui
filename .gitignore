@@ -4,8 +4,10 @@
 node_modules
 ui/dist/
 *.tsbuildinfo
-# The Vite bundle the Containerfile copies in before `go build` embeds it.
-backend/dist/
+# The Vite bundle make fe-build syncs in before `go build` embeds it. .gitkeep is
+# tracked so go:embed has its dir in a fresh clone.
+backend/dist/*
+!backend/dist/.gitkeep
 
 # Coverage reports
 /coverage/

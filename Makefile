@@ -24,9 +24,11 @@ fe-e2e:
 	cd ui && npm run e2e
 
 # main.go embeds backend/dist: rsync --delete, a plain cp keeps stale hashed bundles, which get embedded.
+# The sync drops the tracked .gitkeep (ui/dist has none); the touch puts it back.
 fe-build:
 	cd ui && npm ci && npm run build
 	rsync -a --delete ui/dist/ backend/dist/
+	touch backend/dist/.gitkeep
 
 build: fe-build
 
