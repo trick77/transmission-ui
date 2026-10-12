@@ -151,6 +151,8 @@ func TestReady(t *testing.T) {
 		{http.StatusUnauthorized, false},
 		{http.StatusForbidden, false},
 		{http.StatusServiceUnavailable, false},
+		{http.StatusNotFound, false},
+		{http.StatusMethodNotAllowed, false},
 	} {
 		var gotUser, gotPath string
 		daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

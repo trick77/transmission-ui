@@ -118,8 +118,9 @@ func refusal(status int) error {
 }
 
 // Ready is the readiness check: the daemon answers RPC and accepts our
-// credentials. Any answer but a refusal or a 5xx counts, the 409 session-id
-// handshake included; the UI cannot work without one.
+// credentials: the 409 session-id handshake (what an unauthenticated-session
+// POST gets) or a 2xx. Anything else, a 404 or 405 included, is not a
+// Transmission RPC endpoint, so the UI cannot work against it.
 func Ready(cfg Config) (func(context.Context) error, error) {
 	target, err := cfg.target()
 	if err != nil {
@@ -142,8 +143,8 @@ func Ready(cfg Config) (func(context.Context) error, error) {
 		if err := refusal(resp.StatusCode); err != nil {
 			return err
 		}
-		if resp.StatusCode >= http.StatusInternalServerError {
-			return fmt.Errorf("daemon answered %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusConflict && (resp.StatusCode < 200 || resp.StatusCode > 299) {
+			return fmt.Errorf("daemon answered %d, not a Transmission RPC endpoint", resp.StatusCode)
 		}
 		return nil
 	}, nil
