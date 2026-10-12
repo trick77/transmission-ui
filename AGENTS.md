@@ -4,7 +4,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 
 ## Layout
 - `design/` locked mockups = the spec. `design/build.sh` assembles them from `design/src/`.
-- `ui/` Vite + React 19 + TS, plain CSS. `ui/src/styles/app.css` is ported from `design/src/head.html`: edit the mock first, then copy the `<style>` block over (fonts → `../assets/fonts/`).
+- `ui/` Vite + React 19 + TS, plain CSS. `ui/src/styles/app.css` is ported from `design/src/head.html`: edit the mock first, then copy the `<style>` block over (fonts → `../assets/fonts/`) and `npm run format`.
 - `scripts/` local daemon state, `fixtures.sh` (seeds every torrent state).
 - `ui/sim/` standalone fake daemon (`node ui/sim/server.ts`, `:9092`). Node runs it with built-in type stripping, so keep it erasable: no enum, no parameter properties, `.ts` on every relative import, `import type { … }` in statement form only.
 - `backend/` Go: serves the embedded `ui/dist`, OIDC RP at `/api/auth/*` (signed-cookie session, no DB), reverse-proxies `/transmission/rpc` to the daemon with its basic auth attached. Ported from peeq's `internal/auth`.
@@ -21,7 +21,7 @@ Web client for transmission-daemon. Static bundle served by the daemon itself.
 ## Dev / test / ship
 - `make dev` or `cd ui && npm run dev` → `:5173`, proxies `/transmission/rpc`. Target/auth from `ui/.env.local` (gitignored; see `ui/.env.example`); default = local daemon.
 - `make sim` → dev server against `ui/sim/`, no container, no fixtures. Needs Node ≥ 23.6. ~29 torrents that actually move; knobs `TM_SIM_SEED`, `TM_SIM_COUNT`, `TM_SIM_SPEED` (0 freezes, 30 races), `TM_SIM_PORT`. Dataset names stay copyright-safe: distros, Blender open movies, documented PD/CC0, NASA, open data dumps.
-- Gate = `make check` (ship master, unpinned; `ship.yaml`; local ship: `SHIP_CMD=<binary>`, hook too); 75 % floors (Go, UI) + patch. Hook: `make hooks` once per clone, again when ship says it is stale. GitHub never first to find a failure. `make lint` = golangci-lint at ship's version. `[skip patch-coverage]` skips patch only. No eslint/prettier unless asked.
+- Gate = `make check` (ship master, unpinned; `ship.yaml`; local ship: `SHIP_CMD=<binary>`, hook too); 75 % floors (Go, UI) + patch. Hook: `make hooks` once per clone, again when ship says it is stale. GitHub never first to find a failure. `make lint` = golangci-lint at ship's version. `[skip patch-coverage]` skips patch only. UI lint = `npm run lint` in `ui/` (eslint + prettier `format:check`, ship's `ui.lint`); `npm run format` fixes formatting. `sim/` and `e2e/` are linted, not prettier-formatted.
 - Commit subjects + PR titles: Go style `area: what` (`ui: …`, `backend: …`, `sim: …`, `design: …`, `ci: …`), gated by ship; release notes list them by area.
 - Unit + component tests: `ui/src/**/*.test.{ts,tsx}`, jsdom + @testing-library. Components run against `ui/src/test/fakeDaemon.ts` (in-memory RPC behind `fetch`); assert on the RPC calls it records, not on internals. New source file → a test that imports it, coverage `include` counts untested files.
 - e2e: not in CI, not in the gate. `make fe-e2e` by hand before a UI-behaviour PR (Playwright, needs dev server + seeded local daemon; `e2e/served.spec.ts` needs `npm run build`). Screenshots in `ui/test-results/`.

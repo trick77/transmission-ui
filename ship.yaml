@@ -6,6 +6,7 @@ go:
 ui:
   # make fe-build syncs ui/dist into backend/dist: main.go embeds it, so go build needs it first.
   build: cd .. && make fe-build
+  lint: npm run lint
   # Reporters from ui/vite.config.ts (lcov into ../coverage/ui), not overridden on the command line.
   test: npm run test -- --coverage
   lcov: coverage/ui/lcov.info
