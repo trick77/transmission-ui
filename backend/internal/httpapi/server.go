@@ -251,11 +251,13 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Callback clears the transient cookies whatever the outcome, and refuses a
-	// user outside the allowed group.
+	// user outside the allowed group, handing back the verified claims so the
+	// refusal names who was turned away.
 	claims, err := s.oidc.Callback(w, r)
 	switch {
 	case errors.Is(err, auth.ErrNotInGroup):
-		s.log.Warn("login rejected: missing group", "required", s.cfg.OIDCAllowedGroup)
+		s.log.Warn("login rejected: missing group", "subject", claims.Subject,
+			"username", claims.PreferredUsername, "required", s.cfg.OIDCAllowedGroup)
 		httpx.WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	case err != nil:

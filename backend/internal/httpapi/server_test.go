@@ -26,10 +26,10 @@ func (f *fakeOIDC) Start(w http.ResponseWriter, r *http.Request) {
 }
 
 // Callback stands in for kit's group check: the real one refuses a user
-// outside the configured group with ErrNotInGroup.
+// outside the configured group with ErrNotInGroup and the verified claims.
 func (f *fakeOIDC) Callback(http.ResponseWriter, *http.Request) (auth.Claims, error) {
 	if f.err == nil && !f.claims.HasGroup(f.group) {
-		return auth.Claims{}, auth.ErrNotInGroup
+		return f.claims, auth.ErrNotInGroup
 	}
 	return f.claims, f.err
 }
@@ -288,7 +288,9 @@ func TestRPCRejectsWrongGroup(t *testing.T) {
 
 func TestCallbackRejectsWrongGroup(t *testing.T) {
 	srv, _ := newTestServer(t, config.AuthModeOIDC, "media",
-		&fakeOIDC{claims: auth.Claims{Subject: "u3", Groups: []string{"Nope"}}, group: "media"})
+		&fakeOIDC{claims: auth.Claims{Subject: "u3", PreferredUsername: "mallory", Groups: []string{"Nope"}}, group: "media"})
+	var logs strings.Builder
+	srv.log = slog.New(slog.NewTextHandler(&logs, nil))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/auth/callback?code=x", nil))
 	if rec.Code != http.StatusForbidden {
@@ -296,6 +298,11 @@ func TestCallbackRejectsWrongGroup(t *testing.T) {
 	}
 	if len(rec.Result().Cookies()) > 0 && rec.Result().Cookies()[0].Value != "" {
 		t.Fatal("session issued to a user outside the group")
+	}
+	// The refusal names who was turned away, so an operator can act on it.
+	if out := logs.String(); !strings.Contains(out, "level=WARN") ||
+		!strings.Contains(out, "subject=u3") || !strings.Contains(out, "username=mallory") {
+		t.Fatalf("refusal log does not name the user: %q", out)
 	}
 }
 
