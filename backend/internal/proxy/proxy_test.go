@@ -89,6 +89,36 @@ func TestProxyRejectsBadUpstream(t *testing.T) {
 	}
 }
 
+// A daemon 401 (our credentials) or 403 (its rpc-whitelist) is a 502 with no
+// WWW-Authenticate: passing it through would pop the browser's basic-auth
+// dialog and the UI would read it as a dead session.
+func TestProxyUpstreamRefusalIsBadGateway(t *testing.T) {
+	for _, code := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Transmission"`)
+			w.WriteHeader(code)
+			_, _ = io.WriteString(w, "<h1>401: Unauthorized</h1>")
+		}))
+		h, err := New(Config{Upstream: daemon.URL, User: "u", Pass: "wrong"})
+		if err != nil {
+			t.Fatalf("new: %v", err)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/transmission/rpc", nil))
+		daemon.Close()
+
+		if rec.Code != http.StatusBadGateway {
+			t.Fatalf("daemon %d: want 502, got %d", code, rec.Code)
+		}
+		if got := rec.Header().Get("WWW-Authenticate"); got != "" {
+			t.Fatalf("daemon %d: WWW-Authenticate leaked: %q", code, got)
+		}
+		if body := rec.Body.String(); body != "upstream refused the request" {
+			t.Fatalf("daemon %d: body %q", code, body)
+		}
+	}
+}
+
 // An unreachable daemon is a 502, not a panic.
 func TestProxyUpstreamDown(t *testing.T) {
 	down := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
