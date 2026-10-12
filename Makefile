@@ -1,4 +1,4 @@
-.PHONY: check hooks lint fe-test fe-coverage fe-build fe-e2e build dev fixtures sim sim-server
+.PHONY: check hooks lint fe-test fe-build fe-e2e build dev fixtures sim sim-server
 
 # The gate: everything CI checks, configured in ship.yaml. Master's ship, as the pre-push hook and the @master
 # workflows run it: its sha asked of GitHub (a proxy lags on @master). A local ship: SHIP_CMD=<go-installed binary>,
@@ -13,7 +13,7 @@ check:
 hooks:
 	$(SHIP_CMD) hooks
 
-# Quick lint while editing, at the golangci-lint version check runs.
+# Quick lint while editing, at the version check runs.
 lint:
 	$(SHIP_CMD) lint
 
@@ -36,9 +36,6 @@ sim-server:
 
 fe-test:
 	cd ui && npm run test -- --run
-
-fe-coverage:
-	cd ui && npm run test -- --run --coverage
 
 fe-e2e:
 	cd ui && npm run e2e

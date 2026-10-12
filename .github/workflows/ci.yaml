@@ -1,7 +1,7 @@
 name: CI
 
-# ship check on every pull request (public repo: forks included, read-only token, no secrets). Own pushes are
-# gated by the pre-push hook already; Dependabot and fork PRs never pass it.
+# Every pull request, fork PRs included (read-only token, no secrets): Dependabot and outside contributors have no
+# pre-push hook. Own pushes are gated by the hook already. By hand: gh workflow run CI --ref <branch>
 on:
   pull_request:
     branches: [master]
