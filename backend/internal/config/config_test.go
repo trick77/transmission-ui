@@ -22,8 +22,8 @@ func oidcEnv(extra map[string]string) map[string]string {
 		"BACKEND_OIDC_CLIENT_ID":     "id",
 		"BACKEND_OIDC_CLIENT_SECRET": "secret",
 		"BACKEND_OIDC_REDIRECT_URL":  "https://host.example/transmission/api/auth/callback",
-		"TM_USER":                    "u",
-		"TM_PASS":                    "p",
+		"TRANSMISSION_USER":          "u",
+		"TRANSMISSION_PASSWORD":      "p",
 	}
 	for k, v := range extra {
 		e[k] = v
@@ -61,10 +61,10 @@ func TestLoopbackPublicURLDropsSecureCookies(t *testing.T) {
 	for _, u := range []string{"http://127.0.0.1:8127", "http://localhost:8127"} {
 		os.Clearenv()
 		withEnv(t, map[string]string{
-			"BACKEND_AUTH_MODE":  "form",
-			"BACKEND_PUBLIC_URL": u,
-			"TM_USER":            "u",
-			"TM_PASS":            "p",
+			"BACKEND_AUTH_MODE":     "form",
+			"BACKEND_PUBLIC_URL":    u,
+			"TRANSMISSION_USER":     "u",
+			"TRANSMISSION_PASSWORD": "p",
 		})
 		cfg, err := Load()
 		if err != nil {
@@ -80,10 +80,10 @@ func TestLoopbackPublicURLDropsSecureCookies(t *testing.T) {
 func TestFormModeGeneratesSessionSecret(t *testing.T) {
 	os.Clearenv()
 	withEnv(t, map[string]string{
-		"BACKEND_AUTH_MODE":  "form",
-		"BACKEND_PUBLIC_URL": "https://host.example",
-		"TM_USER":            "u",
-		"TM_PASS":            "p",
+		"BACKEND_AUTH_MODE":     "form",
+		"BACKEND_PUBLIC_URL":    "https://host.example",
+		"TRANSMISSION_USER":     "u",
+		"TRANSMISSION_PASSWORD": "p",
 	})
 	cfg, err := Load()
 	if err != nil {
@@ -101,16 +101,16 @@ func TestFormModeRequiresPassword(t *testing.T) {
 	os.Clearenv()
 	withEnv(t, map[string]string{
 		"BACKEND_AUTH_MODE": "form",
-		"TM_USER":           "u",
+		"TRANSMISSION_USER": "u",
 	})
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TM_PASS") {
-		t.Fatalf("want a TM_PASS complaint, got %v", err)
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRANSMISSION_PASSWORD") {
+		t.Fatalf("want a TRANSMISSION_PASSWORD complaint, got %v", err)
 	}
 }
 
 func TestUnknownAuthModeRejected(t *testing.T) {
 	os.Clearenv()
-	withEnv(t, map[string]string{"BACKEND_AUTH_MODE": "dev", "TM_USER": "u", "TM_PASS": "p"})
+	withEnv(t, map[string]string{"BACKEND_AUTH_MODE": "dev", "TRANSMISSION_USER": "u", "TRANSMISSION_PASSWORD": "p"})
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "BACKEND_AUTH_MODE") {
 		t.Fatalf("dev mode should be gone, got %v", err)
 	}
@@ -124,8 +124,8 @@ func TestFormModeIgnoresAllowedGroup(t *testing.T) {
 		"BACKEND_AUTH_MODE":          "form",
 		"BACKEND_PUBLIC_URL":         "https://host.example",
 		"BACKEND_OIDC_ALLOWED_GROUP": "media",
-		"TM_USER":                    "u",
-		"TM_PASS":                    "p",
+		"TRANSMISSION_USER":          "u",
+		"TRANSMISSION_PASSWORD":      "p",
 	})
 	cfg, err := Load()
 	if err != nil {
@@ -139,7 +139,7 @@ func TestFormModeIgnoresAllowedGroup(t *testing.T) {
 // The missing settings are listed in the same order on every start.
 func TestMissingOIDCSettingsAreListedInOrder(t *testing.T) {
 	os.Clearenv()
-	withEnv(t, map[string]string{"BACKEND_AUTH_MODE": "oidc", "TM_USER": "u"})
+	withEnv(t, map[string]string{"BACKEND_AUTH_MODE": "oidc", "TRANSMISSION_USER": "u"})
 	_, err := Load()
 	if err == nil {
 		t.Fatal("want an error")
@@ -172,10 +172,10 @@ func TestPublicURLMustBeHTTPS(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			os.Clearenv()
 			withEnv(t, map[string]string{
-				"BACKEND_AUTH_MODE":  "form",
-				"BACKEND_PUBLIC_URL": tc.url,
-				"TM_USER":            "u",
-				"TM_PASS":            "p",
+				"BACKEND_AUTH_MODE":     "form",
+				"BACKEND_PUBLIC_URL":    tc.url,
+				"TRANSMISSION_USER":     "u",
+				"TRANSMISSION_PASSWORD": "p",
 			})
 			_, err := Load()
 			if tc.ok && err != nil {
@@ -210,9 +210,9 @@ func TestShortSessionSecretRejected(t *testing.T) {
 
 // An unfilled .env line arrives as an empty string: the same fault as unset.
 func TestEmptyRequiredVarIsAFault(t *testing.T) {
-	withEnv(t, oidcEnv(map[string]string{"BACKEND_OIDC_ISSUER": "", "TM_USER": ""}))
+	withEnv(t, oidcEnv(map[string]string{"BACKEND_OIDC_ISSUER": "", "TRANSMISSION_USER": ""}))
 	_, err := Load()
-	if err == nil || !strings.Contains(err.Error(), "BACKEND_OIDC_ISSUER is required") || !strings.Contains(err.Error(), "TM_USER is required") {
+	if err == nil || !strings.Contains(err.Error(), "BACKEND_OIDC_ISSUER is required") || !strings.Contains(err.Error(), "TRANSMISSION_USER is required") {
 		t.Fatalf("want both empty vars reported, got %v", err)
 	}
 }

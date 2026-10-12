@@ -7,8 +7,8 @@
 import { test, expect } from '@playwright/test'
 
 const APP = process.env.TM_APP || 'http://127.0.0.1:8127'
-const USER = process.env.TM_USER || 'dev'
-const PASS = process.env.TM_PASS || 'devpass'
+const USER = process.env.TRANSMISSION_USER || 'dev'
+const PASS = process.env.TRANSMISSION_PASSWORD || 'devpass'
 
 test('an unauthenticated visit lands on the login form', async ({ browser }) => {
   const ctx = await browser.newContext()

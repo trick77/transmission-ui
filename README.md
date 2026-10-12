@@ -22,13 +22,13 @@ bundle, terminates the login, and reverse-proxies `/transmission/rpc` to your da
 daemon's basic auth attached. The browser never sees those credentials, and an unauthenticated RPC
 call gets a 401 rather than a native auth dialog.
 
-The image contains **no daemon**. Point `TM_RPC_UPSTREAM` at one; it keeps its own RPC port for
+The image contains **no daemon**. Point `TRANSMISSION_RPC_UPSTREAM` at one; it keeps its own RPC port for
 `transmission-remote` and the *arr apps, which go on using basic auth directly.
 
 ## Install
 
 ```
-cp .env.example .env     # fill in TM_*, the auth block, and the session secret
+cp .env.example .env     # fill in TRANSMISSION_*, the auth block, and the session secret
 docker compose up -d
 ```
 
@@ -89,7 +89,7 @@ repo's `compose.yaml`: that file is a starting point and changes with releases.
 
 `BACKEND_AUTH_MODE` picks one:
 
-- **`form`** — a login page that accepts the daemon's own RPC credentials (`TM_USER` / `TM_PASS`).
+- **`form`** — a login page that accepts the daemon's own RPC credentials (`TRANSMISSION_USER` / `TRANSMISSION_PASSWORD`).
   Nothing extra to provision, and what local development uses.
 - **`oidc`** — an identity provider. Register a confidential client with redirect URI
   `<BACKEND_PUBLIC_URL>/api/auth/callback`, request the `groups` scope, and optionally gate access

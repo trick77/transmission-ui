@@ -110,7 +110,7 @@ func New(cfg Config) (http.Handler, error) {
 func refusal(status int) error {
 	switch status {
 	case http.StatusUnauthorized:
-		return errors.New("daemon rejected the RPC credentials (401): check TM_USER/TM_PASS")
+		return errors.New("daemon rejected the RPC credentials (401): check TRANSMISSION_USER/TRANSMISSION_PASSWORD")
 	case http.StatusForbidden:
 		return errors.New("daemon refused the connection (403): its rpc-whitelist likely does not include this container's address")
 	}
