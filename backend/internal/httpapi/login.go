@@ -32,9 +32,9 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · transmission-ui</title>
-<!-- The bundle's /icon.svg sits behind staticHandler, which this page is served
-     before, so the icon is embedded here and served from /login-assets/ like
-     the fonts and the background. Same file as ui/icons/icon.svg. -->
+<!-- The page stands apart from the bundle: its icon is embedded here and
+     served from /login-assets/ like the fonts and the background. Same file as
+     ui/icons/icon.svg. -->
 <link rel="icon" href="{{.Base}}/login-assets/icon.svg" type="image/svg+xml">
 <style>
   @font-face{font-family:"Anthropic Sans";src:url("{{.Base}}/login-assets/SansWebVariable-TextRegular.woff2") format("woff2");font-weight:300 800;font-display:swap}
@@ -174,7 +174,7 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	// Already signed in: no reason to show the form again. The same judgment
 	// as the shell's gate, or a session the shell refuses would bounce between
 	// the two forever.
-	if s.authorize(r) == http.StatusOK {
+	if s.authorized(r) {
 		http.Redirect(w, r, s.cfg.BasePath+"/", http.StatusFound)
 		return
 	}

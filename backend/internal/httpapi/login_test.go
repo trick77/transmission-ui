@@ -138,7 +138,7 @@ func TestLoginPageHasNoFormInOIDCMode(t *testing.T) {
 }
 
 // The login page is served before the bundle loads, so it cannot reach the
-// bundle's /icon.svg behind staticHandler. Its icon is embedded and served from
+// bundle's /icon.svg. Its icon is embedded and served from
 // /login-assets/ like the fonts; if that asset stops resolving the sign-in tab
 // silently loses its icon, which no other test would catch.
 func TestLoginPageServesItsIcon(t *testing.T) {

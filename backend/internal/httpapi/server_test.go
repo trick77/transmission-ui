@@ -112,7 +112,7 @@ func TestAppShellHiddenWhenSignedOut(t *testing.T) {
 	}
 }
 
-// staticHandler rewrites every unknown extensionless path to index.html for the
+// The shell answers every unknown extensionless path, for the
 // SPA's client-side routes, so gating only "/" leaves the shell reachable at
 // /settings, /detail or any made-up path. Deep links are the regression this
 // guards: an earlier version of the gate passed the "/" tests while leaking here.
@@ -157,6 +157,36 @@ func TestAppShellDeepLinkServedWithSession(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), "tmui-base") {
 		t.Fatalf("signed-in deep link did not get the bundle: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// An unknown /api path is a 404, not the shell: a JSON caller must not get HTML.
+// /index.html is the shell under its own name, so the gate covers it too.
+func TestShellFallbackEdges(t *testing.T) {
+	srv, sessions := newTestServer(t, config.AuthModeOIDC, "media", &fakeOIDC{})
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1", Groups: []string{"media"}})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/nope", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatalf("/api/nope: want a 404, got %d %q", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/index.html", nil))
+	if strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatal("/index.html served the app bundle to an anonymous visitor")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/index.html", nil)
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "tmui-base") {
+		t.Fatalf("/index.html signed in: want the shell, got %d %q", rec.Code, rec.Body.String())
 	}
 }
 
@@ -327,7 +357,7 @@ func TestStaticFallsBackToIndex(t *testing.T) {
 // No favicon.ico ships: the app declares an SVG icon, and the clients that
 // still probe this path are RSS readers, Windows bookmark thumbnails and old
 // IE. It must 404 rather than fall back to index.html, or those clients get
-// HTML where they expect an image. isAssetRequest already covers it — anything
+// HTML where they expect an image. appRoute already covers it — anything
 // with an extension is an asset — so this is a regression guard on that rule,
 // not on a route of its own.
 func TestFaviconIcoIsNotFound(t *testing.T) {
