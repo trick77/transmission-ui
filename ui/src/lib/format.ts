@@ -47,6 +47,11 @@ export function eta(seconds: number, finished = false): string {
   return duration(seconds);
 }
 
+/** The wall clock in unix seconds. */
+export function nowSeconds(): number {
+  return Date.now() / 1000;
+}
+
 export function duration(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
   if (s < 60) return `${s} s`;

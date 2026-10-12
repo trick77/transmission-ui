@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { Icon } from "../icons/Icon";
-import { bytes, duration } from "../lib/format";
+import { bytes } from "../lib/format";
 import {
   ADV_KEYS,
   ADV_LABEL,
@@ -39,7 +39,7 @@ import {
   type Removing,
 } from "../state/store";
 import * as api from "../rpc/methods";
-import { Menu, Seg, useDismiss } from "../app/ui";
+import { Elapsed, Menu, Seg, useDismiss } from "../app/ui";
 import { Row, type RowRemoval } from "./Row";
 import { torrentMenu, viewMenu } from "./actions";
 
@@ -128,24 +128,27 @@ export function List() {
     atPointer?: boolean;
   } | null>(null);
   const [fpop, setFpop] = useState(false);
-  const closeF = useCallback(() => setFpop(false), []);
+  const closeF = useCallback(() => setFpop(false), [setFpop]);
   const fref = useDismiss(closeF, fpop);
 
   // Stable across polls, or every memoized Row would re-render with the list. The
   // selection is read at click time for the same reason.
   // Anchored to the trigger, not the pointer: the menu then opens in the same place for
   // every row, which the pointer-anchored version never did.
-  const onMore = useCallback((id: number, trigger: HTMLElement) => {
-    const sel = get().selected;
-    const r = trigger.getBoundingClientRect();
-    setMenu({
-      x: r.right,
-      y: r.bottom + 4,
-      kind: "row",
-      ids: sel.has(id) ? [...sel] : [id],
-      rowId: id,
-    });
-  }, []);
+  const onMore = useCallback(
+    (id: number, trigger: HTMLElement) => {
+      const sel = get().selected;
+      const r = trigger.getBoundingClientRect();
+      setMenu({
+        x: r.right,
+        y: r.bottom + 4,
+        kind: "row",
+        ids: sel.has(id) ? [...sel] : [id],
+        rowId: id,
+      });
+    },
+    [setMenu],
+  );
   const removals = useMemo(
     () => new Map(removing?.ids.map((id) => [id, removalOf(removing, id)])),
     [removing],
@@ -415,8 +418,8 @@ export function List() {
               </>
             ) : (
               <>
-                has been unreachable for {duration(Date.now() / 1000 - h.since)}{" "}
-                · {h.count} torrents affected
+                has been unreachable for <Elapsed since={h.since} /> · {h.count}{" "}
+                torrents affected
                 {session?.dht_enabled
                   ? ", DHT and PEX still finding peers"
                   : ""}

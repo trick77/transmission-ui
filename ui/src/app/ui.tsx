@@ -7,6 +7,18 @@ import {
   type ReactNode,
 } from "react";
 import { Icon, type IconName } from "../icons/Icon";
+import { duration, nowSeconds } from "../lib/format";
+
+/** How long since `since` (unix seconds), counting up once a second on its own
+ *  rather than only when the parent happens to re-render. */
+export function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(nowSeconds);
+  useEffect(() => {
+    const id = setInterval(() => setNow(nowSeconds()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{duration(now - since)}</>;
+}
 
 export function Toggle({
   on,
@@ -77,10 +89,14 @@ export function NumInput({
   min?: number;
   disabled?: boolean;
 }) {
+  // A new value from outside replaces the draft, while rendering rather than
+  // one render later from an effect.
   const [v, setV] = useState(String(value));
-  useEffect(() => {
+  const [shown, setShown] = useState(value);
+  if (!Object.is(shown, value)) {
+    setShown(value);
     setV(String(value));
-  }, [value]);
+  }
   const commit = () => {
     const n = Number(v);
     if (!Number.isNaN(n) && n >= min && n !== value) onCommit(n);
@@ -128,9 +144,11 @@ export function TextInput({
   autoFocus?: boolean;
 }) {
   const [v, setV] = useState(value);
-  useEffect(() => {
+  const [shown, setShown] = useState(value);
+  if (shown !== value) {
+    setShown(value);
     setV(value);
-  }, [value]);
+  }
   const commit = () => {
     if (v !== value) onCommit(v);
   };

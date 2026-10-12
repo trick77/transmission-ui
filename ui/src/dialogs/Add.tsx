@@ -60,9 +60,9 @@ export function Add({
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!dir && base) setDir(base);
-  }, [base, dir]);
+  // The session can land after the dialog opened: an empty folder takes its
+  // default then, while rendering rather than from an effect a render later.
+  if (!dir && base) setDir(base);
   const free = useFreeSpace(dir);
   // Keyed on the array itself: StrictMode runs the effect twice for one drop, and a second
   // drop while the dialog is open arrives as a new array.

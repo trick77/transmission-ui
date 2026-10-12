@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Icon } from "../icons/Icon";
-import { bytes, duration } from "../lib/format";
+import { bytes } from "../lib/format";
+import { Elapsed } from "./ui";
 import {
   FILTERS,
   FILTER_ORDER,
@@ -116,14 +117,18 @@ export function Sidebar() {
             const bad = t.state === "down" || t.state === "rejected";
             // Label is the name, but the filter key stays the host so old URLs keep working.
             const name = trackerName(t.host);
-            const sub =
-              t.state === "down"
-                ? `down · ${duration(Date.now() / 1000 - t.since)} · ${t.result}`
-                : t.state === "rejected"
-                  ? `client rejected · ${t.result}`
-                  : t.state === "issues"
-                    ? `${t.failing} of ${t.count} failing${t.result ? " · " + t.result : ""}`
-                    : "";
+            const sub: ReactNode =
+              t.state === "down" ? (
+                <>
+                  down · <Elapsed since={t.since} /> · {t.result}
+                </>
+              ) : t.state === "rejected" ? (
+                `client rejected · ${t.result}`
+              ) : t.state === "issues" ? (
+                `${t.failing} of ${t.count} failing${t.result ? " · " + t.result : ""}`
+              ) : (
+                ""
+              );
             return (
               <button
                 key={t.host}
