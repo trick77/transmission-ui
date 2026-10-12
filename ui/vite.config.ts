@@ -1,6 +1,27 @@
-import { loadEnv } from "vite";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { loadEnv, type Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+
+const outDir = "../backend/dist";
+
+// emptyOutDir:true would delete the tracked .gitkeep; without a clean every build would leave its old hashed
+// bundles behind for go:embed. This empties the directory but .gitkeep, also for a plain `npm run build`.
+function cleanOutDir(): Plugin {
+  return {
+    name: "clean-out-dir",
+    apply: "build",
+    buildStart() {
+      // Absent in the image's ui stage: vite creates it.
+      if (!existsSync(outDir)) return;
+      for (const f of readdirSync(outDir)) {
+        if (f !== ".gitkeep")
+          rmSync(join(outDir, f), { recursive: true, force: true });
+      }
+    },
+  };
+}
 
 // Dev proxy target: local compose daemon by default; the real server only via .env.local
 // (TM_RPC_TARGET=http://host:9091, TM_RPC_AUTH=user:pass). Never commit a host.
@@ -9,7 +30,7 @@ export default defineConfig(({ mode }) => {
   const target = env.TM_RPC_TARGET || "http://localhost:9091";
   const auth = env.TM_RPC_AUTH;
   return {
-    plugins: [react()],
+    plugins: [react(), cleanOutDir()],
     base: "./",
     server: {
       port: 5173,
@@ -22,9 +43,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     // Built straight into the Go embed directory, which also holds a tracked
-    // .gitkeep so `//go:embed all:dist` always has something to embed.
-    // emptyOutDir:true would delete it; the Makefile's fe-build clears the rest.
-    build: { outDir: "../backend/dist", emptyOutDir: false, sourcemap: false },
+    // .gitkeep so `//go:embed all:dist` always has something to embed; cleanOutDir clears the rest.
+    build: { outDir, emptyOutDir: false, sourcemap: false },
     // Component tests render views and fire DOM events via @testing-library/react, so jsdom.
     test: {
       environment: "jsdom",
