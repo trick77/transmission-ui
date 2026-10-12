@@ -5,6 +5,8 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       go-minor-and-patch:
         patterns: ["*"]
@@ -15,6 +17,8 @@ updates:
     directory: /ui
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       # First matching group wins, so the specific groups come first and the
       # catch-all stays last. vite, its react plugin, vitest and its coverage
@@ -32,6 +36,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       actions:
         patterns: ["*"]
@@ -41,6 +47,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       docker:
         patterns: ["*"]
@@ -51,6 +59,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       compose:
         patterns: ["*"]

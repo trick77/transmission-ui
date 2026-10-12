@@ -1,0 +1,11 @@
+# The gate (make check, and ship pre-push in the hook) and the release, see github.com/trick77/ship.
+go:
+  dir: backend
+ui:
+  # make fe-build syncs ui/dist into backend/dist: main.go embeds it, so go build needs it first.
+  build: cd .. && make fe-build
+  # Reporters from ui/vite.config.ts (lcov into ../coverage/ui), not overridden on the command line.
+  test: npm run test -- --run --coverage
+  lcov: coverage/ui/lcov.info
+images:
+  - {}

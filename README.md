@@ -109,7 +109,7 @@ Every route then mounts under that prefix. The reverse proxy must forward it, no
 
 ### Bundle only
 
-The release also ships `transmission-ui-<version>.zip`: unzip it, mount it at `/web`, set
+Build the bundle (`cd ui && npm ci && npm run build`), mount `ui/dist` at `/web`, set
 `TRANSMISSION_WEB_HOME=/web`, restart the daemon. Unsetting the variable puts the stock UI back.
 This path has no backend, so the daemon's own basic auth applies and there is no OIDC.
 

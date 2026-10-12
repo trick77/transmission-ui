@@ -31,9 +31,9 @@ export default defineConfig(({ mode }) => {
       include: ['src/**/*.test.{ts,tsx}', 'sim/**/*.test.ts'],
       coverage: {
         provider: 'v8',
-        // json-summary is what scripts/coverage-gate.sh reads (the project floor); lcov for tooling;
-        // text-summary for humans reading the log.
-        reporter: ['text-summary', 'json-summary', 'lcov'],
+        // lcov is what ship reads (UI floor and patch gate, ship.yaml ui.lcov); text-summary for humans
+        // reading the log.
+        reporter: ['text-summary', 'lcov'],
         reportsDirectory: '../coverage/ui',
         // Without an explicit include, v8 only instruments files some test imports, so an untested
         // module would be invisible and inflate the ratio.
