@@ -35,7 +35,7 @@ sim-server:
 	node ui/sim/server.ts
 
 fe-test:
-	cd ui && npm run test -- --run
+	cd ui && npm run test
 
 fe-e2e:
 	cd ui && npm run e2e

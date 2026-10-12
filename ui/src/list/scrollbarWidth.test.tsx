@@ -8,7 +8,7 @@ import { publishScrollbarWidth } from './List'
 // This drives the measurement against known dimensions instead of through a
 // mounted <List>: jsdom has no layout, so there offsetWidth and clientWidth are
 // both 0 and any formula, inverted included, would look correct. The suite's
-// ResizeObserver is a no-op stub (test-setup.ts), so a mount-only test would
+// ResizeObserver is a no-op stub (src/test/setup.ts), so a mount-only test would
 // also pass with this logic deleted outright.
 
 const sbw = () => document.documentElement.style.getPropertyValue('--sbw')

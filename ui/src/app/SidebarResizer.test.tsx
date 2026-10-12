@@ -226,7 +226,7 @@ describe('SidebarResizer', () => {
     // have happened, and the throw must not escape.
     h.hasPointerCapture = () => true
     h.releasePointerCapture = () => { order.push('release'); throw new DOMException('gone', 'NotFoundError') }
-    // test-setup.ts swaps in its own storage object, so spy on the instance.
+    // src/test/setup.ts swaps in its own storage object, so spy on the instance.
     vi.spyOn(localStorage, 'setItem')
     const seen = vi.mocked(localStorage.setItem)
 
