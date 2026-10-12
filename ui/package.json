@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "format": "prettier --write 'src/**/*.{ts,tsx,css}' '*.ts'",
+    "format:check": "prettier --check 'src/**/*.{ts,tsx,css}' '*.ts'",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
