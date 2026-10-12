@@ -3,7 +3,7 @@ module github.com/trick77/transmission-ui/backend
 go 1.27.2
 
 require (
-	github.com/trick77/ship/kit v0.3.0
+	github.com/trick77/ship/kit v0.4.0
 	github.com/trick77/ship/kit/auth v0.2.0
 )
 
