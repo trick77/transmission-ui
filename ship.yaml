@@ -13,3 +13,7 @@ ui:
   lcov: coverage/ui/lcov.info
 images:
   - {}
+allow:
+  - rule: handrolled
+    path: backend/internal/httpapi/server.go
+    why: mounts kit's httpx.Health under BasePath (StripPrefix), no route of its own
