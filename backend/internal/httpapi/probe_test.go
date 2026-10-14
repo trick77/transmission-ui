@@ -38,10 +38,20 @@ func TestProbesUnderPrefix(t *testing.T) {
 		{"/healthz", nil, http.StatusNotFound},
 	} {
 		failing = tc.fail
-		if got := get(srv, tc.path, nil).Code; got != tc.want {
+		if got := probe(srv, tc.path).Code; got != tc.want {
 			t.Errorf("%s (check err %v): want %d, got %d", tc.path, tc.fail, tc.want, got)
 		}
 	}
+}
+
+// probe asks as the container healthcheck does: from loopback, no proxy
+// headers. The kit's probes answer nobody else.
+func probe(srv *Server, path string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.RemoteAddr = "127.0.0.1:40000"
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
 }
 
 // API errors are {"error": "..."}, which the UI reads for its banner.
