@@ -198,7 +198,7 @@ func (s *Server) Handler() http.Handler {
 	// Health logs their transitions, a line per probe would be noise.
 	return httpx.Chain(mux,
 		httpx.AccessLog(s.log, httpx.AccessLogOptions{
-			ClientIP:   func(r *http.Request) string { return httpx.ClientIP(r, trustedHops) },
+			ClientIP:   clientIP,
 			ProbePaths: []string{s.cfg.BasePath + "/healthz", s.cfg.BasePath + "/readyz"},
 			// The daemon's 409 hands out X-Transmission-Session-Id: a
 			// handshake on every page load and daemon restart, not a fault.

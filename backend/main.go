@@ -73,6 +73,10 @@ func run(parent context.Context) error {
 		dctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		if oidc, err = auth.NewOIDC(dctx, httpapi.OIDCConfig(cfg)); err != nil {
+			// A stop asked for during discovery is a clean exit, not a failed start.
+			if ctx.Err() != nil {
+				return nil
+			}
 			return err
 		}
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"net"
 	"net/http"
@@ -95,10 +94,12 @@ func TestRunRejectsBadConfig(t *testing.T) {
 	}
 }
 
-// Shutdown during OIDC discovery ends the start at once, not after the 30s
-// discovery timeout.
+// Shutdown during OIDC discovery ends the start at once and cleanly, not
+// after the 30s discovery timeout with a startup error.
 func TestRunStopsDuringDiscovery(t *testing.T) {
+	asked := make(chan struct{}, 1)
 	idp := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		asked <- struct{}{}
 		<-r.Context().Done()
 	}))
 	defer idp.Close()
@@ -112,11 +113,15 @@ func TestRunStopsDuringDiscovery(t *testing.T) {
 	t.Setenv("BACKEND_OIDC_REDIRECT_URL", "http://127.0.0.1:8080/api/auth/callback")
 	t.Setenv("TRANSMISSION_USER", "user")
 
-	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+	go func() {
+		<-asked
+		cancel()
+	}()
 	start := time.Now()
-	if err := run(ctx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("want the context's end, got %v", err)
+	if err := run(ctx); err != nil {
+		t.Fatalf("want a clean stop, got %v", err)
 	}
 	if d := time.Since(start); d > 5*time.Second {
 		t.Fatalf("run took %v after the context ended", d)
