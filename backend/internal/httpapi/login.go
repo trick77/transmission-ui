@@ -8,12 +8,15 @@ import (
 	"errors"
 	"html/template"
 	"io/fs"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/trick77/ship/kit/auth"
 	"github.com/trick77/ship/kit/httpx"
+	"github.com/trick77/ship/kit/ratelimit"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
@@ -184,9 +187,10 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 const (
 	// loginGap is the gap between two attempts from one client. Per client, so
 	// guessing is capped at two tries a second however many connections one
-	// address opens, while a flood from that address cannot keep anyone else
+	// client opens, while a flood from that client cannot keep anyone else
 	// from signing in: a limit shared by everybody would hand any visitor a
-	// way to lock the form.
+	// way to lock the form. An IPv6 client is its /64 (throttleKey), so a
+	// flood does hold back its own /64's neighbours.
 	loginGap = 500 * time.Millisecond
 	// loginMaxWait is how far ahead a client may queue attempts before further
 	// ones are refused.
@@ -199,9 +203,16 @@ const (
 	trustedHops = 1
 )
 
-// clientIP is the address the throttle keys on and the access log records.
+// clientIP is the address the access log records.
 func clientIP(r *http.Request) string {
 	return httpx.ClientIP(r, trustedHops)
+}
+
+// throttleKey is clientIP through ratelimit.Key: an IPv6 client by its /64,
+// since rotating the low 64 bits is free and a turn per address would
+// throttle nobody.
+func throttleKey(r *http.Request) string {
+	return ratelimit.Key(clientIP(r))
 }
 
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
@@ -218,9 +229,14 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
-	switch err := s.throttle.Wait(r.Context(), clientIP(r)); {
+	key := throttleKey(r)
+	switch err := s.throttle.Wait(r.Context(), key); {
 	case errors.Is(err, httpx.ErrThrottled):
-		w.Header().Set("Retry-After", "5")
+		// Whole seconds, rounded up and never 0 (httpx.TooManyRequests' rule;
+		// it writes JSON where this answers with the page): rounded down, an
+		// obedient client comes back early into another 429.
+		secs := max(int64(math.Ceil(s.throttle.RetryAfter(key).Seconds())), 1)
+		w.Header().Set("Retry-After", strconv.FormatInt(secs, 10))
 		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
 		return
 	case err != nil:
