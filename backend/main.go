@@ -74,7 +74,9 @@ func run(parent context.Context) error {
 		defer cancel()
 		if oidc, err = auth.NewOIDC(dctx, httpapi.OIDCConfig(cfg)); err != nil {
 			// A stop asked for during discovery is a clean exit, not a failed start.
-			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+			// ctx alone decides: go-oidc wraps some failures with %v, which
+			// drops context.Canceled from the chain.
+			if ctx.Err() != nil {
 				log.Info("stopped during oidc discovery")
 				return nil
 			}

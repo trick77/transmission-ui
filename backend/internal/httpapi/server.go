@@ -19,6 +19,7 @@ import (
 	"github.com/trick77/ship/kit/logging"
 	"github.com/trick77/ship/kit/spa"
 	"github.com/trick77/transmission-ui/backend/internal/config"
+	"github.com/trick77/transmission-ui/backend/internal/proxy"
 )
 
 // OIDC is the part of auth.OIDC the server uses, so tests can fake it.
@@ -192,6 +193,7 @@ func (s *Server) Handler() http.Handler {
 		Gate:   s.gate,
 		Index:  s.withBase,
 	})))
+	rpcPath := s.cfg.BasePath + "/transmission/rpc"
 	// Recover inside AccessLog, so a panic's 500 carries the request id. The
 	// UI and the login page load only their own files and inline styles,
 	// which DefaultCSP allows. The probes sit under the prefix, so name them:
@@ -202,10 +204,9 @@ func (s *Server) Handler() http.Handler {
 			ProbePaths: []string{s.cfg.BasePath + "/healthz", s.cfg.BasePath + "/readyz"},
 			// The daemon's 409 hands out X-Transmission-Session-Id: a
 			// handshake on every page load and daemon restart, not a fault.
-			// 499 is a browser that left mid-poll (proxy.go).
+			// 499 is a browser that left mid-poll.
 			Skip: func(r *http.Request, status int) bool {
-				return (status == http.StatusConflict || status == 499) &&
-					r.URL.Path == s.cfg.BasePath+"/transmission/rpc"
+				return (status == http.StatusConflict || status == proxy.StatusClientClosed) && r.URL.Path == rpcPath
 			},
 		}),
 		httpx.Recover(s.log),

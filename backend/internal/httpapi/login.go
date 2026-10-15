@@ -234,7 +234,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The same message either way, so a wrong username is indistinguishable
 		// from a wrong password.
-		s.log.WarnContext(r.Context(), "failed form login", "user", user, "remote", r.RemoteAddr)
+		s.log.WarnContext(r.Context(), "failed form login", "user", user, "remote", clientIP(r))
 		s.renderLogin(w, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}

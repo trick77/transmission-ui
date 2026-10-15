@@ -27,9 +27,9 @@ import (
 // rpcPath is where the daemon serves RPC, whatever the upstream URL's path.
 const rpcPath = "/transmission/rpc"
 
-// statusClientClosed is nginx's "client closed request": no client sees it,
+// StatusClientClosed is nginx's "client closed request": no client sees it,
 // only the access log.
-const statusClientClosed = 499
+const StatusClientClosed = 499
 
 // Config describes the upstream daemon.
 type Config struct {
@@ -103,7 +103,7 @@ func New(cfg Config) (http.Handler, error) {
 			// nobody reads the answer. nginx's 499 keeps it out of the 5xx
 			// the access log reports as errors.
 			if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
-				w.WriteHeader(statusClientClosed)
+				w.WriteHeader(StatusClientClosed)
 				return
 			}
 			// Refused, unresolvable, timed out: the one place the reason exists.
