@@ -99,7 +99,10 @@ func TestRunRejectsBadConfig(t *testing.T) {
 func TestRunStopsDuringDiscovery(t *testing.T) {
 	asked := make(chan struct{}, 1)
 	idp := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		asked <- struct{}{}
+		select {
+		case asked <- struct{}{}:
+		default:
+		}
 		<-r.Context().Done()
 	}))
 	defer idp.Close()
@@ -116,8 +119,11 @@ func TestRunStopsDuringDiscovery(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() {
-		<-asked
-		cancel()
+		select {
+		case <-asked:
+			cancel()
+		case <-ctx.Done():
+		}
 	}()
 	start := time.Now()
 	if err := run(ctx); err != nil {

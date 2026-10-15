@@ -55,17 +55,24 @@ func probe(srv *Server, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// Every answer carries the baseline headers, the login page and API errors
-// alike, not only the shell.
+// Every answer carries the baseline headers: the shell, the login page and
+// its assets, API errors.
 func TestSecurityHeaders(t *testing.T) {
-	srv, _ := newTestServer(t, config.AuthModeForm, "", nil)
-	for _, path := range []string{"/login", "/transmission/rpc"} {
+	srv, sessions := newTestServer(t, config.AuthModeForm, "", nil)
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1"})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	for _, path := range []string{"/", "/login", "/login-assets/icon.svg", "/transmission/rpc"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
 		rec := httptest.NewRecorder()
-		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		srv.Handler().ServeHTTP(rec, req)
 		h := rec.Header()
-		if h.Get("Content-Security-Policy") != httpx.DefaultCSP || h.Get("X-Frame-Options") != "DENY" ||
-			h.Get("X-Content-Type-Options") != "nosniff" || h.Get(httpx.RequestIDHeader) == "" {
-			t.Errorf("%s: headers %v", path, h)
+		if rec.Code >= 500 || h.Get("Content-Security-Policy") != httpx.DefaultCSP || h.Get("X-Frame-Options") != "DENY" ||
+			h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "same-origin" ||
+			h.Get(httpx.RequestIDHeader) == "" {
+			t.Errorf("%s: %d, headers %v", path, rec.Code, h)
 		}
 	}
 }
