@@ -211,7 +211,9 @@ func clientIP(r *http.Request) string {
 // throttleKey is clientIP through ratelimit.Key: an IPv6 client by its /64,
 // since rotating the low 64 bits is free and a turn per address would
 // throttle nobody.
-var throttleKey = ratelimit.ClientKey(trustedHops)
+func throttleKey(r *http.Request) string {
+	return ratelimit.Key(clientIP(r))
+}
 
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	// The route is registered in every mode so the page and its assets resolve,

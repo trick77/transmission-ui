@@ -2,9 +2,11 @@ package httpapi
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -187,15 +189,21 @@ func formTry(srv *Server, client string) *httptest.ResponseRecorder {
 func TestFormLoginRefusalCarriesTheRealWait(t *testing.T) {
 	srv, _ := formServer(t)
 	// The first attempt books the next turn 7.99s out, 2.99s past the 5s
-	// queue: the second is refused for just under 3s, "3" rounded up, with
-	// almost a second of slack for a slow runner.
-	srv.throttle = httpx.NewThrottle(7990*time.Millisecond, 5*time.Second)
+	// queue: the second is refused for 2.99s less the time between them,
+	// "3" rounded up on any runner that takes under 0.99s for the two.
+	const wait = 2990 * time.Millisecond
+	srv.throttle = httpx.NewThrottle(5*time.Second+wait, 5*time.Second)
+	start := time.Now()
 	if rec := formTry(srv, "198.51.100.7"); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("first attempt: want 401, got %d", rec.Code)
 	}
 	rec := formTry(srv, "198.51.100.7")
-	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") != "3" {
-		t.Fatalf("want 429 with Retry-After 3, got %d %q", rec.Code, rec.Header().Get("Retry-After"))
+	// A slower runner shrinks the wait: the header is then the remainder
+	// rounded up, between what is left now and 3.
+	least := max(int(math.Ceil((wait - time.Since(start)).Seconds())), 1)
+	got, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+	if rec.Code != http.StatusTooManyRequests || err != nil || got < least || got > 3 {
+		t.Fatalf("want 429 with Retry-After in [%d, 3], got %d %q", least, rec.Code, rec.Header().Get("Retry-After"))
 	}
 	if !strings.Contains(rec.Body.String(), "Too many attempts") {
 		t.Fatalf("want the sign-in page with the error, got %q", rec.Body.String())
