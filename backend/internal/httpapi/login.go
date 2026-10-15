@@ -8,12 +8,15 @@ import (
 	"errors"
 	"html/template"
 	"io/fs"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/trick77/ship/kit/auth"
 	"github.com/trick77/ship/kit/httpx"
+	"github.com/trick77/ship/kit/ratelimit"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
@@ -199,7 +202,8 @@ const (
 	trustedHops = 1
 )
 
-// clientIP is the address the throttle keys on and the access log records.
+// clientIP is the address the access log records and, through ratelimit.Key,
+// the throttle keys on.
 func clientIP(r *http.Request) string {
 	return httpx.ClientIP(r, trustedHops)
 }
@@ -218,9 +222,16 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
-	switch err := s.throttle.Wait(r.Context(), clientIP(r)); {
+	// Keyed by ratelimit.Key: an IPv6 client by its /64, since rotating the
+	// low 64 bits is free and a turn per address would throttle nobody.
+	key := ratelimit.Key(clientIP(r))
+	switch err := s.throttle.Wait(r.Context(), key); {
 	case errors.Is(err, httpx.ErrThrottled):
-		w.Header().Set("Retry-After", "5")
+		// Whole seconds, rounded up and never 0 (httpx.TooManyRequests' rule;
+		// it writes JSON where this answers with the page): rounded down, an
+		// obedient client comes back early into another 429.
+		secs := max(int64(math.Ceil(s.throttle.RetryAfter(key).Seconds())), 1)
+		w.Header().Set("Retry-After", strconv.FormatInt(secs, 10))
 		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
 		return
 	case err != nil:

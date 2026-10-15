@@ -173,6 +173,50 @@ func TestFormLoginFloodDoesNotLockOthersOut(t *testing.T) {
 	}
 }
 
+// formTry posts a wrong password from client, as the proxy forwards it.
+func formTry(srv *Server, client string) *httptest.ResponseRecorder {
+	r := post(url.Values{"username": {"daemonuser"}, "password": {"nope"}})
+	r.Header.Set("X-Forwarded-For", client)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, r)
+	return rec
+}
+
+// A refusal tells the client its real wait, rounded up to whole seconds, on
+// the sign-in page rather than a bare error.
+func TestFormLoginRefusalCarriesTheRealWait(t *testing.T) {
+	srv, _ := formServer(t)
+	// The first attempt books the next turn 7.5s out, 2.5s past the 5s queue:
+	// the second is refused until that 2.5s has passed.
+	srv.throttle = httpx.NewThrottle(7500*time.Millisecond, 5*time.Second)
+	if rec := formTry(srv, "198.51.100.7"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("first attempt: want 401, got %d", rec.Code)
+	}
+	rec := formTry(srv, "198.51.100.7")
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") != "3" {
+		t.Fatalf("want 429 with Retry-After 3, got %d %q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	if !strings.Contains(rec.Body.String(), "Too many attempts") {
+		t.Fatalf("want the sign-in page with the error, got %q", rec.Body.String())
+	}
+}
+
+// Rotating the low 64 bits of an IPv6 address is free, so one /64 shares a
+// turn; the next /64 over is somebody else.
+func TestFormLoginThrottlesIPv6ByItsSlash64(t *testing.T) {
+	srv, _ := formServer(t)
+	srv.throttle = httpx.NewThrottle(time.Minute, loginMaxWait)
+	if rec := formTry(srv, "2001:db8:1:2::1"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("first attempt: want 401, got %d", rec.Code)
+	}
+	if rec := formTry(srv, "2001:db8:1:2::ffff"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("same /64: want 429, got %d", rec.Code)
+	}
+	if rec := formTry(srv, "2001:db8:1:3::1"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("next /64: want 401, got %d", rec.Code)
+	}
+}
+
 func TestCrossSitePostsAreRefused(t *testing.T) {
 	srv, sessions := formServer(t)
 	cookie, _ := sessions.Encode(auth.Claims{Subject: "u1"})
