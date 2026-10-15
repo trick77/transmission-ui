@@ -19,6 +19,7 @@ import (
 	"github.com/trick77/ship/kit/logging"
 	"github.com/trick77/ship/kit/spa"
 	"github.com/trick77/transmission-ui/backend/internal/config"
+	"github.com/trick77/transmission-ui/backend/internal/proxy"
 )
 
 // OIDC is the part of auth.OIDC the server uses, so tests can fake it.
@@ -134,7 +135,7 @@ func etagOf(b []byte) string {
 }
 
 // Handler returns the mux serving every route, mounted under the configured
-// base path.
+// base path, behind the access log, panic recovery and security headers.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	// The reverse proxy forwards the prefix rather than stripping it (the other
@@ -192,7 +193,25 @@ func (s *Server) Handler() http.Handler {
 		Gate:   s.gate,
 		Index:  s.withBase,
 	})))
-	return mux
+	rpcPath := s.cfg.BasePath + "/transmission/rpc"
+	// Recover inside AccessLog, so a panic's 500 carries the request id. The
+	// UI and the login page load only their own files and inline styles,
+	// which DefaultCSP allows. The probes sit under the prefix, so name them:
+	// Health logs their transitions, a line per probe would be noise.
+	return httpx.Chain(mux,
+		httpx.AccessLog(s.log, httpx.AccessLogOptions{
+			ClientIP:   clientIP,
+			ProbePaths: []string{s.cfg.BasePath + "/healthz", s.cfg.BasePath + "/readyz"},
+			// The daemon's 409 hands out X-Transmission-Session-Id: a
+			// handshake on every page load and daemon restart, not a fault.
+			// 499 is a browser that left mid-poll.
+			Skip: func(r *http.Request, status int) bool {
+				return (status == http.StatusConflict || status == proxy.StatusClientClosed) && r.URL.Path == rpcPath
+			},
+		}),
+		httpx.Recover(s.log),
+		httpx.SecurityHeaders(""),
+	)
 }
 
 // refuse answers a guarded request with the JSON error for status.
@@ -256,12 +275,12 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	claims, err := s.oidc.Callback(w, r)
 	switch {
 	case errors.Is(err, auth.ErrNotInGroup):
-		s.log.Warn("login rejected: missing group", "subject", claims.Subject,
+		s.log.WarnContext(r.Context(), "login rejected: missing group", "subject", claims.Subject,
 			"username", claims.PreferredUsername, "required", s.cfg.OIDCAllowedGroup)
 		httpx.WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	case err != nil:
-		s.log.Warn("oidc callback failed", logging.Err(err))
+		s.log.WarnContext(r.Context(), "oidc callback failed", logging.Err(err))
 		httpx.WriteError(w, http.StatusUnauthorized, "authentication failed")
 		return
 	}
@@ -270,7 +289,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if err := s.sessions.Issue(w, claims); err != nil {
-		s.log.Error("issue session", logging.Err(err))
+		s.log.ErrorContext(r.Context(), "issue session", logging.Err(err))
 		httpx.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

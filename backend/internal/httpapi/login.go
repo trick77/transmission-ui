@@ -199,6 +199,11 @@ const (
 	trustedHops = 1
 )
 
+// clientIP is the address the throttle keys on and the access log records.
+func clientIP(r *http.Request) string {
+	return httpx.ClientIP(r, trustedHops)
+}
+
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	// The route is registered in every mode so the page and its assets resolve,
 	// but only form mode has credentials to check.
@@ -213,7 +218,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
-	switch err := s.throttle.Wait(r.Context(), httpx.ClientIP(r, trustedHops)); {
+	switch err := s.throttle.Wait(r.Context(), clientIP(r)); {
 	case errors.Is(err, httpx.ErrThrottled):
 		w.Header().Set("Retry-After", "5")
 		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
@@ -229,7 +234,8 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The same message either way, so a wrong username is indistinguishable
 		// from a wrong password.
-		s.log.Warn("failed form login", "user", user, "remote", r.RemoteAddr)
+		s.log.WarnContext(r.Context(), "failed form login", "user", user, "remote", r.RemoteAddr,
+			"ip", clientIP(r))
 		s.renderLogin(w, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}

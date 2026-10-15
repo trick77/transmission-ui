@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -52,6 +53,44 @@ func probe(srv *Server, path string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	return rec
+}
+
+// Every answer carries the baseline headers: the shell, the login page and
+// its assets, API errors.
+func TestSecurityHeaders(t *testing.T) {
+	srv, sessions := newTestServer(t, config.AuthModeForm, "", nil)
+	cookie, err := sessions.Encode(auth.Claims{Subject: "u1"})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	for _, path := range []string{"/", "/login", "/login-assets/icon.svg", "/transmission/rpc"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		h := rec.Header()
+		if rec.Code >= 500 || h.Get("Content-Security-Policy") != httpx.DefaultCSP || h.Get("X-Frame-Options") != "DENY" ||
+			h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "same-origin" ||
+			h.Get(httpx.RequestIDHeader) == "" {
+			t.Errorf("%s: %d, headers %v", path, rec.Code, h)
+		}
+	}
+}
+
+// A panicking handler answers a JSON 500 instead of dropping the connection.
+func TestPanicRecovered(t *testing.T) {
+	cfg := config.Config{AuthMode: config.AuthModeForm}
+	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte(`<meta name="tmui-base" content="">`)}}
+	srv, err := New(cfg, nil, newSessions(t, cfg).Sessions, http.NotFoundHandler(), ui,
+		slog.New(slog.DiscardHandler),
+		httpx.Check{Name: "transmission", Run: func(context.Context) error { panic("boom") }})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	rec := probe(srv, "/readyz")
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"error"`) {
+		t.Fatalf("want JSON 500, got %d %q", rec.Code, rec.Body.String())
+	}
 }
 
 // API errors are {"error": "..."}, which the UI reads for its banner.

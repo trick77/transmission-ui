@@ -14,6 +14,7 @@ import (
 	"github.com/trick77/ship/kit/auth"
 	"github.com/trick77/ship/kit/httpx"
 	"github.com/trick77/ship/kit/logging"
+	kitrun "github.com/trick77/ship/kit/run"
 	"github.com/trick77/ship/kit/version"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 	"github.com/trick77/transmission-ui/backend/internal/httpapi"
@@ -31,13 +32,18 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
 		os.Exit(healthcheck())
 	}
-	if err := run(); err != nil {
+	if err := run(context.Background()); err != nil {
 		slog.Error("startup", logging.Err(err))
 		os.Exit(1)
 	}
 }
 
-func run() error {
+// run serves until parent ends or a shutdown signal arrives.
+func run(parent context.Context) error {
+	// Ctrl-C or SIGTERM during startup (a slow OIDC discovery) ends it too,
+	// not only the server after it.
+	ctx, stop := kitrun.Context(parent)
+	defer stop()
 	cfg, cfgErr := config.Load()
 	// Logging first, so the config faults go out in the configured shape; a bad LOG_LEVEL joins them, so every
 	// fault is listed at once.
@@ -64,9 +70,16 @@ func run() error {
 
 	var oidc httpapi.OIDC
 	if cfg.AuthMode == config.AuthModeOIDC {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		dctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if oidc, err = auth.NewOIDC(ctx, httpapi.OIDCConfig(cfg)); err != nil {
+		if oidc, err = auth.NewOIDC(dctx, httpapi.OIDCConfig(cfg)); err != nil {
+			// A stop asked for during discovery is a clean exit, not a failed start.
+			// ctx alone decides: go-oidc wraps some failures with %v, which
+			// drops context.Canceled from the chain.
+			if ctx.Err() != nil {
+				log.Info("stopped during oidc discovery")
+				return nil
+			}
 			return err
 		}
 	}
@@ -83,7 +96,7 @@ func run() error {
 	}
 
 	log.Info("listening", "addr", cfg.Addr, "version", version.String(), "auth", cfg.AuthMode, "upstream", cfg.RPCUpstream)
-	return httpx.Serve(context.Background(), httpx.NewServer(cfg.Addr, srv.Handler()), 10*time.Second)
+	return httpx.Serve(ctx, httpx.NewServer(cfg.Addr, srv.Handler()), 10*time.Second)
 }
 
 // healthcheck probes the local listener's liveness route. The daemon upstream

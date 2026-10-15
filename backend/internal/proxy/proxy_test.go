@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The daemon must receive our credentials, and the browser's own Authorization
@@ -136,6 +137,25 @@ func TestProxyUpstreamDown(t *testing.T) {
 	}
 	if body := strings.TrimSpace(rec.Body.String()); body != `{"error":"upstream unavailable"}` {
 		t.Fatalf("want the JSON error body, got %q", body)
+	}
+}
+
+// A browser that leaves mid-request is no daemon outage: 499, not 502.
+func TestProxyClientGone(t *testing.T) {
+	daemon := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer daemon.Close()
+	h, err := New(Config{Upstream: daemon.URL, User: "u", Pass: "p"})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodPost, "/transmission/rpc", nil))
+	if rec.Code != 499 {
+		t.Fatalf("want 499, got %d", rec.Code)
 	}
 }
 

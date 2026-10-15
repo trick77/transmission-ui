@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The container healthcheck probes the liveness route under the app's own
@@ -65,7 +68,7 @@ func TestHealthcheckNoListener(t *testing.T) {
 // A bad LOG_LEVEL stops the start instead of logging at a silent default.
 func TestRunRejectsUnknownLogLevel(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "verbose")
-	if err := run(); err == nil {
+	if err := run(t.Context()); err == nil {
 		t.Fatal("want an error for LOG_LEVEL=verbose")
 	}
 }
@@ -75,7 +78,7 @@ func TestRunJoinsLogLevelAndConfigFaults(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "verbose")
 	t.Setenv("BACKEND_PUBLIC_URL", "")
 	t.Setenv("BACKEND_AUTH_MODE", "form")
-	err := run()
+	err := run(t.Context())
 	if err == nil || !strings.Contains(err.Error(), "verbose") || !strings.Contains(err.Error(), "BACKEND_PUBLIC_URL") {
 		t.Fatalf("want the LOG_LEVEL and BACKEND_PUBLIC_URL faults together, got %v", err)
 	}
@@ -86,7 +89,67 @@ func TestRunRejectsBadConfig(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "error")
 	t.Setenv("BACKEND_PUBLIC_URL", "")
 	t.Setenv("BACKEND_AUTH_MODE", "form")
-	if err := run(); err == nil {
+	if err := run(t.Context()); err == nil {
 		t.Fatal("want a config error")
+	}
+}
+
+// Shutdown during OIDC discovery ends the start at once and cleanly, not
+// after the 30s discovery timeout with a startup error.
+func TestRunStopsDuringDiscovery(t *testing.T) {
+	asked := make(chan struct{}, 1)
+	idp := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case asked <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	defer idp.Close()
+	t.Setenv("LOG_LEVEL", "error")
+	t.Setenv("BACKEND_PUBLIC_URL", "http://127.0.0.1:8080")
+	t.Setenv("BACKEND_AUTH_MODE", "oidc")
+	t.Setenv("BACKEND_SESSION_SECRET", strings.Repeat("s", 32))
+	t.Setenv("BACKEND_OIDC_ISSUER", idp.URL)
+	t.Setenv("BACKEND_OIDC_CLIENT_ID", "tmui")
+	t.Setenv("BACKEND_OIDC_CLIENT_SECRET", "secret")
+	t.Setenv("BACKEND_OIDC_REDIRECT_URL", "http://127.0.0.1:8080/api/auth/callback")
+	t.Setenv("TRANSMISSION_USER", "user")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() {
+		select {
+		case <-asked:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	start := time.Now()
+	if err := run(ctx); err != nil {
+		t.Fatalf("want a clean stop, got %v", err)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("run took %v after the context ended", d)
+	}
+}
+
+// A shutdown before the listener is up is a clean stop. Needs the built UI
+// (make fe-build), which the gate builds before the tests.
+func TestRunStopsCleanly(t *testing.T) {
+	if _, err := fs.Stat(distFS, "dist/index.html"); err != nil {
+		t.Skip("no UI bundle in dist: make fe-build")
+	}
+	t.Setenv("LOG_LEVEL", "error")
+	t.Setenv("BACKEND_ADDR", "127.0.0.1:0")
+	t.Setenv("BACKEND_PUBLIC_URL", "http://127.0.0.1:8080")
+	t.Setenv("BACKEND_AUTH_MODE", "form")
+	t.Setenv("TRANSMISSION_USER", "user")
+	t.Setenv("TRANSMISSION_PASSWORD", "pass")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := run(ctx); err != nil {
+		t.Fatalf("run: %v", err)
 	}
 }

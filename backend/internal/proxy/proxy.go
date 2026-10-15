@@ -27,6 +27,10 @@ import (
 // rpcPath is where the daemon serves RPC, whatever the upstream URL's path.
 const rpcPath = "/transmission/rpc"
 
+// StatusClientClosed is nginx's "client closed request": no client sees it,
+// only the access log.
+const StatusClientClosed = 499
+
 // Config describes the upstream daemon.
 type Config struct {
 	Upstream string // e.g. http://transmission:9091
@@ -80,7 +84,7 @@ func New(cfg Config) (http.Handler, error) {
 		// through sign-in forever. Report it as the upstream misconfig it is.
 		ModifyResponse: func(resp *http.Response) error {
 			if err := refusal(resp.StatusCode); err != nil {
-				log.Error("transmission refused the RPC request", logging.Err(err))
+				log.ErrorContext(resp.Request.Context(), "transmission refused the RPC request", logging.Err(err))
 				resp.Header.Del("WWW-Authenticate")
 				_ = resp.Body.Close()
 				// No ResponseWriter here, so httpx.WriteError's body by hand.
@@ -94,9 +98,16 @@ func New(cfg Config) (http.Handler, error) {
 			}
 			return nil
 		},
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			// The browser left (reload, closed tab): the daemon is fine and
+			// nobody reads the answer. nginx's 499 keeps it out of the 5xx
+			// the access log reports as errors.
+			if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+				w.WriteHeader(StatusClientClosed)
+				return
+			}
 			// Refused, unresolvable, timed out: the one place the reason exists.
-			log.Error("transmission is unreachable", "upstream", cfg.Upstream, logging.Err(err))
+			log.ErrorContext(r.Context(), "transmission is unreachable", "upstream", cfg.Upstream, logging.Err(err))
 			httpx.WriteError(w, http.StatusBadGateway, "upstream unavailable")
 		},
 	}
