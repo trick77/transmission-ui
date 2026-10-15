@@ -196,6 +196,7 @@ const (
 	// X-Forwarded-For entry it wrote is the client. Reached directly, the
 	// header is the caller's to forge; a forged one only buys a fresh turn
 	// per value, which is the unthrottled form this replaced and no worse.
+	// The access log's ip follows the same count.
 	trustedHops = 1
 )
 

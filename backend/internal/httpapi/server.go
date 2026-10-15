@@ -134,7 +134,7 @@ func etagOf(b []byte) string {
 }
 
 // Handler returns the mux serving every route, mounted under the configured
-// base path.
+// base path, behind the access log, panic recovery and security headers.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	// The reverse proxy forwards the prefix rather than stripping it (the other
@@ -192,7 +192,23 @@ func (s *Server) Handler() http.Handler {
 		Gate:   s.gate,
 		Index:  s.withBase,
 	})))
-	return mux
+	// Recover inside AccessLog, so a panic's 500 carries the request id. The
+	// UI and the login page load only their own files and inline styles,
+	// which DefaultCSP allows. The probes sit under the prefix, so name them:
+	// Health logs their transitions, a line per probe would be noise.
+	return httpx.Chain(mux,
+		httpx.AccessLog(s.log, httpx.AccessLogOptions{
+			ClientIP:   func(r *http.Request) string { return httpx.ClientIP(r, trustedHops) },
+			ProbePaths: []string{s.cfg.BasePath + "/healthz", s.cfg.BasePath + "/readyz"},
+			// The daemon's 409 hands out X-Transmission-Session-Id: a
+			// handshake on every page load and daemon restart, not a fault.
+			Skip: func(r *http.Request, status int) bool {
+				return status == http.StatusConflict && r.URL.Path == s.cfg.BasePath+"/transmission/rpc"
+			},
+		}),
+		httpx.Recover(s.log),
+		httpx.SecurityHeaders(""),
+	)
 }
 
 // refuse answers a guarded request with the JSON error for status.
