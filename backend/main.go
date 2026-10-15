@@ -75,6 +75,7 @@ func run(parent context.Context) error {
 		if oidc, err = auth.NewOIDC(dctx, httpapi.OIDCConfig(cfg)); err != nil {
 			// A stop asked for during discovery is a clean exit, not a failed start.
 			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+				log.Info("stopped during oidc discovery")
 				return nil
 			}
 			return err

@@ -202,8 +202,10 @@ func (s *Server) Handler() http.Handler {
 			ProbePaths: []string{s.cfg.BasePath + "/healthz", s.cfg.BasePath + "/readyz"},
 			// The daemon's 409 hands out X-Transmission-Session-Id: a
 			// handshake on every page load and daemon restart, not a fault.
+			// 499 is a browser that left mid-poll (proxy.go).
 			Skip: func(r *http.Request, status int) bool {
-				return status == http.StatusConflict && r.URL.Path == s.cfg.BasePath+"/transmission/rpc"
+				return (status == http.StatusConflict || status == 499) &&
+					r.URL.Path == s.cfg.BasePath+"/transmission/rpc"
 			},
 		}),
 		httpx.Recover(s.log),
@@ -272,12 +274,12 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	claims, err := s.oidc.Callback(w, r)
 	switch {
 	case errors.Is(err, auth.ErrNotInGroup):
-		s.log.Warn("login rejected: missing group", "subject", claims.Subject,
+		s.log.WarnContext(r.Context(), "login rejected: missing group", "subject", claims.Subject,
 			"username", claims.PreferredUsername, "required", s.cfg.OIDCAllowedGroup)
 		httpx.WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	case err != nil:
-		s.log.Warn("oidc callback failed", logging.Err(err))
+		s.log.WarnContext(r.Context(), "oidc callback failed", logging.Err(err))
 		httpx.WriteError(w, http.StatusUnauthorized, "authentication failed")
 		return
 	}
@@ -286,7 +288,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if err := s.sessions.Issue(w, claims); err != nil {
-		s.log.Error("issue session", logging.Err(err))
+		s.log.ErrorContext(r.Context(), "issue session", logging.Err(err))
 		httpx.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
