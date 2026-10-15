@@ -182,13 +182,14 @@ func formTry(srv *Server, client string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// A refusal tells the client its real wait, rounded up to whole seconds, on
-// the sign-in page rather than a bare error.
+// A refusal's Retry-After is the real wait rounded up to whole seconds, and
+// the answer is still the sign-in page rather than a bare error.
 func TestFormLoginRefusalCarriesTheRealWait(t *testing.T) {
 	srv, _ := formServer(t)
-	// The first attempt books the next turn 7.5s out, 2.5s past the 5s queue:
-	// the second is refused until that 2.5s has passed.
-	srv.throttle = httpx.NewThrottle(7500*time.Millisecond, 5*time.Second)
+	// The first attempt books the next turn 7.99s out, 2.99s past the 5s
+	// queue: the second is refused for just under 3s, "3" rounded up, with
+	// almost a second of slack for a slow runner.
+	srv.throttle = httpx.NewThrottle(7990*time.Millisecond, 5*time.Second)
 	if rec := formTry(srv, "198.51.100.7"); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("first attempt: want 401, got %d", rec.Code)
 	}

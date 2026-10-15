@@ -187,9 +187,10 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 const (
 	// loginGap is the gap between two attempts from one client. Per client, so
 	// guessing is capped at two tries a second however many connections one
-	// address opens, while a flood from that address cannot keep anyone else
+	// client opens, while a flood from that client cannot keep anyone else
 	// from signing in: a limit shared by everybody would hand any visitor a
-	// way to lock the form.
+	// way to lock the form. An IPv6 client is its /64 (throttleKey), so a
+	// flood does hold back its own /64's neighbours.
 	loginGap = 500 * time.Millisecond
 	// loginMaxWait is how far ahead a client may queue attempts before further
 	// ones are refused.
@@ -202,11 +203,15 @@ const (
 	trustedHops = 1
 )
 
-// clientIP is the address the access log records and, through ratelimit.Key,
-// the throttle keys on.
+// clientIP is the address the access log records.
 func clientIP(r *http.Request) string {
 	return httpx.ClientIP(r, trustedHops)
 }
+
+// throttleKey is clientIP through ratelimit.Key: an IPv6 client by its /64,
+// since rotating the low 64 bits is free and a turn per address would
+// throttle nobody.
+var throttleKey = ratelimit.ClientKey(trustedHops)
 
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	// The route is registered in every mode so the page and its assets resolve,
@@ -222,9 +227,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
-	// Keyed by ratelimit.Key: an IPv6 client by its /64, since rotating the
-	// low 64 bits is free and a turn per address would throttle nobody.
-	key := ratelimit.Key(clientIP(r))
+	key := throttleKey(r)
 	switch err := s.throttle.Wait(r.Context(), key); {
 	case errors.Is(err, httpx.ErrThrottled):
 		// Whole seconds, rounded up and never 0 (httpx.TooManyRequests' rule;
