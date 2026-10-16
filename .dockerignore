@@ -9,10 +9,12 @@
 ui/node_modules
 ui/dist
 ui/coverage
+# The host's UI build in the Go tree: the image builds dist in its own stage, a stale one must not come in with the
+# context.
+backend/dist
 # ship:end
 
-# Test output, and the host's embed copy: the image embeds the ui stage's own dist.
+# Test output.
 **/node_modules
 ui/test-results
 ui/playwright-report
-backend/dist
