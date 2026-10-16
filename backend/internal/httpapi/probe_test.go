@@ -94,7 +94,8 @@ func TestPanicRecovered(t *testing.T) {
 	// Recover resets the header to what it found: what the 500 needs is set
 	// outside it.
 	h := rec.Header()
-	if h.Get("Content-Security-Policy") != httpx.DefaultCSP || h.Get("X-Content-Type-Options") != "nosniff" ||
+	if h.Get("Content-Security-Policy") != httpx.DefaultCSP || h.Get("X-Frame-Options") != "DENY" ||
+		h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "same-origin" ||
 		h.Get(httpx.RequestIDHeader) == "" {
 		t.Fatalf("500 lost the outer headers: %v", h)
 	}
