@@ -3,13 +3,8 @@
 # directory (a tracked self-referential symlink once broke fresh `npm` installs).
 node_modules
 *.tsbuildinfo
-# The Vite bundle (vite's outDir) that `go build` embeds. .gitkeep is tracked so
-# go:embed has its dir in a fresh clone.
-backend/dist/*
-!backend/dist/.gitkeep
 
 # Coverage reports
-/coverage/
 /ui/coverage/
 
 # Test output
@@ -51,3 +46,13 @@ scripts/transmission-ui
 scripts/state/
 scripts/downloads/
 scripts/watch/
+
+# ship:begin (owned by ship init; the repo's own lines go above the begin marker)
+# What the gate and the UI build write into the tree.
+coverage/ui/
+ui/node_modules/
+ui/*.tsbuildinfo
+# The UI build the Go binary embeds; .gitkeep stays tracked so go:embed's dir exists in a fresh clone.
+backend/dist/*
+!backend/dist/.gitkeep
+# ship:end
