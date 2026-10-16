@@ -67,9 +67,10 @@ type Config struct {
 func Load() (Config, error) {
 	r := env.New(os.Getenv)
 	cfg := Config{
-		Addr:                      r.String("BACKEND_ADDR", ":8080"),
-		PublicURL:                 r.String("BACKEND_PUBLIC_URL", ""),
-		AuthMode:                  AuthMode(r.String("BACKEND_AUTH_MODE", string(AuthModeOIDC))),
+		Addr:      r.String("BACKEND_ADDR", ":8080"),
+		PublicURL: r.String("BACKEND_PUBLIC_URL", ""),
+		AuthMode: AuthMode(r.Enum("BACKEND_AUTH_MODE", string(AuthModeOIDC),
+			string(AuthModeOIDC), string(AuthModeForm))),
 		SessionTTL:                24 * time.Hour,
 		OIDCPostLogoutRedirectURL: r.String("BACKEND_OIDC_POST_LOGOUT_REDIRECT_URL", ""),
 		OIDCAllowedGroup:          r.String("BACKEND_OIDC_ALLOWED_GROUP", ""),
@@ -129,8 +130,6 @@ func Load() (Config, error) {
 		// The form checks the daemon's RPC credentials, so a blank password
 		// would let anyone in with just the username.
 		cfg.RPCPass = r.Required("TRANSMISSION_PASSWORD")
-	default:
-		r.Fail("BACKEND_AUTH_MODE must be %q or %q, got %q", AuthModeOIDC, AuthModeForm, cfg.AuthMode)
 	}
 	if secret != "" {
 		// The secret signs every session: a short one is a startup error, not
