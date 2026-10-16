@@ -91,6 +91,14 @@ func TestPanicRecovered(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"error"`) {
 		t.Fatalf("want JSON 500, got %d %q", rec.Code, rec.Body.String())
 	}
+	// Recover resets the header to what it found: what the 500 needs is set
+	// outside it.
+	h := rec.Header()
+	if h.Get("Content-Security-Policy") != httpx.DefaultCSP || h.Get("X-Frame-Options") != "DENY" ||
+		h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "same-origin" ||
+		h.Get(httpx.RequestIDHeader) == "" {
+		t.Fatalf("500 lost the outer headers: %v", h)
+	}
 }
 
 // API errors are {"error": "..."}, which the UI reads for its banner.

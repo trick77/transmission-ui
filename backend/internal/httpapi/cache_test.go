@@ -184,8 +184,8 @@ func formTry(srv *Server, client string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// A refusal's Retry-After is the real wait rounded up to whole seconds, and
-// the answer is still the sign-in page rather than a bare error.
+// A refusal's Retry-After is the throttle's wait, rounded up to whole seconds
+// by kit, and the answer is still the sign-in page rather than a bare error.
 func TestFormLoginRefusalCarriesTheRealWait(t *testing.T) {
 	srv, _ := formServer(t)
 	// The first attempt books the next turn 7.99s out, 2.99s past the 5s

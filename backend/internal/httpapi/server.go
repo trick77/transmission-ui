@@ -135,7 +135,7 @@ func etagOf(b []byte) string {
 }
 
 // Handler returns the mux serving every route, mounted under the configured
-// base path, behind the access log, panic recovery and security headers.
+// base path, behind the access log, security headers and panic recovery.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	// The reverse proxy forwards the prefix rather than stripping it (the other
@@ -194,24 +194,37 @@ func (s *Server) Handler() http.Handler {
 		Index:  s.withBase,
 	})))
 	rpcPath := s.cfg.BasePath + "/transmission/rpc"
-	// Recover inside AccessLog, so a panic's 500 carries the request id. The
-	// UI and the login page load only their own files and inline styles,
-	// which DefaultCSP allows. The probes sit under the prefix, so name them:
+	// Recover innermost: its 500 keeps only the headers set outside it, so
+	// the request id and the security headers sit outside. The UI and the
+	// login page load only their own files and inline styles, which
+	// DefaultCSP allows. The probes sit under the prefix, so name them:
 	// Health logs their transitions, a line per probe would be noise.
 	return httpx.Chain(mux,
 		httpx.AccessLog(s.log, httpx.AccessLogOptions{
 			ClientIP:   clientIP,
 			ProbePaths: []string{s.cfg.BasePath + "/healthz", s.cfg.BasePath + "/readyz"},
-			// The daemon's 409 hands out X-Transmission-Session-Id: a
-			// handshake on every page load and daemon restart, not a fault.
+			Level:      accessLevel,
 			// 499 is a browser that left mid-poll.
 			Skip: func(r *http.Request, status int) bool {
-				return (status == http.StatusConflict || status == proxy.StatusClientClosed) && r.URL.Path == rpcPath
+				return status == proxy.StatusClientClosed && r.URL.Path == rpcPath
 			},
 		}),
-		httpx.Recover(s.log),
 		httpx.SecurityHeaders(""),
+		httpx.Recover(s.log),
 	)
+}
+
+// accessLevel is kit's rule, with 409 at debug: the daemon's 409 hands out
+// X-Transmission-Session-Id, a handshake on every page load and daemon
+// restart, not a fault. Logged rather than skipped, so a client stuck in a
+// 409 loop shows at LOG_LEVEL=debug. The level sees only the status, but the
+// RPC proxy passing the daemon's answer through is the one route that
+// answers 409.
+func accessLevel(status int) slog.Level {
+	if status == http.StatusConflict {
+		return slog.LevelDebug
+	}
+	return httpx.StatusLevel(status, slog.LevelDebug)
 }
 
 // refuse answers a guarded request with the JSON error for status.
