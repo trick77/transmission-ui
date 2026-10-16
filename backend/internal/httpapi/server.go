@@ -17,6 +17,7 @@ import (
 	"github.com/trick77/ship/kit/auth"
 	"github.com/trick77/ship/kit/httpx"
 	"github.com/trick77/ship/kit/logging"
+	"github.com/trick77/ship/kit/ratelimit"
 	"github.com/trick77/ship/kit/spa"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 	"github.com/trick77/transmission-ui/backend/internal/proxy"
@@ -87,7 +88,7 @@ type Server struct {
 	baseTag []byte
 
 	// Form login: spaces one client's attempts apart; see handleLoginSubmit.
-	throttle *httpx.Throttle
+	throttle *ratelimit.Throttle
 }
 
 const baseMeta = `<meta name="tmui-base" content="">`
@@ -101,7 +102,7 @@ func New(cfg config.Config, oidc OIDC, sessions *auth.Sessions, rpc http.Handler
 		log = slog.Default()
 	}
 	s := &Server{cfg: cfg, oidc: oidc, sessions: sessions, rpc: rpc, ui: ui, log: log, ready: ready,
-		throttle: httpx.NewThrottle(loginGap, loginMaxWait)}
+		throttle: ratelimit.NewThrottle(loginGap, loginMaxWait)}
 	index, err := fs.ReadFile(ui, "index.html")
 	if err != nil {
 		return nil, errors.New("the UI bundle has no index.html")
