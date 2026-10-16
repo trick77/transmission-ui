@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -270,6 +272,48 @@ func TestRPCWithSessionReachesDaemon(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || rec.Body.String() != "reached-daemon" {
 		t.Fatalf("authorized request blocked: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// The daemon's 409 handshake is logged at debug, so a 409 loop shows; a poll
+// the browser abandoned (499) is not logged at all, under any base path.
+func TestAccessLogRPCStatuses(t *testing.T) {
+	for _, base := range []string{"", "/tm"} {
+		for _, tc := range []struct {
+			status int
+			level  string // "" means no line
+		}{
+			{http.StatusConflict, "DEBUG"},
+			{499, ""},
+			{http.StatusBadGateway, "ERROR"},
+		} {
+			srv, sessions := newTestServerAt(t, config.AuthModeForm, "", nil, base)
+			var buf bytes.Buffer
+			srv.log = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			srv.rpc = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(tc.status) })
+			cookie, err := sessions.Encode(auth.Claims{Subject: "u1"})
+			if err != nil {
+				t.Fatalf("encode: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodPost, base+"/transmission/rpc", nil)
+			req.AddCookie(cookie)
+			srv.Handler().ServeHTTP(httptest.NewRecorder(), req)
+
+			var got string
+			for _, l := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+				var line struct {
+					Msg    string `json:"msg"`
+					Level  string `json:"level"`
+					Status int    `json:"status"`
+				}
+				if json.Unmarshal([]byte(l), &line) == nil && line.Msg == "http_request" && line.Status == tc.status {
+					got = line.Level
+				}
+			}
+			if got != tc.level {
+				t.Errorf("base %q, status %d: want level %q, got %q (log %s)", base, tc.status, tc.level, got, buf.String())
+			}
+		}
 	}
 }
 

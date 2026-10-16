@@ -135,7 +135,7 @@ func etagOf(b []byte) string {
 }
 
 // Handler returns the mux serving every route, mounted under the configured
-// base path, behind the access log, panic recovery and security headers.
+// base path, behind the access log, security headers and panic recovery.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	// The reverse proxy forwards the prefix rather than stripping it (the other
