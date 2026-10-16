@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/trick77/ship/kit/auth"
-	"github.com/trick77/ship/kit/httpx"
+	"github.com/trick77/ship/kit/ratelimit"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 )
 
@@ -110,7 +110,7 @@ func TestLoginPageDoesNotBounceARefusedSession(t *testing.T) {
 func TestFormLoginSpacesOneClientsAttempts(t *testing.T) {
 	srv, _ := formServer(t)
 	const gap = 100 * time.Millisecond
-	srv.throttle = httpx.NewThrottle(gap, loginMaxWait)
+	srv.throttle = ratelimit.NewThrottle(gap, loginMaxWait)
 	try := func(pass string) int {
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, post(url.Values{"username": {"daemonuser"}, "password": {pass}}))
@@ -192,7 +192,7 @@ func TestFormLoginRefusalCarriesTheRealWait(t *testing.T) {
 	// queue: the second is refused for 2.99s less the time between them,
 	// "3" rounded up on any runner that takes under 0.99s for the two.
 	const wait = 2990 * time.Millisecond
-	srv.throttle = httpx.NewThrottle(5*time.Second+wait, 5*time.Second)
+	srv.throttle = ratelimit.NewThrottle(5*time.Second+wait, 5*time.Second)
 	start := time.Now()
 	if rec := formTry(srv, "198.51.100.7"); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("first attempt: want 401, got %d", rec.Code)
@@ -214,7 +214,7 @@ func TestFormLoginRefusalCarriesTheRealWait(t *testing.T) {
 // turn; the next /64 over is somebody else.
 func TestFormLoginThrottlesIPv6ByItsSlash64(t *testing.T) {
 	srv, _ := formServer(t)
-	srv.throttle = httpx.NewThrottle(time.Minute, loginMaxWait)
+	srv.throttle = ratelimit.NewThrottle(time.Minute, loginMaxWait)
 	if rec := formTry(srv, "2001:db8:1:2::1"); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("first attempt: want 401, got %d", rec.Code)
 	}

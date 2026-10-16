@@ -230,7 +230,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	err := s.throttle.Wait(r.Context(), throttleKey(r))
 	// The refusal carries its wait. httpx.TooManyRequests would answer JSON;
 	// this answers with the page, under the same Retry-After.
-	var throttled *httpx.ThrottledError
+	var throttled *ratelimit.ThrottledError
 	if errors.As(err, &throttled) {
 		httpx.SetRetryAfter(w, throttled.RetryAfter)
 		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
