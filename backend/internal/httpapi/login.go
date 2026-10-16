@@ -8,9 +8,7 @@ import (
 	"errors"
 	"html/template"
 	"io/fs"
-	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -229,17 +227,16 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	user := r.PostFormValue("username")
 	pass := r.PostFormValue("password")
 
-	key := throttleKey(r)
-	switch err := s.throttle.Wait(r.Context(), key); {
-	case errors.Is(err, httpx.ErrThrottled):
-		// Whole seconds, rounded up and never 0 (httpx.TooManyRequests' rule;
-		// it writes JSON where this answers with the page): rounded down, an
-		// obedient client comes back early into another 429.
-		secs := max(int64(math.Ceil(s.throttle.RetryAfter(key).Seconds())), 1)
-		w.Header().Set("Retry-After", strconv.FormatInt(secs, 10))
+	err := s.throttle.Wait(r.Context(), throttleKey(r))
+	// The refusal carries its wait. httpx.TooManyRequests would answer JSON;
+	// this answers with the page, under the same Retry-After.
+	var throttled *httpx.ThrottledError
+	if errors.As(err, &throttled) {
+		httpx.SetRetryAfter(w, throttled.RetryAfter)
 		s.renderLogin(w, http.StatusTooManyRequests, "Too many attempts. Try again in a moment.")
 		return
-	case err != nil:
+	}
+	if err != nil {
 		// The client gave up; nobody is left to answer.
 		return
 	}

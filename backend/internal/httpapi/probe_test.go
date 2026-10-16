@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/trick77/ship/kit/auth"
 	"github.com/trick77/ship/kit/httpx"
@@ -90,6 +93,59 @@ func TestPanicRecovered(t *testing.T) {
 	rec := probe(srv, "/readyz")
 	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"error"`) {
 		t.Fatalf("want JSON 500, got %d %q", rec.Code, rec.Body.String())
+	}
+	// Recover resets the header to what it found: what the 500 needs is set
+	// outside it.
+	h := rec.Header()
+	if h.Get("Content-Security-Policy") != httpx.DefaultCSP || h.Get("X-Content-Type-Options") != "nosniff" ||
+		h.Get(httpx.RequestIDHeader) == "" {
+		t.Fatalf("500 lost the outer headers: %v", h)
+	}
+}
+
+// The daemon's 409 handshake is logged at debug, so a 409 loop shows; a poll
+// the browser abandoned (499) is not logged at all.
+func TestAccessLogRPCStatuses(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		level  string // "" means no line
+	}{
+		{http.StatusConflict, "DEBUG"},
+		{499, ""},
+		{http.StatusBadGateway, "ERROR"},
+	} {
+		var buf bytes.Buffer
+		cfg := config.Config{AuthMode: config.AuthModeForm, SessionTTL: time.Hour}
+		sessions := newSessions(t, cfg)
+		rpc := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(tc.status) })
+		ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte(`<meta name="tmui-base" content="">`)}}
+		log := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		srv, err := New(cfg, nil, sessions.Sessions, rpc, ui, log)
+		if err != nil {
+			t.Fatalf("new: %v", err)
+		}
+		cookie, err := sessions.Encode(auth.Claims{Subject: "u1"})
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/transmission/rpc", nil)
+		req.AddCookie(cookie)
+		srv.Handler().ServeHTTP(httptest.NewRecorder(), req)
+
+		var got string
+		for _, l := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+			var line struct {
+				Msg    string `json:"msg"`
+				Level  string `json:"level"`
+				Status int    `json:"status"`
+			}
+			if json.Unmarshal([]byte(l), &line) == nil && line.Msg == "http_request" && line.Status == tc.status {
+				got = line.Level
+			}
+		}
+		if got != tc.level {
+			t.Errorf("status %d: want level %q, got %q (log %s)", tc.status, tc.level, got, buf.String())
+		}
 	}
 }
 
