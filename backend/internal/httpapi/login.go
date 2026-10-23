@@ -185,7 +185,7 @@ func loginAssetHandler(basePath string) http.Handler {
 			httpx.WriteError(w, http.StatusNotFound, "not found")
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		w.Header().Set("ETag", tag)
 		w.Header().Set("Cache-Control", "no-cache")
 		// Go's MIME table has no .woff2, and nosniff is set globally, so a
