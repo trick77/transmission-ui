@@ -155,7 +155,7 @@ func loginAssetHandler(basePath string) http.Handler {
 			return err
 		}
 		body, err := fs.ReadFile(sub, name)
-		etags[name] = etagOf(body)
+		etags[name] = httpx.ETag(body)
 		return err
 	})
 	if err != nil {
