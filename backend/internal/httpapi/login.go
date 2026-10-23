@@ -7,9 +7,12 @@ import (
 	"embed"
 	"errors"
 	"html/template"
+	"io"
 	"io/fs"
 	"net/http"
+	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/trick77/ship/kit/auth"
@@ -140,34 +143,59 @@ func (s *Server) renderLogin(w http.ResponseWriter, status int, msg string) {
 	}{msg, s.cfg.BasePath, s.cfg.AuthMode == config.AuthModeOIDC})
 }
 
-// loginAssetHandler serves the page's embedded background, fonts and icon. The
-// names carry no content hash, so they must not be cached as immutable: a
-// redeploy that changes one would keep serving the old copy for a year. Each
-// gets a validator instead, and a revisit costs a 304.
-func loginAssetHandler(basePath string) http.Handler {
-	sub, err := fs.Sub(loginAssets, "assets")
-	if err != nil {
-		panic(err) // the embed is compile-time; a failure here is a build bug
-	}
-	etags := map[string]string{}
-	err = fs.WalkDir(sub, ".", func(name string, d fs.DirEntry, err error) error {
+// loginAssetETags maps each embedded asset's name to its ETag. The embed is
+// fixed at build time, so the digests are taken once, not per Handler call.
+// Only the tags are kept: the bodies are opened from the embed per request.
+var loginAssetETags = sync.OnceValue(func() map[string]string {
+	tags := map[string]string{}
+	err := fs.WalkDir(loginAssets, "assets", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		body, err := fs.ReadFile(sub, name)
-		etags[name] = httpx.ETag(body)
-		return err
+		body, err := fs.ReadFile(loginAssets, name)
+		if err != nil {
+			return err
+		}
+		tags[strings.TrimPrefix(name, "assets/")] = httpx.ETag(body)
+		return nil
 	})
 	if err != nil {
-		panic(err)
+		panic(err) // the embed is compile-time; a failure here is a build bug
 	}
-	files := http.FileServer(http.FS(sub))
+	return tags
+})
+
+// loginAssetHandler serves the page's embedded background, fonts and icon. The
+// names carry no content hash, so they must not be cached as immutable: a
+// redeploy that changes one would keep serving the old copy for a year. Each
+// gets a validator instead, and a revisit costs a 304. Only the embedded files
+// resolve, by name, so anything else, a directory included, is a 404 and there
+// is no listing to hand out.
+func loginAssetHandler(basePath string) http.Handler {
+	tags := loginAssetETags()
 	return http.StripPrefix(basePath+"/login-assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if tag, ok := etags[strings.TrimPrefix(r.URL.Path, "/")]; ok {
-			w.Header().Set("ETag", tag)
+		name := r.URL.Path
+		tag, ok := tags[name]
+		if !ok {
+			httpx.WriteError(w, http.StatusNotFound, "not found")
+			return
 		}
+		f, err := loginAssets.Open("assets/" + name)
+		if err != nil {
+			httpx.WriteError(w, http.StatusNotFound, "not found")
+			return
+		}
+		defer func() { _ = f.Close() }()
+		w.Header().Set("ETag", tag)
 		w.Header().Set("Cache-Control", "no-cache")
-		files.ServeHTTP(w, r)
+		// Go's MIME table has no .woff2, and nosniff is set globally, so a
+		// sniffed type would cost the page its fonts. The rest go by extension.
+		if path.Ext(name) == ".woff2" {
+			w.Header().Set("Content-Type", "font/woff2")
+		}
+		// The embed has no modification times; the zero time leaves the ETag
+		// as the only validator.
+		http.ServeContent(w, r, name, time.Time{}, f.(io.ReadSeeker))
 	}))
 }
 
