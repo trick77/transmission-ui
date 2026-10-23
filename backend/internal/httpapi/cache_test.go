@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"io/fs"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -82,13 +83,27 @@ func TestLoginAssetsRevalidate(t *testing.T) {
 }
 
 // The assets are served before sign-in, so nothing but the embedded files may
-// resolve: the bare directory would otherwise answer with a listing of them.
+// resolve: a directory must not answer with a listing of them.
 func TestLoginAssetsDirectoryIsNotListed(t *testing.T) {
 	srv, _ := formServer(t)
-	for _, path := range []string{"/login-assets/", "/login-assets/fonts/", "/login-assets/icon.svg/"} {
-		rec := get(srv, path, nil)
-		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "icon.svg") {
-			t.Fatalf("%s: want a 404 without a listing, got %d %q", path, rec.Code, rec.Body.String())
+	assertNoLoginAssetListing(t, srv, "")
+}
+
+func assertNoLoginAssetListing(t *testing.T, srv *Server, base string) {
+	t.Helper()
+	entries, err := fs.ReadDir(loginAssets, "assets")
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no embedded assets to check against: %v", err)
+	}
+	for _, path := range []string{"/login-assets/", "/login-assets/icon.svg/", "/login-assets/index.html"} {
+		rec := get(srv, base+path, nil)
+		if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"error"`) {
+			t.Fatalf("%s: want a JSON 404, got %d %q", base+path, rec.Code, rec.Body.String())
+		}
+		for _, e := range entries {
+			if strings.Contains(rec.Body.String(), e.Name()) {
+				t.Fatalf("%s: body names %s: %q", base+path, e.Name(), rec.Body.String())
+			}
 		}
 	}
 }

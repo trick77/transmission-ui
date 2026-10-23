@@ -119,3 +119,8 @@ func TestPrefixServesLoginAssets(t *testing.T) {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
 }
+
+func TestPrefixDoesNotListLoginAssets(t *testing.T) {
+	srv, _ := prefixServer(t)
+	assertNoLoginAssetListing(t, srv, "/transmission")
+}
