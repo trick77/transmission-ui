@@ -81,6 +81,18 @@ func TestLoginAssetsRevalidate(t *testing.T) {
 	}
 }
 
+// The assets are served before sign-in, so nothing but the embedded files may
+// resolve: the bare directory would otherwise answer with a listing of them.
+func TestLoginAssetsDirectoryIsNotListed(t *testing.T) {
+	srv, _ := formServer(t)
+	for _, path := range []string{"/login-assets/", "/login-assets/fonts/", "/login-assets/icon.svg/"} {
+		rec := get(srv, path, nil)
+		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "icon.svg") {
+			t.Fatalf("%s: want a 404 without a listing, got %d %q", path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestNewRefusesBundleWithoutBaseTag(t *testing.T) {
 	cfg := config.Config{AuthMode: config.AuthModeForm, BasePath: "/transmission"}
 	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html>ui</html>")}}

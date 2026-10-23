@@ -143,7 +143,9 @@ func (s *Server) renderLogin(w http.ResponseWriter, status int, msg string) {
 // loginAssetHandler serves the page's embedded background, fonts and icon. The
 // names carry no content hash, so they must not be cached as immutable: a
 // redeploy that changes one would keep serving the old copy for a year. Each
-// gets a validator instead, and a revisit costs a 304.
+// gets a validator instead, and a revisit costs a 304. Only the embedded files
+// resolve: anything else, the directory itself included, is a 404, or
+// FileServer would hand out a listing of it.
 func loginAssetHandler(basePath string) http.Handler {
 	sub, err := fs.Sub(loginAssets, "assets")
 	if err != nil {
@@ -163,9 +165,12 @@ func loginAssetHandler(basePath string) http.Handler {
 	}
 	files := http.FileServer(http.FS(sub))
 	return http.StripPrefix(basePath+"/login-assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if tag, ok := etags[strings.TrimPrefix(r.URL.Path, "/")]; ok {
-			w.Header().Set("ETag", tag)
+		tag, ok := etags[strings.TrimPrefix(r.URL.Path, "/")]
+		if !ok {
+			http.NotFound(w, r)
+			return
 		}
+		w.Header().Set("ETag", tag)
 		w.Header().Set("Cache-Control", "no-cache")
 		files.ServeHTTP(w, r)
 	}))
