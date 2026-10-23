@@ -82,6 +82,45 @@ func TestLoginAssetsRevalidate(t *testing.T) {
 	}
 }
 
+// nosniff is set on every response, so a wrong Content-Type is not corrected
+// by the browser: a font served as anything but font/woff2 leaves the page on
+// its fallback faces. Ranges must keep working on the bodies opened per request.
+func TestLoginAssetsServeTypesAndRanges(t *testing.T) {
+	srv, _ := formServer(t)
+	want := map[string]string{
+		"icon.svg":                           "image/svg+xml",
+		"login-bg.webp":                      "image/webp",
+		"SansWebVariable-TextRegular.woff2":  "font/woff2",
+		"SerifWebVariable-TextRegular.woff2": "font/woff2",
+	}
+	entries, err := fs.ReadDir(loginAssets, "assets")
+	if err != nil || len(entries) != len(want) {
+		t.Fatalf("want %d embedded assets, got %d: %v", len(want), len(entries), err)
+	}
+	for _, e := range entries {
+		ctype, ok := want[e.Name()]
+		if !ok {
+			t.Fatalf("%s: no expected Content-Type", e.Name())
+		}
+		body, err := fs.ReadFile(loginAssets, "assets/"+e.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := "/login-assets/" + e.Name()
+		full := get(srv, path, nil)
+		if full.Code != http.StatusOK || full.Header().Get("Content-Type") != ctype || full.Body.Len() != len(body) {
+			t.Fatalf("%s: want 200 %s with %d bytes, got %d %q %d", path, ctype, len(body), full.Code,
+				full.Header().Get("Content-Type"), full.Body.Len())
+		}
+		part := get(srv, path, nil, "Range", "bytes=2-9")
+		wantRange := "bytes 2-9/" + strconv.Itoa(len(body))
+		if part.Code != http.StatusPartialContent || part.Header().Get("Content-Range") != wantRange ||
+			part.Body.String() != string(body[2:10]) {
+			t.Fatalf("%s: want 206 %q, got %d %q", path, wantRange, part.Code, part.Header().Get("Content-Range"))
+		}
+	}
+}
+
 // The assets are served before sign-in, so nothing but the embedded files may
 // resolve: a directory must not answer with a listing of them.
 func TestLoginAssetsDirectoryIsNotListed(t *testing.T) {
