@@ -4,8 +4,6 @@ package httpapi
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"html"
 	"io/fs"
@@ -126,13 +124,6 @@ func (s *Server) withBase(index []byte, _ *http.Request) []byte {
 		return index
 	}
 	return bytes.Replace(index, []byte(baseMeta), s.baseTag, 1)
-}
-
-// etagOf is a strong validator over the content. The embedded files carry no
-// modification time, so without one a browser can never get a 304.
-func etagOf(b []byte) string {
-	sum := sha256.Sum256(b)
-	return `"` + hex.EncodeToString(sum[:8]) + `"`
 }
 
 // Handler returns the mux serving every route, mounted under the configured
