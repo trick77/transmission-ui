@@ -6,7 +6,7 @@ import { bytes } from "../lib/format";
 import { labelCounts } from "../lib/model";
 import { Add } from "./Add";
 import { Settings } from "./Settings";
-import { Opt, TextInput, Toggle, useDismiss } from "../app/ui";
+import { TextInput, useDismiss } from "../app/ui";
 import {
   Chip,
   FolderChips,
@@ -72,13 +72,7 @@ export function Dialogs() {
     case "settings":
       return <Settings onClose={close} section={dialog.section} />;
     case "confirm-remove":
-      return (
-        <ConfirmRemove
-          ids={dialog.ids}
-          deleteData={dialog.deleteData}
-          onClose={close}
-        />
-      );
+      return <ConfirmRemove ids={dialog.ids} onClose={close} />;
     case "labels":
       return <Labels ids={dialog.ids} onClose={close} />;
     case "location":
@@ -101,14 +95,11 @@ function names(ids: number[]) {
 
 function ConfirmRemove({
   ids,
-  deleteData,
   onClose,
 }: {
   ids: number[];
-  deleteData: boolean;
   onClose: () => void;
 }) {
-  const [del, setDel] = useState(deleteData);
   const n = names(ids);
   const dirs = [
     ...new Set(
@@ -117,7 +108,7 @@ function ConfirmRemove({
   ];
   return (
     <Modal
-      title={del ? "Remove and delete data" : "Remove from list"}
+      title="Remove and delete data"
       width={520}
       onClose={onClose}
       footer={
@@ -127,16 +118,14 @@ function ConfirmRemove({
             Cancel
           </button>
           <button
-            className={"btn " + (del ? "primary" : "")}
-            style={del ? { background: "var(--err)" } : undefined}
+            className="btn primary"
+            style={{ background: "var(--err)" }}
             onClick={() => {
               onClose();
-              void removeSequence(ids, del);
+              void removeSequence(ids);
             }}
           >
-            {del
-              ? `Delete ${ids.length > 1 ? ids.length + " torrents" : "torrent"} and data`
-              : `Remove ${ids.length > 1 ? ids.length + " torrents" : "torrent"}`}
+            {`Delete ${ids.length > 1 ? ids.length + " torrents" : "torrent"} and data`}
           </button>
         </>
       }
@@ -155,21 +144,9 @@ function ConfirmRemove({
             </>
           )}
         </div>
-        <Opt
-          label="Also delete downloaded data"
-          desc={
-            del ? (
-              <span style={{ color: "var(--err)" }}>
-                Files under {dirs.join(", ")} are deleted. This cannot be
-                undone.
-              </span>
-            ) : (
-              "The files stay on disk; only the torrent is forgotten."
-            )
-          }
-        >
-          <Toggle on={del} onChange={setDel} />
-        </Opt>
+        <div className="hint" style={{ color: "var(--err)" }}>
+          Files under {dirs.join(", ")} are deleted. This cannot be undone.
+        </div>
       </div>
     </Modal>
   );
@@ -281,7 +258,6 @@ function Location({ ids, onClose }: { ids: number[]; onClose: () => void }) {
     () =>
       get().byId.get(ids[0])?.download_dir ?? get().session?.download_dir ?? "",
   );
-  const [move, setMove] = useState(true);
   const free = useFreeSpace(path);
   return (
     <Modal
@@ -298,10 +274,10 @@ function Location({ ids, onClose }: { ids: number[]; onClose: () => void }) {
             className="btn primary"
             onClick={() => {
               onClose();
-              void run("Move", () => api.setLocation(ids, path, move));
+              void run("Move", () => api.setLocation(ids, path));
             }}
           >
-            {move ? "Move" : "Set location"}
+            Move
           </button>
         </>
       }
@@ -318,16 +294,7 @@ function Location({ ids, onClose }: { ids: number[]; onClose: () => void }) {
           />
           <FolderChips value={path} onPick={setPath} />
         </div>
-        <Opt
-          label="Move data"
-          desc={
-            move
-              ? "Files are moved to the new folder."
-              : "Only the path changes; use when the files are already there."
-          }
-        >
-          <Toggle on={move} onChange={setMove} />
-        </Opt>
+        <div className="hint">Files are moved to the new folder.</div>
       </div>
     </Modal>
   );

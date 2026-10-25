@@ -46,14 +46,14 @@ export const start = (ids: number[]) => rpc("torrent_start", { ids });
 export const stop = (ids: number[]) => rpc("torrent_stop", { ids });
 export const verify = (ids: number[]) => rpc("torrent_verify", { ids });
 export const reannounce = (ids: number[]) => rpc("torrent_reannounce", { ids });
-export const remove = (ids: number[], deleteData: boolean) =>
-  rpc("torrent_remove", { ids, delete_local_data: deleteData });
+export const remove = (ids: number[]) =>
+  rpc("torrent_remove", { ids, delete_local_data: true });
 export const queueMove = (
   where: "top" | "up" | "down" | "bottom",
   ids: number[],
 ) => rpc(`queue_move_${where}`, { ids });
-export const setLocation = (ids: number[], location: string, move = true) =>
-  rpc("torrent_set_location", { ids, location, move });
+export const setLocation = (ids: number[], location: string) =>
+  rpc("torrent_set_location", { ids, location, move: true });
 export const renamePath = (id: number, path: string, name: string) =>
   rpc("torrent_rename_path", { ids: [id], path, name });
 

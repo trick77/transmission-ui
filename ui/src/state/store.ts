@@ -18,7 +18,7 @@ export type Dialog =
   | { kind: "none" }
   | { kind: "add"; magnet?: string; files?: File[] }
   | { kind: "settings"; section?: string }
-  | { kind: "confirm-remove"; ids: number[]; deleteData: boolean }
+  | { kind: "confirm-remove"; ids: number[] }
   | { kind: "labels"; ids: number[] }
   | { kind: "location"; ids: number[] }
   | { kind: "rename"; id: number }
@@ -68,7 +68,6 @@ export interface Removing {
   done: number; // responses received, successes and failures
   active: number | null; // the id the daemon is deleting right now
   failed: { id: number; msg: string }[];
-  deleteData: boolean;
   stopped: boolean;
 }
 
@@ -449,7 +448,7 @@ export function selectAllVisible() {
 
 let removalToken = 0;
 
-export async function removeSequence(ids: number[], deleteData: boolean) {
+export async function removeSequence(ids: number[]) {
   if (!ids.length) return;
   // A finished run hangs around so its failures stay readable, so "already removing" has
   // to mean actually in flight. Otherwise retrying the torrent that just failed would be
@@ -494,34 +493,16 @@ export async function removeSequence(ids: number[], deleteData: boolean) {
       done: 0,
       active: null,
       failed: [],
-      deleteData,
       stopped: false,
     },
   });
-
-  if (!deleteData) {
-    try {
-      await api.remove(batch, false);
-      patch(() => ({ done: batch.length, active: null }));
-    } catch (e) {
-      // One call, one failure: the batch never reached the daemon, so this is reported as
-      // a plain toast rather than marking every row as individually failed. The run ends
-      // here, without the success toast finishRemoval would otherwise write over it.
-      patch(() => ({ done: batch.length, active: null }));
-      if (mine()) set({ removing: null });
-      refreshNow();
-      toast(`Remove failed: ${errMsg(e)}`);
-      return;
-    }
-    return finishRemoval(token);
-  }
 
   for (const id of batch) {
     const cur = mine();
     if (!cur || cur.stopped) break;
     patch(() => ({ active: id }));
     try {
-      await api.remove([id], true);
+      await api.remove([id]);
       // The 200 means the files are gone, so drop the row now instead of waiting for the
       // next poll. mergeTorrents() deleting the same id later is a harmless no-op.
       const byId = new Map(get().byId);
@@ -558,12 +539,7 @@ function finishRemoval(token: number) {
   if (r.failed.length) return;
   const n = r.done;
   set({ removing: null });
-  if (n)
-    toast(
-      r.deleteData
-        ? `Removed ${n === 1 ? "1 torrent" : `${n} torrents`} and data`
-        : `Removed ${n === 1 ? "1 torrent" : `${n} torrents`}`,
-    );
+  if (n) toast(`Removed ${n === 1 ? "1 torrent" : `${n} torrents`} and data`);
 }
 
 /** Stop issuing further removes. The one in flight cannot be aborted: the daemon is mid-unlink. */

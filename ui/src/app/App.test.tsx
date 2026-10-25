@@ -720,11 +720,16 @@ describe("list interactions", () => {
     await waitFor(() =>
       expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(2),
     );
+    fireEvent.click(
+      within(row("Big Buck Bunny (2008) 4K 60fps")).getByTitle("More"),
+    );
+    expect(document.querySelector(".cmenu")).not.toHaveTextContent("from list");
     open("Remove and delete data…");
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "Remove and delete data",
     );
     expect(screen.getByRole("dialog")).toHaveTextContent("cannot be undone");
+    expect(within(screen.getByRole("dialog")).queryByRole("switch")).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: /Delete torrent and data/ }),
     );
@@ -764,7 +769,7 @@ describe("list interactions", () => {
     );
   });
 
-  it("keyboard: \u2318\u232b opts out of deleting the data", async () => {
+  it("keyboard: \u2318\u232b deletes the data too", async () => {
     await mount();
     fireEvent.click(
       within(row("Big Buck Bunny (2008) 4K 60fps")).getByText(
@@ -772,12 +777,14 @@ describe("list interactions", () => {
       ),
     );
     fireEvent.keyDown(document, { key: "Backspace", metaKey: true });
-    expect(screen.getByRole("dialog")).toHaveTextContent("Remove from list");
-    fireEvent.click(screen.getByRole("button", { name: /^Remove torrent/ }));
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Remove and delete data",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /and data$/ }));
     await waitFor(() =>
       expect(daemon.of("torrent_remove")[0]).toEqual({
         ids: [2],
-        delete_local_data: false,
+        delete_local_data: true,
       }),
     );
   });
@@ -1227,13 +1234,13 @@ describe("dialogs", () => {
     let dlg = await screen.findByRole("dialog");
     await waitFor(() => expect(dlg).toHaveTextContent("412 GB free"));
     fireEvent.click(within(dlg).getByRole("button", { name: "buffer" }));
-    fireEvent.click(within(dlg).getByRole("switch")); // move off → "Set location"
-    fireEvent.click(within(dlg).getByRole("button", { name: "Set location" }));
+    expect(within(dlg).queryByRole("switch")).toBeNull();
+    fireEvent.click(within(dlg).getByRole("button", { name: "Move" }));
     await waitFor(() =>
       expect(daemon.of("torrent_set_location")[0]).toEqual({
         ids: [1],
         location: "/data/torrents/buffer",
-        move: false,
+        move: true,
       }),
     );
 
