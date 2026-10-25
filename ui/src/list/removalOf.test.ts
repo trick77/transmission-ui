@@ -8,7 +8,6 @@ const base: Removing = {
   done: 0,
   active: null,
   failed: [],
-  deleteData: true,
   stopped: false,
 };
 
@@ -32,13 +31,6 @@ describe("removalOf", () => {
     expect(removalOf({ ...base, active: 2 }, 2)).toEqual({
       kind: "active",
       text: "Deleting files…",
-    });
-  });
-
-  it("words remove-from-list differently from remove-and-delete", () => {
-    expect(removalOf({ ...base, active: 2, deleteData: false }, 2)).toEqual({
-      kind: "active",
-      text: "Removing…",
     });
   });
 

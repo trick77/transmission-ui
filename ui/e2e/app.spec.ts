@@ -219,7 +219,7 @@ test('dead fixture tracker: issues on a fresh daemon, down + notice once the out
   await expect(item.locator('.sub.down')).toHaveText(/^down · /)
 })
 
-test('add by magnet then remove from list', async ({ page }) => {
+test('add by magnet then remove it', async ({ page }) => {
   const magnet = 'magnet:?xt=urn:btih:00000000000000000000000000000000000000e2&dn=e2e-added&tr=http://127.0.0.1:1/announce'
   await page.getByRole('button', { name: 'Add' }).first().click()
   await page.locator('.modal input[placeholder^="magnet"]').fill(magnet)
@@ -229,9 +229,9 @@ test('add by magnet then remove from list', async ({ page }) => {
   const row = page.locator('.row', { hasText: 'e2e-added' })
   await expect(row).toBeVisible({ timeout: 8000 })
   await row.click({ button: 'right' })
-  await page.locator('.cmenu .it', { hasText: 'Remove from list' }).click()
+  await page.locator('.cmenu .it', { hasText: 'Remove and delete data' }).click()
   await shot(page, 'confirm-remove')
-  await page.locator('.modal').getByRole('button', { name: /^Remove torrent/ }).click()
+  await page.locator('.modal').getByRole('button', { name: /^Delete torrent and data/ }).click()
   await expect.poll(async () => (await torrents()).some(t => t.name === 'e2e-added'), { timeout: 8000 }).toBe(false)
 })
 

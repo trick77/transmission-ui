@@ -26,8 +26,8 @@
 ## Conventions
 - All RPC via `ui/src/rpc/methods.ts`; daemon's snake_case names, spellings from upstream `docs/rpc-spec.md`, never memory.
 - Derived views in `ui/src/lib/model.ts`. One Error filter = daemon error + failing tracker; `filterFn` maps retired `trackererr` onto it.
-- Bulk = one RPC with id array. Remove vs remove+delete: always two differently worded actions; remove+delete is default (⌫), remove-only ⌘⌫. Do not "fix" that inversion.
-- **Remove+delete = one `torrent_remove` per torrent** (`removeSequence`): sync on the daemon's session thread, answers nothing while it unlinks (polls included), 200 = files gone; cost O(file count). Closing the tab mid-run leaves the rest. Remove-from-list stays one call. Failed rows persist until dismissed, never vanish silently.
+- Bulk = one RPC with id array. Remove always deletes data (⌫ / ⌘⌫ / menu): no remove-from-list, no keep-data toggle. Set location always moves data (`move: true`), no toggle. Do not bring either back.
+- **Remove+delete = one `torrent_remove` per torrent** (`removeSequence`): sync on the daemon's session thread, answers nothing while it unlinks (polls included), 200 = files gone; cost O(file count). Closing the tab mid-run leaves the rest. Failed rows persist until dismissed, never vanish silently.
 - New inspector field → `EXTRA_FIELDS` or `EXTRA_LIVE`, else it never refreshes.
 - Empty delta leaves `torrents`/`byId` untouched (every 5th tick renews the array, for clock-driven tracker health); `List` hands `Row` stable props (`rowMemo.test.tsx`). Never mutate a row (`perRow` cache).
 - Only hashed `/assets/*` is `immutable`; unversioned names get ETag + `no-cache`. No compression in the backend.

@@ -82,13 +82,7 @@ export function App() {
       }
       if (e.key === "Backspace" || e.key === "Delete") {
         e.preventDefault();
-        set({
-          dialog: {
-            kind: "confirm-remove",
-            ids,
-            deleteData: !(e.metaKey || e.ctrlKey),
-          },
-        });
+        set({ dialog: { kind: "confirm-remove", ids } });
       }
     };
     document.addEventListener("keydown", onKey);

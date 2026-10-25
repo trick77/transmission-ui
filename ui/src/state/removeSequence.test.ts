@@ -35,13 +35,13 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe("removeSequence with delete-data", () => {
+describe("removeSequence", () => {
   it("sends one torrent_remove per torrent, not one call with an id array", async () => {
     d = installFakeDaemon({ torrents: three() });
     const { removeSequence, set } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    await removeSequence([1, 2, 3], true);
+    await removeSequence([1, 2, 3]);
 
     const calls = d.of("torrent_remove");
     expect(calls).toHaveLength(3);
@@ -55,7 +55,7 @@ describe("removeSequence with delete-data", () => {
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
     // ids arrive in the order the user clicked them
-    await removeSequence([3, 1, 2], true);
+    await removeSequence([3, 1, 2]);
 
     expect(d.of("torrent_remove").map((c) => c.ids)).toEqual([[1], [2], [3]]);
   });
@@ -67,7 +67,7 @@ describe("removeSequence with delete-data", () => {
     // what List.tsx shows: sorted descending, so progress should walk 3, 2, 1
     setViewOrder([3, 2, 1]);
 
-    await removeSequence([1, 2, 3], true);
+    await removeSequence([1, 2, 3]);
 
     expect(d.of("torrent_remove").map((c) => c.ids)).toEqual([[3], [2], [1]]);
   });
@@ -85,7 +85,7 @@ describe("removeSequence with delete-data", () => {
     const { removeSequence, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    const done = removeSequence([1, 2, 3], true);
+    const done = removeSequence([1, 2, 3]);
     for (let i = 0; i < 3; i++) {
       await settle();
       seen.push(get().torrents.map((t) => t.id));
@@ -113,10 +113,9 @@ describe("removeSequence with delete-data", () => {
     const { removeSequence, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    const done = removeSequence([1, 2, 3], true);
+    const done = removeSequence([1, 2, 3]);
     await settle();
     expect(get().removing?.active).toBe(1);
-    expect(get().removing?.deleteData).toBe(true);
 
     gates.shift()?.();
     await settle();
@@ -138,7 +137,7 @@ describe("removeSequence with delete-data", () => {
       selected: new Set([1, 2, 3]),
     });
 
-    await removeSequence([1, 2], true);
+    await removeSequence([1, 2]);
 
     expect([...get().selected]).toEqual([3]);
   });
@@ -155,7 +154,7 @@ describe("partial failure", () => {
     const { removeSequence, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    await removeSequence([1, 2, 3], true);
+    await removeSequence([1, 2, 3]);
 
     // all three were attempted
     expect(d.of("torrent_remove")).toHaveLength(3);
@@ -175,7 +174,7 @@ describe("partial failure", () => {
     const { removeSequence, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    await removeSequence([1, 2, 3], true);
+    await removeSequence([1, 2, 3]);
 
     // a failed removal must not vanish silently -- that is the bug this feature exists to fix
     expect(get().removing).not.toBeNull();
@@ -187,7 +186,7 @@ describe("partial failure", () => {
     const { removeSequence, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    await removeSequence([1, 2, 3], true);
+    await removeSequence([1, 2, 3]);
 
     expect(get().removing).toBeNull();
     expect(get().toast).toContain("3 torrents");
@@ -204,12 +203,12 @@ describe("partial failure", () => {
     const { removeSequence, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    await removeSequence([1], true);
+    await removeSequence([1]);
     expect(get().removing?.failed).toHaveLength(1); // summary still on screen
 
     // user fixes the permissions and tries again: this must start a new run, not be dropped
     fail = false;
-    await removeSequence([1], true);
+    await removeSequence([1]);
 
     expect(d.of("torrent_remove")).toHaveLength(2);
     expect(get().removing).toBeNull();
@@ -227,9 +226,9 @@ describe("partial failure", () => {
     const { removeSequence, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    const done = removeSequence([1, 2], true);
+    const done = removeSequence([1, 2]);
     await settle();
-    await removeSequence([3], true);
+    await removeSequence([3]);
 
     expect(get().toast).toContain("already running");
     expect(d.of("torrent_remove").map((c) => c.ids)).toEqual([[1]]); // torrent 3 was not sent
@@ -251,41 +250,9 @@ describe("partial failure", () => {
     const { removeSequence, dismissRemoval, set, get } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    await removeSequence([1], true);
+    await removeSequence([1]);
     expect(get().removing).not.toBeNull();
     dismissRemoval();
-    expect(get().removing).toBeNull();
-  });
-});
-
-describe("remove from list", () => {
-  it("stays a single call with the whole id array: it does not touch the disk", async () => {
-    d = installFakeDaemon({ torrents: three() });
-    const { removeSequence, set } = await freshStore();
-    set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
-
-    await removeSequence([1, 2, 3], false);
-
-    const calls = d.of("torrent_remove");
-    expect(calls).toHaveLength(1);
-    expect(calls[0].ids).toEqual([1, 2, 3]);
-    expect(calls[0].delete_local_data).toBe(false);
-  });
-
-  it("toasts a transport error instead of blaming every row in the batch", async () => {
-    d = installFakeDaemon({
-      torrents: three(),
-      onRemove: () => {
-        throw new Error("HTTP 502");
-      },
-    });
-    const { removeSequence, set, get } = await freshStore();
-    set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
-
-    await removeSequence([1, 2, 3], false);
-
-    // the batch never reached the daemon, so no individual torrent failed
-    expect(get().toast).toContain("502");
     expect(get().removing).toBeNull();
   });
 });
@@ -304,13 +271,13 @@ describe("a run that outlives its own stop", () => {
       await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    const first = removeSequence([1, 2, 3], true);
+    const first = removeSequence([1, 2, 3]);
     await settle();
     stopRemoval();
     dismissRemoval(); // user clears the bar while torrent 1 is still unlinking
 
     // a fresh run starts before the old one's reply lands
-    const second = removeSequence([3], true);
+    const second = removeSequence([3]);
     await settle();
     gates.shift()?.(); // torrent 1 finally comes back, inside the stopped loop
     await settle();
@@ -335,12 +302,12 @@ describe("a run that outlives its own stop", () => {
       await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    const first = removeSequence([1, 2], true);
+    const first = removeSequence([1, 2]);
     await settle();
     stopRemoval();
     dismissRemoval();
 
-    const second = removeSequence([3], true);
+    const second = removeSequence([3]);
     await settle();
     gates.shift()?.(); // the old run's reply
     await settle();
@@ -363,7 +330,7 @@ describe("the inspector", () => {
       focusId: 2,
     });
 
-    await removeSequence([2], true);
+    await removeSequence([2]);
 
     // the poll that would normally notice cannot run while the daemon is unlinking
     expect(get().focusId).toBeNull();
@@ -384,7 +351,7 @@ describe("stopRemoval", () => {
     const { removeSequence, stopRemoval, set } = await freshStore();
     set({ torrents: three(), byId: new Map(three().map((t) => [t.id, t])) });
 
-    const done = removeSequence([1, 2, 3], true);
+    const done = removeSequence([1, 2, 3]);
     await settle();
     stopRemoval();
     gates.shift()?.(); // the in-flight one still completes: the daemon is mid-unlink

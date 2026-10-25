@@ -659,7 +659,7 @@ body.resizing{cursor:col-resize;user-select:none}
           <button class="x" id="selclear" title="Clear selection"><svg class="i" style="width:13px;height:13px"><use href="#i-x"/></svg></button>
         </div>
         <div class="rm-bar" id="rmbar" hidden>
-          <span class="v" id="rmcount">Removing 1 of 10</span>
+          <span class="v" id="rmcount">Deleting 1 of 10</span>
           <span class="who" id="rmwho">debian-13.1.0-amd64-netinst.iso</span>
           <span class="track"><i id="rmfill" style="--p:0%"></i></span>
           <button class="btn sm ghost" id="rmstop">Stop</button>
@@ -806,7 +806,7 @@ const ADV_LABEL = {size:{lt1:"< 1 GB","1to10":"1–10 GB",gt10:"> 10 GB"}, age:{
 let adv = {};
 const BASE = "/data/torrents";
 const rel = d => d.startsWith(BASE + "/") ? d.slice(BASE.length + 1) : d;
-const RM = { state:{}, ids:[], done:0, fails:0, stopped:false, timer:null, del:true, filter:null };
+const RM = { state:{}, ids:[], done:0, fails:0, stopped:false, timer:null, filter:null };
 const gb = s => s.endsWith("MB") ? parseFloat(s)/1024 : parseFloat(s);
 function renderRows(selId, filter){ RM.filter = filter;
   const F = filter && filter.startsWith('dir:') ? {label: rel(filter.slice(4)), f: t => t.dir === filter.slice(4) || t.dir.startsWith(filter.slice(4) + '/')} : FILTERS[filter || 'all'];
@@ -846,7 +846,7 @@ function contextMenu(rowEl){
        <div class="cmenu sub">${it('up','Move to top')}${it('up','Move up')}${it('down','Move down')}${it('down','Move to bottom')}</div></div>` +
     it('tag','Labels…') + it('folder','Set location…') + it('file','Rename…') + it('gear','Limits & priority…') + `<div class="sep"></div>` +
     it('magnet','Copy magnet link','⌘C') + it('link','Open folder') + `<div class="sep"></div>` +
-    it('trash','Remove and delete data…','⌫','danger') + it('x','Remove from list','⌘⌫','danger');
+    it('trash','Remove and delete data…','⌫','danger');
   document.body.appendChild(m);
 }
 // ───────── Bulk removal, mocked ─────────
@@ -865,10 +865,9 @@ function rmRender(){
   const cur = RM.ids[RM.done];
   const finished = RM.done >= total || RM.stopped;
   bar.classList.toggle('done', finished);
-  const verb = RM.del ? 'Deleting' : 'Removing';
   document.getElementById('rmcount').textContent = finished
     ? (RM.fails ? `Removed ${RM.done - RM.fails} of ${total}, ${RM.fails} failed` : `Removed ${RM.done} torrents`)
-    : `${verb} ${RM.done + 1} of ${total}`;
+    : `Deleting ${RM.done + 1} of ${total}`;
   const who = document.getElementById('rmwho');
   who.textContent = finished ? '' : (T.find(t=>t.id===cur)?.name || '');
   const sbtn = document.getElementById('rmstop');
@@ -883,7 +882,7 @@ function rmStep(){
   const id = RM.ids[RM.done];
   // one torrent in the batch fails, so the mock shows the partial-failure wording too
   const fail = RM.done === 6;
-  RM.state[id] = RM.del ? 'Deleting files…' : 'Removing…';
+  RM.state[id] = 'Deleting files…';
   renderRows(null, RM.filter); rmRender();
   RM.timer = setTimeout(() => {
     if (fail) { RM.state[id] = 'Failed: permission denied'; RM.fails++; }
@@ -907,9 +906,9 @@ function rmDismiss(){
   RM.ids = []; RM.done = 0; RM.fails = 0; RM.stopped = false;
   renderRows(null, RM.filter); rmRender();
 }
-function rmStart(ids, del){
+function rmStart(ids){
   clearTimeout(RM.timer);
-  RM.ids = ids.slice(); RM.done = 0; RM.fails = 0; RM.stopped = false; RM.del = del !== false;
+  RM.ids = ids.slice(); RM.done = 0; RM.fails = 0; RM.stopped = false;
   RM.ids.forEach(id => { RM.state[id] = 'Queued for removal'; });
   document.querySelectorAll('.row').forEach(r=>r.classList.remove('sel'));
   syncSel();
@@ -979,11 +978,11 @@ if (Q.has('tmenu')) toolbarMenu(document.getElementById('tmenu'));
 // Bulk removal: the sel-bar's Remove hands its ids to the sequence and steps aside.
 document.querySelector('#selbar .btn.danger').onclick = () => {
   const ids = [...document.querySelectorAll('.row.sel')].map(r=>+r.dataset.id);
-  if (ids.length) rmStart(ids, true);
+  if (ids.length) rmStart(ids);
 };
 // ?rm=10 removes the first N rows in view, so the sequence can be watched without clicking.
 if (Q.has('rm')) {
   const n = +Q.get('rm') || 10;
-  rmStart([...document.querySelectorAll('.row')].slice(0, n).map(r=>+r.dataset.id), Q.get('del') !== '0');
+  rmStart([...document.querySelectorAll('.row')].slice(0, n).map(r=>+r.dataset.id));
 }
 </script>

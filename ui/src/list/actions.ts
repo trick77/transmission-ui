@@ -94,17 +94,7 @@ export function torrentMenu(ids: number[]): MenuItem[] {
       label: "Remove and delete data…",
       k: "⌫",
       danger: true,
-      onClick: () =>
-        set({ dialog: { kind: "confirm-remove", ids, deleteData: true } }),
-    },
-    {
-      icon: "x",
-      label:
-        ids.length > 1 ? `Remove ${ids.length} from list` : "Remove from list",
-      k: "⌘⌫",
-      danger: true,
-      onClick: () =>
-        set({ dialog: { kind: "confirm-remove", ids, deleteData: false } }),
+      onClick: () => set({ dialog: { kind: "confirm-remove", ids } }),
     },
   ];
 }

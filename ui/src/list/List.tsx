@@ -302,13 +302,7 @@ export function List() {
             <button
               className="btn sm ghost danger"
               onClick={() =>
-                set({
-                  dialog: {
-                    kind: "confirm-remove",
-                    ids: selIds,
-                    deleteData: true,
-                  },
-                })
+                set({ dialog: { kind: "confirm-remove", ids: selIds } })
               }
             >
               <Icon name="trash" />
@@ -583,7 +577,7 @@ function RemoveBar() {
     ? r.failed.length
       ? `Removed ${ok} of ${total}, ${r.failed.length} failed`
       : `Removed ${ok === 1 ? "1 torrent" : `${ok} torrents`}`
-    : `${r.deleteData ? "Deleting" : "Removing"} ${Math.min(r.done + 1, total)} of ${total}`;
+    : `Deleting ${Math.min(r.done + 1, total)} of ${total}`;
   const who = r.active != null ? (byId.get(r.active)?.name ?? "") : "";
   return (
     <div
@@ -634,11 +628,7 @@ export function removalOf(r: Removing | null, id: number): RowRemoval {
   const failed = r.failed.find((f) => f.id === id);
   if (failed) return { kind: "failed", text: `Failed: ${failed.msg}` };
   if (!r.ids.includes(id)) return null;
-  if (r.active === id)
-    return {
-      kind: "active",
-      text: r.deleteData ? "Deleting files…" : "Removing…",
-    };
+  if (r.active === id) return { kind: "active", text: "Deleting files…" };
   // A stopped run leaves the not-yet-attempted rows alone: they are still there and still live.
   if (r.stopped) return null;
   return { kind: "queued", text: "Queued for removal" };
