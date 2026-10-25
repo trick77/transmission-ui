@@ -3,10 +3,10 @@ import { Icon } from "../icons/Icon";
 import { ago, bytes } from "../lib/format";
 import {
   deleteOrphan,
-  forgetKept,
   keepOrphan,
   KeptByRecheck,
   STATE_GROUP,
+  unkeepOrphan,
   type Orphan,
   type OrphanScan,
 } from "../api/orphans";
@@ -83,7 +83,8 @@ export function why(o: Orphan): ReactNode[] {
       <span key="m">
         <b>A loaded torrent has this exact name</b>, with its data in{" "}
         <span className="mono">{o.match}</span>. If that folder is this same
-        storage under another name, these are its files: keep it.{" "}
+        storage under another name, or the torrent is still downloading into an
+        earlier incomplete folder, these are its files: keep it.{" "}
       </span>,
     );
   } else if (o.inside) {
@@ -180,6 +181,9 @@ export function OrphanReview({
   >("review");
   const [outcome, setOutcome] = useState<Record<string, Outcome>>({});
   const stopped = useRef(false);
+  // Keep and Undo go out one after another, in key-press order: K then U on the same
+  // entry must leave it forgotten, not let the Keep land last.
+  const keeps = useRef<Promise<unknown>>(Promise.resolve());
   // Set on mount too: StrictMode mounts, unmounts and mounts again, and a flag only
   // ever cleared would leave a delete run believing the window had closed.
   const alive = useRef(true);
@@ -222,14 +226,15 @@ export function OrphanReview({
       }
     }
     // Keep is remembered on the server right away; taking it back forgets it again.
+    const send = (call: () => Promise<void>, what: string) => {
+      keeps.current = keeps.current
+        .then(call)
+        .catch((e: Error) => toast(`Could not ${what}: ${e.message}`));
+    };
     if (d === "keep" && was !== "keep")
-      keepOrphan(scan.scan_id, id).catch((e: Error) =>
-        toast(`Could not remember the Keep: ${e.message}`),
-      );
+      send(() => keepOrphan(scan.scan_id, id), "remember the Keep");
     if (d !== "keep" && was === "keep")
-      forgetKept(scan.scan_id, id).catch((e: Error) =>
-        toast(`Could not forget the Keep: ${e.message}`),
-      );
+      send(() => unkeepOrphan(scan.scan_id, id), "forget the Keep");
   };
 
   useEffect(() => {

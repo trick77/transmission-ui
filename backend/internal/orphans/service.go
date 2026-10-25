@@ -19,6 +19,7 @@ import (
 	"path"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,11 +30,8 @@ import (
 // list, short enough that nobody deletes from a picture of last week's disk.
 const resultTTL = 30 * time.Minute
 
-// claimsTTL is how long a delete run reuses the daemon's answer: one
-// torrent_get per run, not one per entry, but never older than this.
-const claimsTTL = 30 * time.Second
-
-// ErrBusy is a scan or delete while another one runs.
+// ErrBusy is a scan or delete while another one runs. Nothing was checked; the
+// same request can simply be tried again.
 var ErrBusy = errors.New("a scan or delete is already running")
 
 // ErrExpired is a scan id that is gone: expired, replaced, or from before a restart.
@@ -56,17 +54,20 @@ type Options struct {
 
 // Service runs scans and deletes. One operation at a time.
 type Service struct {
-	roots   []config.Mount
-	state   config.Mount
-	rpc     *rpcClient
-	log     *slog.Logger
-	now     func() time.Time
-	opMu    sync.Mutex // held for a whole scan or delete
-	mu      sync.Mutex // guards the fields below
-	result  *Result
-	lastAt  time.Time
-	claims  *claims
-	claimAt time.Time
+	roots  []config.Mount
+	state  config.Mount
+	rpc    *rpcClient
+	log    *slog.Logger
+	now    func() time.Time
+	opMu   sync.Mutex // held for a whole scan or delete
+	keepMu sync.Mutex // held for a read-modify-write of the Keep list
+	mu     sync.Mutex // guards the fields below
+	result *Result
+	lastAt time.Time
+	// The claims the last delete built, and the cheap fingerprint of the
+	// daemon's answer they came from; see freshClaims.
+	claims   *claims
+	claimsFP string
 }
 
 // New checks that every folder is there and is a folder: a typo in a mount
@@ -108,10 +109,11 @@ type Result struct {
 
 // Status is what the Settings entry shows before any scan.
 type Status struct {
-	Roots    []RootStatus `json:"roots"`
-	Config   string       `json:"config"`
-	Kept     []Kept       `json:"kept"`
-	LastScan int64        `json:"last_scan,omitempty"`
+	Roots     []RootStatus `json:"roots"`
+	Config    string       `json:"config"`
+	Kept      []Kept       `json:"kept"`
+	KeptError string       `json:"kept_error,omitempty"`
+	LastScan  int64        `json:"last_scan,omitempty"`
 }
 
 // RootStatus is one scanned folder.
@@ -127,10 +129,12 @@ func (s *Service) Status() (Status, error) {
 		st.Roots = append(st.Roots, RootStatus{Path: m.Daemon, Free: free(m.Local)})
 	}
 	kept, err := s.withState(loadKept)
-	if err != nil {
+	switch {
+	case errors.Is(err, errKeptUnreadable):
+		st.KeptError = err.Error()
+	case err != nil:
 		return st, err
-	}
-	if kept != nil {
+	case kept != nil:
 		st.Kept = kept
 	}
 	s.mu.Lock()
@@ -141,7 +145,12 @@ func (s *Service) Status() (Status, error) {
 	return st, nil
 }
 
+// withState runs f on the daemon's config folder, one at a time: Keeps come in
+// quick runs of K presses, and two read-modify-writes of the list at once would
+// each drop the other's entry.
 func (s *Service) withState(f func(*os.Root) ([]Kept, error)) ([]Kept, error) {
+	s.keepMu.Lock()
+	defer s.keepMu.Unlock()
 	root, err := os.OpenRoot(s.state.Local)
 	if err != nil {
 		return nil, err
@@ -177,12 +186,11 @@ func (s *Service) Scan(ctx context.Context, progress func(looked int, current st
 		// Mounted here but not scanned: the same storage under a second name
 		// would make every file of those torrents look orphaned in the root
 		// that is scanned. Refuse rather than guess.
-		if _, err := os.Lstat(dir); err == nil {
+		if _, err := os.Lstat(dir); err == nil && !s.underMappedLocal(dir) {
 			return nil, fmt.Errorf("%d torrent(s) keep their data in %s, which this container can see but BACKEND_DATA_ROOTS does not list: add it, or the scan cannot tell what they own", n, dir)
 		}
 		res.Warnings = append(res.Warnings, fmt.Sprintf("%d torrent(s) keep their data in %s, which is not scanned", n, dir))
 	}
-	slices.Sort(res.Warnings)
 
 	looked, last := 0, time.Time{}
 	seen := func(rel string) {
@@ -199,7 +207,8 @@ func (s *Service) Scan(ctx context.Context, progress func(looked int, current st
 			return nil, err
 		}
 		w := &walker{ctx: ctx, i: i, root: root, mount: m.Daemon, c: c, now: start,
-			seen: func(rel string) { seen(path.Join(m.Daemon, rel)) }}
+			seen: func(rel string) { seen(path.Join(m.Daemon, rel)) },
+			warn: func(msg string) { res.Warnings = append(res.Warnings, msg) }}
 		err = w.visit(".")
 		_ = root.Close()
 		if err != nil {
@@ -216,9 +225,13 @@ func (s *Service) Scan(ctx context.Context, progress func(looked int, current st
 		_ = stateRoot.Close()
 		return nil, err
 	}
+	s.keepMu.Lock()
 	kept, err := loadKept(stateRoot)
+	s.keepMu.Unlock()
 	_ = stateRoot.Close()
-	if err != nil {
+	if errors.Is(err, errKeptUnreadable) {
+		res.Warnings = append(res.Warnings, err.Error()+": everything is shown; Forget all in Settings resets the list")
+	} else if err != nil {
 		return nil, err
 	}
 	found = append(found, stateEntries...)
@@ -260,6 +273,7 @@ func (s *Service) Scan(ctx context.Context, progress func(looked int, current st
 		e.ID = "e" + strconv.Itoa(n+1)
 		res.byID[e.ID] = e
 	}
+	slices.Sort(res.Warnings)
 	res.ID = newID()
 	res.at = s.now()
 	res.At = res.at.Unix()
@@ -267,9 +281,21 @@ func (s *Service) Scan(ctx context.Context, progress func(looked int, current st
 	res.Looked = looked
 	s.mu.Lock()
 	s.result, s.lastAt = res, res.at
-	s.claims = nil // the first delete asks the daemon afresh
 	s.mu.Unlock()
 	return res, nil
+}
+
+// underMappedLocal reports whether a daemon path, read as a path here, lands
+// inside a root that this container mounts under another name. There it is
+// some other folder, so seeing it proves nothing; everywhere else the paths are
+// the daemon's, and a visible unlisted folder must stop the scan.
+func (s *Service) underMappedLocal(p string) bool {
+	for _, m := range s.roots {
+		if m.Daemon != m.Local && within(p, m.Local) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) entry(scanID, id string) (*Entry, error) {
@@ -286,6 +312,10 @@ func (s *Service) entry(scanID, id string) (*Entry, error) {
 	return e, nil
 }
 
+// errKeptLocked refuses a Keep or Unkeep while the list does not parse:
+// writing it would replace every earlier Keep without a word.
+var errKeptLocked = errors.New("the remembered Keeps cannot be read, so this decision cannot be saved: Forget all in Settings resets the list")
+
 // Keep remembers an entry as decided-on, so later scans hide it while it is
 // unchanged. Keeping twice is fine.
 func (s *Service) Keep(scanID, id string) error {
@@ -295,6 +325,9 @@ func (s *Service) Keep(scanID, id string) error {
 	}
 	_, err = s.withState(func(root *os.Root) ([]Kept, error) {
 		k, err := loadKept(root)
+		if errors.Is(err, errKeptUnreadable) {
+			return nil, errKeptLocked
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -313,6 +346,9 @@ func (s *Service) Unkeep(scanID, id string) error {
 	}
 	_, err = s.withState(func(root *os.Root) ([]Kept, error) {
 		k, err := loadKept(root)
+		if errors.Is(err, errKeptUnreadable) {
+			return nil, errKeptLocked
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -360,26 +396,48 @@ func (s *Service) Delete(ctx context.Context, scanID, id, who string) error {
 	return nil
 }
 
+// freshClaims asks the daemon what it owns right now, for every single delete:
+// a torrent re-added a moment ago must win over the scan. Each delete asks the
+// cheap question (which torrents, named what, where, and the session's
+// folders); the file lists, which can run to megabytes, are fetched again only
+// when that answer differs from the one the cached claims were built from.
 func (s *Service) freshClaims(ctx context.Context) (*claims, error) {
-	s.mu.Lock()
-	c, at := s.claims, s.claimAt
-	s.mu.Unlock()
-	if c != nil && s.now().Sub(at) < claimsTTL {
-		return c, nil
-	}
 	sess, err := s.rpc.session(ctx)
 	if err != nil {
 		return nil, err
+	}
+	ids, err := s.rpc.identities(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fp := fingerprint(sess, ids)
+	s.mu.Lock()
+	c, cfp := s.claims, s.claimsFP
+	s.mu.Unlock()
+	if c != nil && cfp == fp {
+		return c, nil
 	}
 	ts, err := s.rpc.torrents(ctx)
 	if err != nil {
 		return nil, err
 	}
 	c = newClaims(s.roots, sess, ts)
+	// Keyed by what the full answer says, so a change between the two calls
+	// cannot pair new claims with the old fingerprint.
 	s.mu.Lock()
-	s.claims, s.claimAt = c, s.now()
+	s.claims, s.claimsFP = c, fingerprint(sess, ts)
 	s.mu.Unlock()
 	return c, nil
+}
+
+func fingerprint(sess session, ts []torrent) string {
+	parts := make([]string, 0, len(ts)+1)
+	parts = append(parts, sess.DownloadDir+"\x00"+sess.IncompleteDir)
+	for _, t := range ts {
+		parts = append(parts, fmt.Sprint(t.ID)+"\x00"+t.HashString+"\x00"+t.Name+"\x00"+t.DownloadDir)
+	}
+	slices.Sort(parts[1:])
+	return strings.Join(parts, "\x01")
 }
 
 func (s *Service) deleteData(e *Entry, c *claims) error {

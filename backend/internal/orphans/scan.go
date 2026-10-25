@@ -71,13 +71,27 @@ type walker struct {
 	c     *claims
 	now   time.Time
 	seen  func(rel string) // progress, once per path looked at
+	warn  func(msg string) // a path the scan could not read, and skipped
 	out   []*Entry
+}
+
+// skip decides what a read error means for one path below the root: gone
+// meanwhile (an import moving it) is nothing, anything else is a warning. The
+// path is left out either way, never offered on a half-read guess.
+func (w *walker) skip(rel string, err error) {
+	if !errors.Is(err, fs.ErrNotExist) {
+		w.warn("could not read " + path.Join(w.mount, rel) + ", skipped: " + plainReason(err))
+	}
 }
 
 func (w *walker) visit(rel string) error {
 	ents, err := readDir(w.root, rel)
 	if err != nil {
-		return err
+		if rel == "." {
+			return err
+		}
+		w.skip(rel, err)
+		return nil
 	}
 	for _, de := range ents {
 		if err := w.ctx.Err(); err != nil {
@@ -101,7 +115,8 @@ func (w *walker) visit(rel string) error {
 			}
 			e, err := summarize(w.root, crel, w.seen)
 			if err != nil {
-				return err
+				w.skip(crel, err)
+				continue
 			}
 			w.add(e, key)
 			continue
@@ -111,11 +126,12 @@ func (w *walker) visit(rel string) error {
 		}
 		e, err := summarize(w.root, crel, w.seen)
 		if err != nil {
-			return err
+			w.skip(crel, err)
+			continue
 		}
 		w.add(e, key)
 	}
-	return nil
+	return w.ctx.Err()
 }
 
 func (w *walker) add(e *Entry, key string) {
@@ -171,6 +187,11 @@ func summarize(root *os.Root, rel string, seen func(string)) (*Entry, error) {
 	var walk func(dir, top string) error
 	walk = func(dir, top string) error {
 		ents, err := readDir(root, dir)
+		// A subfolder gone since its parent was listed (a tool tidying up) leaves
+		// the rest of the folder to measure; only the top path vanishing means gone.
+		if dir != rel && errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -185,6 +206,9 @@ func summarize(root *os.Root, rel string, seen func(string)) (*Entry, error) {
 				kids[t] = &Child{Name: t, Dir: de.IsDir()}
 			}
 			fi, err := de.Info()
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
 			if err != nil {
 				return err
 			}

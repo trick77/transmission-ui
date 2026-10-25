@@ -187,7 +187,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	orph = httpx.CrossOrigin(guard(http.StripPrefix(s.cfg.BasePath, orph)))
 	for _, route := range []string{"GET /api/orphans", "GET /api/orphans/", "POST /api/orphans/scan",
-		"POST /api/orphans/keep", "DELETE /api/orphans/keep", "POST /api/orphans/delete"} {
+		"POST /api/orphans/keep", "POST /api/orphans/unkeep", "POST /api/orphans/forget", "POST /api/orphans/delete"} {
 		mux.Handle(p(route), orph)
 	}
 	// Without this, a GET on the RPC path falls through to the SPA handler and

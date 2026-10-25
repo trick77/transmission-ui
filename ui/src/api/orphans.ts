@@ -49,10 +49,15 @@ export interface OrphanStatus {
   roots: { path: string; free: number }[];
   config: string;
   kept: KeptPath[];
+  /** The Keep list exists but does not parse: Forget all resets it. */
+  kept_error?: string;
   last_scan?: number;
 }
 
-/** A refusal by the delete's recheck: nothing was removed, and why. */
+/**
+ * A refusal by the delete's recheck (409): nothing was removed, and why. Busy (423) is a
+ * plain failure instead: nothing was checked, and the same delete can be tried again.
+ */
 export class KeptByRecheck extends Error {}
 
 const url = (p: string) => `${basePath()}/api/orphans${p}`;
@@ -131,9 +136,12 @@ async function post(path: string, method: string, body?: unknown) {
 export const keepOrphan = (scanId: string, id: string) =>
   post("/keep", "POST", { scan_id: scanId, id });
 
-/** Takes one Keep back (scanId and id), or forgets every Keep (no arguments). */
-export const forgetKept = (scanId?: string, id?: string) =>
-  post("/keep", "DELETE", scanId ? { scan_id: scanId, id } : undefined);
+/** Takes one Keep back: a decision undone in the review. */
+export const unkeepOrphan = (scanId: string, id: string) =>
+  post("/unkeep", "POST", { scan_id: scanId, id });
+
+/** Forgets every Keep. */
+export const forgetKept = () => post("/forget", "POST");
 
 /** Deletes one entry. Rejects with KeptByRecheck when the backend's recheck said no. */
 export const deleteOrphan = (scanId: string, id: string) =>

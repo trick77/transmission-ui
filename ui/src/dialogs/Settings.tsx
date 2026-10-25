@@ -60,6 +60,9 @@ export function Settings({
     [...SECTIONS, ...MAINTENANCE].find((x) => x.toLowerCase() === section) ??
       "Speed",
   );
+  // "Scan again" asks for one scan, consumed by the first visit to the section, so
+  // coming back to it later does not walk the disk again unasked.
+  const [autoScan, setAutoScan] = useState(!!scan);
   const ref = useDismiss(onClose);
   const save = (patch: Partial<Session>) =>
     void run("Settings", () => api.setSession(patch));
@@ -143,7 +146,10 @@ export function Settings({
           </div>
           <div className="modal-b" style={{ flex: 1 }}>
             {sec === "Orphaned files" ? (
-              <OrphansSection autoScan={scan} />
+              <OrphansSection
+                autoScan={autoScan}
+                onAutoScan={() => setAutoScan(false)}
+              />
             ) : sec === "Speed" ? (
               <>
                 <Sec first>Global limits</Sec>

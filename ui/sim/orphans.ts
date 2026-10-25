@@ -109,16 +109,20 @@ export function orphanRoute(s: OrphanStore, method: string, path: string, body: 
       { result: { scan_id: `sim-${s.scans}`, at: now, took_ms: 900, looked: 14212, hidden_kept: s.entries.length - entries.length, entries } },
     ] }
   }
-  if (path === '/keep' && method === 'DELETE' && !body) {
+  if (method === 'POST' && path === '/forget') {
     s.kept = []
     return { status: 200, body: { ok: true } }
   }
-  if (path === '/keep' || path === '/delete') {
+  if (method === 'POST' && (path === '/keep' || path === '/unkeep' || path === '/delete')) {
     const e = known()
     if (!e) return { status: 410, body: { error: 'this scan has expired, scan again' } }
     if (path === '/keep') {
       s.kept = s.kept.filter(k => k.path !== e.path)
-      if (method === 'POST') s.kept.push({ path: e.path, size: e.size, files: e.files, mtime: e.mtime })
+      s.kept.push({ path: e.path, size: e.size, files: e.files, mtime: e.mtime })
+      return { status: 200, body: { ok: true } }
+    }
+    if (path === '/unkeep') {
+      s.kept = s.kept.filter(k => k.path !== e.path)
       return { status: 200, body: { ok: true } }
     }
     const refused = REFUSE[e.id]

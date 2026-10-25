@@ -19,7 +19,7 @@ func TestOrphanRoutesOffAnswer404(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, m := range []string{"GET /api/orphans", "GET /api/orphans/x", "POST /api/orphans/scan", "DELETE /api/orphans/keep"} {
+		for _, m := range []string{"GET /api/orphans", "GET /api/orphans/x", "POST /api/orphans/scan", "POST /api/orphans/forget"} {
 			method, p, _ := strings.Cut(m, " ")
 			req := httptest.NewRequest(method, base+p, nil)
 			req.AddCookie(cookie)

@@ -18,10 +18,10 @@ describe('sim orphan routes', () => {
 
     expect(orphanRoute(s, 'POST', '/keep', ref('e1'), NOW).status).toBe(200)
     expect(s.kept).toHaveLength(1)
-    expect(orphanRoute(s, 'DELETE', '/keep', ref('e1'), NOW).status).toBe(200)
+    expect(orphanRoute(s, 'POST', '/unkeep', ref('e1'), NOW).status).toBe(200)
     expect(s.kept).toHaveLength(0)
     orphanRoute(s, 'POST', '/keep', ref('e1'), NOW)
-    expect(orphanRoute(s, 'DELETE', '/keep', '', NOW).status).toBe(200)
+    expect(orphanRoute(s, 'POST', '/forget', '', NOW).status).toBe(200)
     expect(s.kept).toHaveLength(0)
 
     expect(orphanRoute(s, 'POST', '/delete', ref('e4'), NOW).status).toBe(200)

@@ -87,28 +87,31 @@ func TestHandlerFlow(t *testing.T) {
 		t.Fatalf("bad keep body: %d", w.Code)
 	}
 	// Taking one Keep back forgets that one only.
-	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", ref(r.Entries[0].ID)); w.Code != http.StatusOK {
+	if w := do(t, h, http.MethodPost, "/api/orphans/unkeep", ref(r.Entries[0].ID)); w.Code != http.StatusOK {
 		t.Fatalf("unkeep: %d %s", w.Code, w.Body)
 	}
 	if st, _ := f.svc.Status(); len(st.Kept) != 0 {
 		t.Fatalf("unkeep left %+v", st.Kept)
 	}
-	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", `{"scan_id":"nope","id":"e1"}`); w.Code != http.StatusGone {
+	if w := do(t, h, http.MethodPost, "/api/orphans/unkeep", `{"scan_id":"nope","id":"e1"}`); w.Code != http.StatusGone {
 		t.Fatalf("unkeep expired: %d", w.Code)
 	}
-	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", `not json`); w.Code != http.StatusBadRequest {
+	if w := do(t, h, http.MethodPost, "/api/orphans/unkeep", `not json`); w.Code != http.StatusBadRequest {
 		t.Fatalf("unkeep bad body: %d", w.Code)
 	}
-	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", ""); w.Code != http.StatusOK {
+	if w := do(t, h, http.MethodPost, "/api/orphans/forget", ""); w.Code != http.StatusOK {
 		t.Fatalf("forget: %d", w.Code)
 	}
+	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", ""); w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("no DELETE route any more: %d", w.Code)
+	}
 
-	// Busy before streaming starts is a plain 409.
+	// Busy is 423, apart from the recheck's 409: nothing was checked.
 	f.svc.opMu.Lock()
-	if w := do(t, h, http.MethodPost, "/api/orphans/scan", ""); w.Code != http.StatusConflict {
+	if w := do(t, h, http.MethodPost, "/api/orphans/scan", ""); w.Code != http.StatusLocked {
 		t.Fatalf("busy scan: %d", w.Code)
 	}
-	if w := do(t, h, http.MethodPost, "/api/orphans/delete", ref("e1")); w.Code != http.StatusConflict {
+	if w := do(t, h, http.MethodPost, "/api/orphans/delete", ref("e1")); w.Code != http.StatusLocked {
 		t.Fatalf("busy delete: %d", w.Code)
 	}
 	f.svc.opMu.Unlock()
@@ -124,18 +127,16 @@ func TestHandlerFlow(t *testing.T) {
 func TestHandlerServerErrors(t *testing.T) {
 	f := newFixture(t)
 	h := f.svc.Handler()
-	// Unreadable Keep list: status and forget report it.
-	must(t, os.WriteFile(filepath.Join(f.cfg, keepFile), []byte("{"), 0o644))
-	if w := do(t, h, http.MethodGet, "/api/orphans", ""); w.Code != http.StatusInternalServerError {
-		t.Fatalf("status with a broken keep file: %d", w.Code)
-	}
-	if _, err := f.svc.Scan(t.Context(), nil); err == nil {
-		t.Fatal("scan with a broken keep file should fail")
-	}
-	must(t, os.Remove(filepath.Join(f.cfg, keepFile)))
+	// The Keep list is a folder: unreadable for real, so status and forget fail.
 	must(t, os.Mkdir(filepath.Join(f.cfg, keepFile), 0o755))
 	must(t, os.WriteFile(filepath.Join(f.cfg, keepFile, "x"), nil, 0o644))
-	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", ""); w.Code != http.StatusInternalServerError {
+	if w := do(t, h, http.MethodGet, "/api/orphans", ""); w.Code != http.StatusInternalServerError {
+		t.Fatalf("status with a keep folder: %d", w.Code)
+	}
+	if _, err := f.svc.Scan(t.Context(), nil); err == nil {
+		t.Fatal("scan with an unreadable keep list should fail")
+	}
+	if w := do(t, h, http.MethodPost, "/api/orphans/forget", ""); w.Code != http.StatusInternalServerError {
 		t.Fatalf("forget failing: %d %s", w.Code, w.Body)
 	}
 }

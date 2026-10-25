@@ -23,14 +23,25 @@ environment:
  * Settings → Maintenance → Orphaned files: what gets scanned, the remembered Keeps, and
  * the Scan button. The review itself is its own window (OrphanReview), opened with the result.
  */
-export function OrphansSection({ autoScan }: { autoScan?: boolean }) {
+export function OrphansSection({
+  autoScan,
+  onAutoScan,
+}: {
+  autoScan?: boolean;
+  /** Called when the requested scan starts, so it is not started again on the next visit. */
+  onAutoScan?: () => void;
+}) {
   const [status, setStatus] = useState<OrphanStatus | null | undefined>();
   const [error, setError] = useState("");
   const [scanning, setScanning] = useState<{
     looked: number;
     path: string;
   } | null>(null);
-  const [clean, setClean] = useState<{ looked: number; hidden: number }>();
+  const [clean, setClean] = useState<{
+    looked: number;
+    hidden: number;
+    warnings: string[];
+  }>();
   const [showKept, setShowKept] = useState(false);
   const abort = useRef<AbortController | null>(null);
 
@@ -52,7 +63,11 @@ export function OrphansSection({ autoScan }: { autoScan?: boolean }) {
         set({ dialog: { kind: "orphan-review", scan: res } });
         return;
       }
-      setClean({ looked: res.looked, hidden: res.hidden_kept });
+      setClean({
+        looked: res.looked,
+        hidden: res.hidden_kept,
+        warnings: res.warnings ?? [],
+      });
       void load();
     } catch (e) {
       if (!ac.signal.aborted) setError((e as Error).message);
@@ -63,11 +78,20 @@ export function OrphansSection({ autoScan }: { autoScan?: boolean }) {
   };
 
   useEffect(() => {
-    void load().then(() => {
-      if (autoScan) void scan();
-    });
+    void load();
+    // Deferred a tick: StrictMode mounts twice, and the first mount's timer is cleared
+    // before it fires, so one request starts one scan, not two racing into a busy 423.
+    const t = autoScan
+      ? setTimeout(() => {
+          onAutoScan?.();
+          void scan();
+        }, 0)
+      : undefined;
     // The section closing mid-scan stops the walk on the server too.
-    return () => abort.current?.abort();
+    return () => {
+      clearTimeout(t);
+      abort.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -105,6 +129,14 @@ export function OrphansSection({ autoScan }: { autoScan?: boolean }) {
     );
   }
   const kept = status?.kept ?? [];
+  const forget = () =>
+    void forgetKept().then(
+      () => {
+        setShowKept(false);
+        void load();
+      },
+      (e: Error) => toast(`Forget failed: ${e.message}`),
+    );
   return (
     <>
       <div className="hint" style={{ marginBottom: 10 }}>
@@ -123,9 +155,16 @@ export function OrphansSection({ autoScan }: { autoScan?: boolean }) {
           <Icon name="check" size={28} style={{ color: "var(--ink-3)" }} />
           <div className="t">Nothing new</div>
           <div>
-            Every file belongs to a torrent
+            {clean.warnings.length
+              ? "Nothing new in what could be read"
+              : "Every file belongs to a torrent"}
             {clean.hidden ? ", or is one you kept before" : ""}.
           </div>
+          {clean.warnings.map((w) => (
+            <div key={w} className="hint" style={{ color: "var(--ink-2)" }}>
+              {w}
+            </div>
+          ))}
           <div className="hint">
             {clean.looked.toLocaleString("en")} files looked at
             {clean.hidden ? ` · ${clean.hidden} kept paths hidden` : ""}
@@ -153,13 +192,23 @@ export function OrphansSection({ autoScan }: { autoScan?: boolean }) {
           <Sec>Remembered</Sec>
           <Opt
             label={
-              kept.length
-                ? `${kept.length} ${kept.length === 1 ? "path" : "paths"} kept in earlier reviews`
-                : "Nothing kept yet"
+              status.kept_error
+                ? "The remembered Keeps cannot be read"
+                : kept.length
+                  ? `${kept.length} ${kept.length === 1 ? "path" : "paths"} kept in earlier reviews`
+                  : "Nothing kept yet"
             }
-            desc="Kept paths stay hidden from scans until they change"
+            desc={
+              status.kept_error
+                ? "Scans show everything until Forget all resets the list"
+                : "Kept paths stay hidden from scans until they change"
+            }
           >
-            {kept.length ? (
+            {status.kept_error ? (
+              <button className="btn sm ghost" onClick={forget}>
+                Forget all
+              </button>
+            ) : kept.length ? (
               <>
                 <button
                   className="btn sm ghost"
@@ -167,18 +216,7 @@ export function OrphansSection({ autoScan }: { autoScan?: boolean }) {
                 >
                   {showKept ? "Hide" : "Show"}
                 </button>
-                <button
-                  className="btn sm ghost"
-                  onClick={() =>
-                    void forgetKept().then(
-                      () => {
-                        setShowKept(false);
-                        void load();
-                      },
-                      (e: Error) => toast(`Forget failed: ${e.message}`),
-                    )
-                  }
-                >
+                <button className="btn sm ghost" onClick={forget}>
                   Forget all
                 </button>
               </>

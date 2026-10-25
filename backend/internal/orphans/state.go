@@ -219,7 +219,8 @@ func bdecode(b []byte, i, depth int) (any, int, error) {
 			return nil, i, errBencode
 		}
 		n, err := strconv.Atoi(string(b[i:colon]))
-		if err != nil || n < 0 || colon+1+n > len(b) {
+		// Compared as a remainder: colon+1+n overflows for an n near MaxInt.
+		if err != nil || n < 0 || n > len(b)-colon-1 {
 			return nil, i, errBencode
 		}
 		return string(b[colon+1 : colon+1+n]), colon + 1 + n, nil

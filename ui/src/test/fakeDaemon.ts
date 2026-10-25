@@ -659,7 +659,8 @@ async function orphanRoute(
       headers: { "Content-Type": "application/x-ndjson" },
     });
   }
-  if (path === "/keep") return Response.json({ ok: true });
+  if (path === "/keep" || path === "/unkeep" || path === "/forget")
+    return Response.json({ ok: true });
   if (path === "/delete") {
     const r = await o.onDelete?.(String(body?.id));
     if (r) return Response.json({ error: r.error }, { status: r.status });

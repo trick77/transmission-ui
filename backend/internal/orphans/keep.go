@@ -3,9 +3,15 @@ package orphans
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 )
+
+// errKeptUnreadable is a Keep list that does not parse (edited by hand,
+// truncated). It must not lock the feature: status reports it, a scan warns
+// and shows everything, and the next Keep or Forget all rewrites the file.
+var errKeptUnreadable = errors.New("the remembered Keeps cannot be read")
 
 // keepFile lives in the daemon's config folder, the one place both mounted and
 // shared by every browser. The daemon ignores files it does not know.
@@ -34,7 +40,7 @@ func loadKept(root *os.Root) ([]Kept, error) {
 	}
 	var k []Kept
 	if err := json.Unmarshal(b, &k); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errKeptUnreadable, err)
 	}
 	return k, nil
 }

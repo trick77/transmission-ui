@@ -65,8 +65,8 @@ describe("Settings entry", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show" }));
     expect(screen.getByText("/data/torrents/old")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Forget all" }));
-    await waitFor(() => expect(calls("/keep", "DELETE")).toHaveLength(1));
-    expect(calls("/keep", "DELETE")[0].body).toBeUndefined();
+    await waitFor(() => expect(calls("/forget", "POST")).toHaveLength(1));
+    expect(calls("/forget")[0].body).toBeUndefined();
   });
 
   it("opens the review with the scan result", async () => {
@@ -76,6 +76,28 @@ describe("Settings entry", () => {
     await waitFor(() => expect(get().dialog.kind).toBe("orphan-review"));
     const d = get().dialog;
     expect(d.kind === "orphan-review" && d.scan.entries).toHaveLength(4);
+  });
+
+  it("shows what a clean scan could not read", async () => {
+    daemon = installFakeDaemon({
+      orphans: {
+        status: orphanStatus(),
+        scan: orphanScan({
+          entries: [],
+          warnings: [
+            "could not read /data/torrents/locked, skipped: permission denied",
+          ],
+        }),
+      },
+    });
+    render(<OrphansSection />);
+    fireEvent.click(await screen.findByRole("button", { name: /Scan/ }));
+    expect(
+      await screen.findByText(/could not read \/data\/torrents\/locked/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Nothing new in what could be read."),
+    ).toBeInTheDocument();
   });
 
   it("says so when nothing new turned up, and scans on its own when asked", async () => {
@@ -146,6 +168,41 @@ describe("Settings entry", () => {
     expect(screen.getByText("Maintenance")).toBeInTheDocument();
     expect(await screen.findByText("/data/torrents")).toBeInTheDocument();
   });
+
+  it("offers Forget all when the Keep list cannot be read", async () => {
+    daemon = installFakeDaemon({
+      orphans: {
+        status: orphanStatus({ kept_error: "cannot be read: bad JSON" }),
+      },
+    });
+    render(<OrphansSection />);
+    expect(
+      await screen.findByText("The remembered Keeps cannot be read"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Forget all" }));
+    await waitFor(() => expect(calls("/forget")).toHaveLength(1));
+  });
+
+  it("scans once for Scan again, not on every later visit", async () => {
+    daemon = installFakeDaemon({
+      orphans: {
+        status: orphanStatus(),
+        scan: orphanScan({ entries: [] }),
+      },
+    });
+    set({ session: defaultSession() });
+    act(() =>
+      set({
+        dialog: { kind: "settings", section: "orphaned files", scan: true },
+      }),
+    );
+    render(<Dialogs />);
+    expect(await screen.findByText("Nothing new")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Speed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Orphaned files" }));
+    expect(await screen.findByText("/data/torrents")).toBeInTheDocument();
+    expect(calls("/scan")).toHaveLength(1);
+  });
 });
 
 function review(
@@ -189,11 +246,14 @@ describe("review", () => {
     expect(item("bbb-extracted.mkv")).toHaveClass("ocur");
     fireEvent.keyDown(document, { key: "u" });
     await waitFor(() =>
-      expect(calls("/keep", "DELETE")[0].body).toEqual({
+      expect(calls("/unkeep", "POST")[0].body).toEqual({
         scan_id: "s1",
         id: "e2",
       }),
     );
+    // Sent in key-press order: the Keep before its Undo.
+    const order = daemon.orphans.calls.map((c) => c.path);
+    expect(order.indexOf("/keep")).toBeLessThan(order.indexOf("/unkeep"));
     expect(item("bbb-extracted.mkv")).not.toHaveClass("keep");
     fireEvent.keyDown(document, { key: "ArrowDown" });
     expect(item("ubuntu-22.04.4-desktop-amd64.iso")).toHaveClass("ocur");
@@ -274,6 +334,23 @@ describe("review", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Delete 2 ·/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Scan again" }));
     expect(onRescan).toHaveBeenCalled();
+  });
+
+  it("shows busy as a failure to retry, not as kept by the recheck", async () => {
+    review({
+      orphans: {
+        onDelete: () => ({
+          status: 423,
+          error: "a scan or delete is already running",
+        }),
+      },
+    });
+    fireEvent.keyDown(document, { key: "d" });
+    fireEvent.click(screen.getByRole("button", { name: "Delete 1…" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete 1 ·/ }));
+    expect(
+      await screen.findByText("Failed: a scan or delete is already running"),
+    ).toBeInTheDocument();
   });
 
   it("stops after the delete in flight", async () => {

@@ -21,7 +21,8 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orphans", s.handleStatus)
 	mux.HandleFunc("POST /api/orphans/scan", s.handleScan)
 	mux.HandleFunc("POST /api/orphans/keep", s.handleKeep)
-	mux.HandleFunc("DELETE /api/orphans/keep", s.handleForget)
+	mux.HandleFunc("POST /api/orphans/unkeep", s.handleUnkeep)
+	mux.HandleFunc("POST /api/orphans/forget", s.handleForget)
 	mux.HandleFunc("POST /api/orphans/delete", s.handleDelete)
 	return mux
 }
@@ -72,7 +73,7 @@ func (s *Service) handleScan(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, ErrBusy) && !started:
-		httpx.WriteError(w, http.StatusConflict, err.Error())
+		httpx.WriteError(w, http.StatusLocked, err.Error())
 	case errors.Is(err, context.Canceled):
 		// The browser pressed Stop and is not listening.
 	case err != nil:
@@ -100,18 +101,23 @@ func (s *Service) handleKeep(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleForget forgets one Keep when the body names an entry (a decision taken
-// back), every Keep when there is no body (Settings' Forget all).
-func (s *Service) handleForget(w http.ResponseWriter, r *http.Request) {
-	forget := s.ForgetKept
-	if r.ContentLength != 0 {
-		var ref entryRef
-		if !httpx.DecodeJSON(w, r, &ref, maxBody) {
-			return
-		}
-		forget = func() error { return s.Unkeep(ref.ScanID, ref.ID) }
+// handleUnkeep takes one Keep back, a decision undone in the review.
+func (s *Service) handleUnkeep(w http.ResponseWriter, r *http.Request) {
+	var ref entryRef
+	if !httpx.DecodeJSON(w, r, &ref, maxBody) {
+		return
 	}
-	if err := forget(); err != nil {
+	if err := s.Unkeep(ref.ScanID, ref.ID); err != nil {
+		s.writeOpError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleForget drops every Keep: Settings' Forget all. Its own route, so that a
+// lost request body can never turn one undo into forgetting everything.
+func (s *Service) handleForget(w http.ResponseWriter, r *http.Request) {
+	if err := s.ForgetKept(); err != nil {
 		s.writeOpError(w, r, err)
 		return
 	}
@@ -137,14 +143,17 @@ func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// writeOpError: 409 for "not now" (busy, kept by the recheck), 410 for an
-// expired scan, 500 with the reason otherwise. The UI shows the message on the
-// row, so it is the plain reason, e.g. "permission denied".
+// writeOpError: 409 when the recheck kept the entry, 423 when another scan or
+// delete runs (nothing was checked, try again), 410 for an expired scan, 500
+// with the reason otherwise. The UI shows the message on the row, so it is the
+// plain reason, e.g. "permission denied".
 func (s *Service) writeOpError(w http.ResponseWriter, r *http.Request, err error) {
 	var kept *KeptError
 	switch {
-	case errors.As(err, &kept), errors.Is(err, ErrBusy):
+	case errors.As(err, &kept):
 		httpx.WriteError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, ErrBusy):
+		httpx.WriteError(w, http.StatusLocked, err.Error())
 	case errors.Is(err, ErrExpired):
 		httpx.WriteError(w, http.StatusGone, err.Error())
 	default:

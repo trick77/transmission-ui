@@ -53,11 +53,13 @@ func newClaims(roots []config.Mount, s session, ts []torrent) *claims {
 			map[string]string{}, map[string]bool{}, map[string]string{}, map[string]string{}
 	}
 	// The daemon's own folders are structure, never an orphan, even with no
-	// torrent in them right now.
+	// torrent in them right now. The incomplete folder counts whether or not it
+	// is enabled: switching the setting off leaves live .part files behind. Only
+	// the current one is known (RPC does not say where each torrent started), so
+	// a download still filling an earlier incomplete folder is not owned here;
+	// it carries its torrent's name, which the scan flags as "match".
 	c.structural(s.DownloadDir)
-	if s.IncompleteDirEnabled {
-		c.structural(s.IncompleteDir)
-	}
+	c.structural(s.IncompleteDir)
 	for _, t := range ts {
 		h := strings.ToLower(t.HashString)
 		c.hashes[h] = true
@@ -66,7 +68,7 @@ func newClaims(roots []config.Mount, s session, ts []torrent) *claims {
 		}
 		c.names[nfc(t.Name)] = t.DownloadDir
 		bases := []string{t.DownloadDir}
-		if s.IncompleteDirEnabled && s.IncompleteDir != "" {
+		if s.IncompleteDir != "" {
 			bases = append(bases, s.IncompleteDir)
 		}
 		if _, _, ok := c.locate(t.DownloadDir); !ok {

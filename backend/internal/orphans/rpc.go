@@ -36,10 +36,9 @@ func newRPCClient(upstream, user, pass string) (*rpcClient, error) {
 
 // session is the part of session_get the claimed set needs.
 type session struct {
-	DownloadDir          string `json:"download_dir"`
-	IncompleteDir        string `json:"incomplete_dir"`
-	IncompleteDirEnabled bool   `json:"incomplete_dir_enabled"`
-	ConfigDir            string `json:"config_dir"`
+	DownloadDir   string `json:"download_dir"`
+	IncompleteDir string `json:"incomplete_dir"`
+	ConfigDir     string `json:"config_dir"`
 }
 
 // torrent is the part of torrent_get the claimed set needs.
@@ -57,9 +56,21 @@ type torrent struct {
 func (c *rpcClient) session(ctx context.Context) (session, error) {
 	var s session
 	err := c.call(ctx, "session_get", map[string]any{
-		"fields": []string{"download_dir", "incomplete_dir", "incomplete_dir_enabled", "config_dir"},
+		"fields": []string{"download_dir", "incomplete_dir", "config_dir"},
 	}, &s)
 	return s, err
+}
+
+// identities is the cheap torrent_get: no file lists. A delete compares it
+// with the one its claims were built from, and builds them again on any change.
+func (c *rpcClient) identities(ctx context.Context) ([]torrent, error) {
+	var out struct {
+		Torrents []torrent `json:"torrents"`
+	}
+	err := c.call(ctx, "torrent_get", map[string]any{
+		"fields": []string{"id", "name", "hash_string", "download_dir"},
+	}, &out)
+	return out.Torrents, err
 }
 
 func (c *rpcClient) torrents(ctx context.Context) ([]torrent, error) {

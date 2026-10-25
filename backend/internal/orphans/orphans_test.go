@@ -25,6 +25,7 @@ type fakeDaemon struct {
 	session  session
 	torrents []torrent
 	calls    int
+	full     int    // torrent_get calls that asked for file lists
 	fail     string // when set, every call answers a JSON-RPC error
 }
 
@@ -47,6 +48,9 @@ func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Method string `json:"method"`
 		ID     int    `json:"id"`
+		Params struct {
+			Fields []string `json:"fields"`
+		} `json:"params"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	d.mu.Lock()
@@ -61,6 +65,9 @@ func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "session_get":
 		result = d.session
 	case "torrent_get":
+		if slices.Contains(req.Params.Fields, "files") {
+			d.full++
+		}
 		result = map[string]any{"torrents": d.torrents}
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": result})
@@ -117,7 +124,7 @@ func newFixture(t *testing.T) *fixture {
 	for _, d := range []string{f.data, f.inc, f.cfg, filepath.Join(f.cfg, "torrents"), filepath.Join(f.cfg, "resume")} {
 		must(t, os.MkdirAll(d, 0o755))
 	}
-	f.daemon = &fakeDaemon{session: session{DownloadDir: f.data, IncompleteDir: f.inc, IncompleteDirEnabled: true, ConfigDir: f.cfg}}
+	f.daemon = &fakeDaemon{session: session{DownloadDir: f.data, IncompleteDir: f.inc, ConfigDir: f.cfg}}
 	srv := httptest.NewServer(f.daemon)
 	t.Cleanup(srv.Close)
 	svc, err := New(Options{
@@ -371,9 +378,6 @@ func TestStateFiles(t *testing.T) {
 	}
 	// Re-added since the scan: refused.
 	f.daemon.set(tor("Live", f.data), torrent{Name: "Lone", HashString: lone})
-	f.svc.mu.Lock()
-	f.svc.claims = nil
-	f.svc.mu.Unlock()
 	var kept *KeptError
 	if err := f.svc.Delete(context.Background(), r.ID, byHash[lone].ID, "me"); !errors.As(err, &kept) {
 		t.Fatalf("re-added hash: %v", err)
@@ -400,9 +404,6 @@ func TestDeleteRechecks(t *testing.T) {
 
 	// Claimed by a torrent added since the scan: refused, still on disk.
 	f.daemon.set(tor("b", f.data, "b/1.bin"))
-	f.svc.mu.Lock()
-	f.svc.claims = nil
-	f.svc.mu.Unlock()
 	var kept *KeptError
 	if err := f.svc.Delete(ctx, r.ID, b.ID, "me"); !errors.As(err, &kept) || !strings.Contains(kept.Reason, "now belongs to b") {
 		t.Fatalf("claimed since scan: %v", err)
