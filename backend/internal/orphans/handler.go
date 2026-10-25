@@ -100,8 +100,18 @@ func (s *Service) handleKeep(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// handleForget forgets one Keep when the body names an entry (a decision taken
+// back), every Keep when there is no body (Settings' Forget all).
 func (s *Service) handleForget(w http.ResponseWriter, r *http.Request) {
-	if err := s.ForgetKept(); err != nil {
+	forget := s.ForgetKept
+	if r.ContentLength != 0 {
+		var ref entryRef
+		if !httpx.DecodeJSON(w, r, &ref, maxBody) {
+			return
+		}
+		forget = func() error { return s.Unkeep(ref.ScanID, ref.ID) }
+	}
+	if err := forget(); err != nil {
 		s.writeOpError(w, r, err)
 		return
 	}

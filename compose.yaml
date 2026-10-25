@@ -50,6 +50,14 @@ services:
       TRANSMISSION_PASSWORD: "${TRANSMISSION_PASSWORD}"
       # debug, info, warn or error; anything else stops the start.
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # Orphan finder (Settings -> Maintenance), off unless both are set. Needs the
+      # volumes and the user below too; see "Orphaned files" in README.md.
+      # BACKEND_DATA_ROOTS: /data/torrents
+      # BACKEND_DAEMON_CONFIG: /config
+    # user: "1000:1000"                  # the daemon's PUID:PGID
+    # volumes:
+    #   - /srv/torrents:/data/torrents   # the same path the daemon uses
+    #   - /srv/transmission:/config      # the daemon's config folder
 
     healthcheck:
       # Probes the liveness route <BACKEND_PUBLIC_URL's path>/healthz; only a

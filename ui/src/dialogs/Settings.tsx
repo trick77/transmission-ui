@@ -4,6 +4,7 @@ import { bytes, duration } from "../lib/format";
 import type { Session, Transport } from "../rpc/types";
 import * as api from "../rpc/methods";
 import { readLocal, writeLocal } from "../lib/local";
+import { OrphansSection } from "./Orphans";
 import { run, set, toast, useStore, type Density } from "../state/store";
 import {
   NumInput,
@@ -24,7 +25,9 @@ const SECTIONS = [
   "Peers",
   "Interface",
 ] as const;
-type Section = (typeof SECTIONS)[number];
+// Rarely used, so apart from the preferences: below them, above the session facts.
+const MAINTENANCE = ["Orphaned files"] as const;
+type Section = (typeof SECTIONS)[number] | (typeof MAINTENANCE)[number];
 const DAYS = [
   { v: 1, l: "Su" },
   { v: 2, l: "Mo" },
@@ -44,14 +47,18 @@ const mins = (s: string) => {
 export function Settings({
   onClose,
   section,
+  scan,
 }: {
   onClose: () => void;
   section?: string;
+  /** Start an orphan scan on opening ("Scan again" from the review). */
+  scan?: boolean;
 }) {
   const s = useStore((x) => x.session);
   const stats = useStore((x) => x.stats);
   const [sec, setSec] = useState<Section>(
-    SECTIONS.find((x) => x.toLowerCase() === section) ?? "Speed",
+    [...SECTIONS, ...MAINTENANCE].find((x) => x.toLowerCase() === section) ??
+      "Speed",
   );
   const ref = useDismiss(onClose);
   const save = (patch: Partial<Session>) =>
@@ -79,6 +86,18 @@ export function Settings({
         >
           <div className="side-h">Preferences</div>
           {SECTIONS.map((k) => (
+            <button
+              key={k}
+              className={"side-item" + (sec === k ? " on" : "")}
+              onClick={() => setSec(k)}
+            >
+              <span className="lbl">{k}</span>
+            </button>
+          ))}
+          <div className="side-h" style={{ marginTop: 22 }}>
+            Maintenance
+          </div>
+          {MAINTENANCE.map((k) => (
             <button
               key={k}
               className={"side-item" + (sec === k ? " on" : "")}
@@ -123,7 +142,9 @@ export function Settings({
             </button>
           </div>
           <div className="modal-b" style={{ flex: 1 }}>
-            {sec === "Speed" ? (
+            {sec === "Orphaned files" ? (
+              <OrphansSection autoScan={scan} />
+            ) : sec === "Speed" ? (
               <>
                 <Sec first>Global limits</Sec>
                 <Opt label="Download limit">

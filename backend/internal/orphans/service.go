@@ -146,7 +146,7 @@ func (s *Service) withState(f func(*os.Root) ([]Kept, error)) ([]Kept, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	return f(root)
 }
 
@@ -305,6 +305,22 @@ func (s *Service) Keep(scanID, id string) error {
 	return err
 }
 
+// Unkeep forgets one entry's Keep: a decision taken back in the review.
+func (s *Service) Unkeep(scanID, id string) error {
+	e, err := s.entry(scanID, id)
+	if err != nil {
+		return err
+	}
+	_, err = s.withState(func(root *os.Root) ([]Kept, error) {
+		k, err := loadKept(root)
+		if err != nil {
+			return nil, err
+		}
+		return nil, saveKept(root, slices.DeleteFunc(k, func(x Kept) bool { return x.Path == e.Path }))
+	})
+	return err
+}
+
 // ForgetKept drops every remembered Keep.
 func (s *Service) ForgetKept() error {
 	_, err := s.withState(func(root *os.Root) ([]Kept, error) { return nil, saveKept(root, nil) })
@@ -374,7 +390,7 @@ func (s *Service) deleteData(e *Entry, c *claims) error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	now, err := summarize(root, e.rel, nil)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -398,7 +414,7 @@ func (s *Service) deleteState(e *Entry, c *claims) error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	for _, rel := range e.state {
 		if err := root.Remove(rel); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err

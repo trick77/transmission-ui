@@ -176,16 +176,16 @@ func find(r *Result, p string) *Entry {
 func TestScanOffersOnlyWhatNobodyOwns(t *testing.T) {
 	f := newFixture(t)
 	f.file(f.data, "Live/a.mkv", 10)
-	f.file(f.data, "Live/sample/extra.mkv", 5)           // stray inside a live torrent
-	f.file(f.data, "Gone (1957)/movie.mkv", 100)         // a removed torrent's folder
-	f.file(f.data, "Gone (1957)/subs/en.srt", 1)         //   ... collapsed into one entry
-	f.file(f.data, "single.iso", 7)                      // owned single-file torrent
-	f.file(f.data, "stray.iso", 3)                       // unowned file at the root
-	f.file(f.inc, "Half/b.mkv.part", 4)                  // owned, mid-download in incomplete
-	f.file(f.inc, "abandoned.iso.part", 9)               // nobody's partial
-	f.file(f.data, "movies/Kept/k.mkv", 2)               // owned, under a category folder
-	f.file(f.data, "movies/loose.txt", 1)                // stray in a category folder: not "inside"
-	f.file(f.data, "lost+found/x", 1)                    // housekeeping is never listed
+	f.file(f.data, "Live/sample/extra.mkv", 5)   // stray inside a live torrent
+	f.file(f.data, "Gone (1957)/movie.mkv", 100) // a removed torrent's folder
+	f.file(f.data, "Gone (1957)/subs/en.srt", 1) //   ... collapsed into one entry
+	f.file(f.data, "single.iso", 7)              // owned single-file torrent
+	f.file(f.data, "stray.iso", 3)               // unowned file at the root
+	f.file(f.inc, "Half/b.mkv.part", 4)          // owned, mid-download in incomplete
+	f.file(f.inc, "abandoned.iso.part", 9)       // nobody's partial
+	f.file(f.data, "movies/Kept/k.mkv", 2)       // owned, under a category folder
+	f.file(f.data, "movies/loose.txt", 1)        // stray in a category folder: not "inside"
+	f.file(f.data, "lost+found/x", 1)            // housekeeping is never listed
 	must(t, os.MkdirAll(filepath.Join(f.data, "empty-dir"), 0o755))
 	f.daemon.set(
 		tor("Live", f.data, "Live/a.mkv"),
@@ -258,8 +258,8 @@ func TestMagnetWithoutMetadataClaimsItsWholeFolder(t *testing.T) {
 
 func TestNamesCompareAfterNFC(t *testing.T) {
 	f := newFixture(t)
-	nfd := "Café"                 // as a Mac client writes it
-	f.file(f.data, nfd+"/x.mkv", 1)      // on disk: NFD
+	nfd := "Café"                                  // as a Mac client writes it
+	f.file(f.data, nfd+"/x.mkv", 1)                 // on disk: NFD
 	f.daemon.set(tor("Café", f.data, "Café/x.mkv")) // daemon: NFC
 	if r := f.scan(); len(r.Entries) != 0 {
 		t.Fatalf("NFD on disk vs NFC in the daemon offered a live file: %v", paths(r))
@@ -297,8 +297,8 @@ func TestFlags(t *testing.T) {
 	must(t, os.WriteFile(tf, []byte("d4:infod4:name8:arch.isoee"), 0o644))
 	f.daemon.set(tor("elsewhere-name", "/srv/other"))
 	r := f.scan()
-	if e := find(r, filepath.Join(f.data, "Linked")); !slices.Contains(e.Flags, "hardlinked") {
-		t.Fatalf("hardlinked: %+v", e)
+	if e := find(r, filepath.Join(f.data, "Linked")); !slices.Contains(e.Flags, "hardlink") {
+		t.Fatalf("hardlink: %+v", e)
 	}
 	if e := find(r, filepath.Join(f.data, "fresh.iso")); !slices.Contains(e.Flags, "recent") {
 		t.Fatalf("recent: %+v", e)

@@ -86,6 +86,19 @@ func TestHandlerFlow(t *testing.T) {
 	if w := do(t, h, http.MethodPost, "/api/orphans/keep", `not json`); w.Code != http.StatusBadRequest {
 		t.Fatalf("bad keep body: %d", w.Code)
 	}
+	// Taking one Keep back forgets that one only.
+	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", ref(r.Entries[0].ID)); w.Code != http.StatusOK {
+		t.Fatalf("unkeep: %d %s", w.Code, w.Body)
+	}
+	if st, _ := f.svc.Status(); len(st.Kept) != 0 {
+		t.Fatalf("unkeep left %+v", st.Kept)
+	}
+	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", `{"scan_id":"nope","id":"e1"}`); w.Code != http.StatusGone {
+		t.Fatalf("unkeep expired: %d", w.Code)
+	}
+	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", `not json`); w.Code != http.StatusBadRequest {
+		t.Fatalf("unkeep bad body: %d", w.Code)
+	}
 	if w := do(t, h, http.MethodDelete, "/api/orphans/keep", ""); w.Code != http.StatusOK {
 		t.Fatalf("forget: %d", w.Code)
 	}

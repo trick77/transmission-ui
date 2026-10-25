@@ -107,6 +107,30 @@ BACKEND_PUBLIC_URL=https://seedbox.example.com/transmission
 
 Every route then mounts under that prefix. The reverse proxy must forward it, not strip it.
 
+### Orphaned files
+
+Settings → Maintenance → Orphaned files finds what no torrent owns: data left behind by
+torrents removed without it, abandoned `.part` files, stray extras inside a torrent's folder,
+and the daemon's own leftover `.torrent`/`.resume` files. Each one is reviewed and marked
+Delete or Keep; nothing is deleted without that, and Keep is remembered. Off unless set up:
+
+```yaml
+services:
+  transmission-ui:
+    user: "1000:1000"                  # the daemon's PUID:PGID, or deletes are refused
+    volumes:
+      - /srv/torrents:/data/torrents   # the same path the daemon uses
+      - /srv/transmission:/config      # the daemon's config folder
+    environment:
+      BACKEND_DATA_ROOTS: /data/torrents        # comma-separated; daemon=local if paths differ
+      BACKEND_DAEMON_CONFIG: /config
+```
+
+Both variables go together. Every folder the daemon downloads to must be a root: the scan
+refuses to run when a torrent's folder is visible in the container but not listed. Deleting a
+hardlinked file (an *arr import) removes only that path and frees no space. Remembered Keeps
+live in `transmission-ui-kept.json` in the config folder; each deletion is logged with the user.
+
 ### Bundle only
 
 Build the bundle (`cd ui && npm ci && npm run build`), mount `backend/dist` at `/web`, set

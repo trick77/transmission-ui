@@ -3,6 +3,7 @@
 //   node ui/sim/server.ts            # :9092, then point TM_RPC_TARGET at it
 //   TM_SIM_SPEED=30 node ui/sim/server.ts
 //   TM_SIM_REMOVE_MS=1500 node ui/sim/server.ts   # make deletes stall the whole sim
+//   TM_SIM_ORPHANS=0 node ui/sim/server.ts        # the orphan finder as not set up
 //
 // Needs Node >= 23.6 for built-in TypeScript type stripping. No build step, no dependencies.
 
@@ -11,6 +12,7 @@ import { randomBytes } from 'node:crypto'
 import { createState } from './state.ts'
 import { handle, RpcFailure } from './handlers.ts'
 import { tick } from './tick.ts'
+import { createOrphans, orphanRoute } from './orphans.ts'
 
 /** A typo in a knob must not silently poison the world: fall back rather than carry NaN into the tick. */
 function knob(name: string, fallback: number, min = 0): number {
@@ -46,6 +48,8 @@ function blockFor(ms: number) {
 }
 
 const state = createState({ seed: SEED, count: COUNT, speed: SPEED })
+// The backend's /api/orphans, which vite proxies here too under make sim.
+const orphans = createOrphans(knob('TM_SIM_ORPHANS', 1) > 0, Math.floor(Date.now() / 1000))
 // The daemon hands out one session id and rejects requests without it, which is what makes
 // rpc/client.ts run its 409 retry path on the very first call.
 const SESSION_ID = randomBytes(24).toString('hex')
@@ -70,6 +74,16 @@ function send(res: ServerResponse, status: number, body?: unknown, headers: Reco
 
 const server = createServer(async (req, res) => {
   const url = req.url ?? '/'
+  if (url.startsWith('/api/orphans')) {
+    const a = orphanRoute(orphans, req.method ?? 'GET', url.slice('/api/orphans'.length), await readBody(req), Math.floor(Date.now() / 1000))
+    if (!a.lines) return send(res, a.status, a.body)
+    res.writeHead(a.status, { 'Content-Type': 'application/x-ndjson' })
+    for (const line of a.lines) {
+      res.write(JSON.stringify(line) + '\n')
+      await new Promise(r => setTimeout(r, 350))
+    }
+    return res.end()
+  }
   if (!url.startsWith('/transmission/rpc')) return send(res, 404, undefined)
   if (req.method !== 'POST') return send(res, 405, undefined, { Allow: 'POST' })
 

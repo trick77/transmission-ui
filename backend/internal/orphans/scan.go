@@ -22,7 +22,7 @@ type Entry struct {
 	Size  int64  `json:"size"`
 	Files int    `json:"files"`
 	MTime int64  `json:"mtime"` // newest change anywhere in it, unix seconds
-	// Flags: hardlinked, inside, partial, recent, torrent, match, state.
+	// Flags: hardlink, inside, partial, recent, torrent, match, state.
 	Flags  []string `json:"flags,omitempty"`
 	Inside string   `json:"inside,omitempty"` // the live torrent whose folder it sits in
 	// Match is where a loaded torrent with this very name keeps its data: the
@@ -161,7 +161,7 @@ func summarize(root *os.Root, rel string, seen func(string)) (*Entry, error) {
 		e.Kind, e.Size, e.Files = "file", info.Size(), 1
 		e.Types = map[string]int{category(rel): 1}
 		if links(info) > 1 {
-			e.Flags = append(e.Flags, "hardlinked")
+			e.Flags = append(e.Flags, "hardlink")
 		}
 		return e, nil
 	}
@@ -214,7 +214,7 @@ func summarize(root *os.Root, rel string, seen func(string)) (*Entry, error) {
 	if e.Files == 0 {
 		e.Kind, e.Types = "empty", nil
 	} else if allLinked {
-		e.Flags = append(e.Flags, "hardlinked")
+		e.Flags = append(e.Flags, "hardlink")
 	}
 	for _, k := range kids {
 		e.Children = append(e.Children, *k)
@@ -236,7 +236,7 @@ func readDir(root *os.Root, rel string) ([]fs.DirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	ents, err := f.ReadDir(-1)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err

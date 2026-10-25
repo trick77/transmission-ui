@@ -5,6 +5,7 @@ go 1.27.2
 require (
 	github.com/trick77/ship/kit v0.17.4
 	github.com/trick77/ship/kit/auth v0.3.1
+	golang.org/x/text v0.43.0
 )
 
 require (
@@ -12,5 +13,4 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
 )
