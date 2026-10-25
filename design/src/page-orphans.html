@@ -1,0 +1,244 @@
+  </div>
+</div>
+
+
+<!-- Settings: only the entry point -->
+<div class="scrim" id="settings" hidden>
+  <div class="modal" style="width:820px;height:640px;flex-direction:row">
+    <nav style="width:190px;border-right:1px solid var(--line);padding:14px 10px;background:var(--bg);flex:none">
+      <div class="side-h">Preferences</div>
+      <button class="side-item"><span class="lbl">Speed</span></button>
+      <button class="side-item"><span class="lbl">Downloads</span></button>
+      <button class="side-item"><span class="lbl">Seeding</span></button>
+      <button class="side-item"><span class="lbl">Queue</span></button>
+      <button class="side-item"><span class="lbl">Network</span></button>
+      <button class="side-item"><span class="lbl">Peers</span></button>
+      <button class="side-item"><span class="lbl">Interface</span></button>
+      <div class="side-h" style="margin-top:22px">Maintenance</div>
+      <button class="side-item on"><span class="lbl">Orphaned files</span></button>
+      <div class="side-h" style="margin-top:22px">Session</div>
+      <div class="hint" style="padding:0 8px;line-height:1.6">transmission-daemon 4.1.3<br>rpc 6.0.1<br>Uptime 6d 14h<br><span class="num">↓ 218 GB · ↑ 391 GB</span><br>Ratio <span class="num">1.79</span></div>
+    </nav>
+    <div style="display:flex;flex-direction:column;min-width:0;flex:1">
+      <div class="modal-h"><span class="t">Orphaned files</span><div class="spacer"></div><button class="btn ghost icon"><svg class="i"><use href="#i-x"/></svg></button></div>
+      <div class="modal-b" style="flex:1" id="sbody"></div>
+      <div class="modal-f" id="sfoot"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Review window: the actual work -->
+<div class="scrim" id="review" hidden>
+  <div class="modal rv">
+    <div class="rv-h">
+      <span class="t">Review orphans</span>
+      <span class="hint" id="rvtot"></span>
+      <div class="spacer" style="flex:1"></div>
+      <span class="oprog" id="rvprog"></span>
+      <button class="btn ghost icon"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="rv-b">
+      <div class="rv-l">
+        <div class="rv-tabs" id="rvtabs"></div>
+        <div class="rv-list" id="rvlist"></div>
+      </div>
+      <div class="rv-d" id="rvd"></div>
+    </div>
+    <div class="rv-f" id="rvf"></div>
+  </div>
+</div>
+
+<div class="scrim" id="confirm" hidden style="z-index:20;background:rgba(0,0,0,.25)">
+  <div class="modal" style="width:560px">
+    <div class="modal-h"><span class="t" id="ctitle"></span><div class="spacer"></div><button class="btn ghost icon"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="modal-b">
+      <div>Everything you marked Delete, and nothing else. Transmission does not know these files, so nothing changes in the list.</div>
+      <div class="confirm-list" id="clist"></div>
+      <div class="hint" style="color:var(--err)">This cannot be undone.</div>
+    </div>
+    <div class="modal-f"><div class="spacer"></div><button class="btn ghost" data-c="back">Back to review</button><button class="btn primary" style="background:var(--err)" id="cgo" data-c="go"></button></div>
+  </div>
+</div>
+
+<script>
+// The orphan review (Settings → Maintenance → Orphaned files → Scan). One scan, biggest first. `why` is what the backend can actually tell from the scan;
+// it is the reason a person can decide without opening a shell.
+const ORPH = [
+  { g:'/data/torrents', dir:'', name:'nasa-apollo-11-mission-audio', kind:'dir', files:2904, size:18.4, age:'1 year ago',
+    why:'<b>No torrent points at this folder.</b> Most likely a torrent that was removed from the list without its data.',
+    types:'2,896 audio · 8 text', kids:[['dir','01 - Launch','412 files · 2.6 GB'],['dir','02 - Translunar coast','688 files · 4.4 GB'],['dir','03 - Lunar orbit','903 files · 5.8 GB'],['dir','04 - Landing','391 files · 2.5 GB'],['dir','… 2 more folders','510 files · 3.1 GB']] },
+  { g:'/data/torrents', dir:'blender/', name:'Tears of Steel (2012) 4K', kind:'dir', files:3, size:11.8, age:'8 months ago', flags:['Hardlinked'],
+    why:'<b>No torrent points at this folder</b>, and <span class="hl">every file in it has a second hard link</span>, most likely in a media library. Deleting removes this path only and <b>frees no space</b>; the library copy stays.',
+    types:'1 video · 1 subtitle · 1 text', kids:[['file','tears_of_steel_4k.mov','11.7 GB'],['file','tears_of_steel_4k.en.srt','64 kB'],['file','credits.txt','3 kB']] },
+  { g:'/data/torrents', dir:'Big Buck Bunny (2008) 4K 60fps/', name:'bbb-extracted.mkv', kind:'file', size:7.1, age:'3 weeks ago', flags:['Inside a torrent'],
+    why:'Sits in the folder of <b>Big Buck Bunny (2008) 4K 60fps</b>, which is still in Transmission, but is <b>not one of its files</b>. Usually something unpacked or copied in by hand. The torrent itself is not touched.',
+    types:'1 video' },
+  { g:'/data/torrents', dir:'movies/public-domain/', name:'Plan 9 from Outer Space (1957)', kind:'dir', files:4, size:6.1, age:'5 months ago',
+    why:'<b>No torrent points at this folder.</b> Most likely a torrent that was removed from the list without its data.',
+    types:'1 video · 1 subtitle · 1 image · 1 text', kids:[['file','Plan 9 from Outer Space (1957).mkv','6.0 GB'],['file','Plan 9 from Outer Space (1957).en.srt','88 kB'],['file','poster.jpg','412 kB'],['file','README.txt','2 kB']] },
+  { g:'/data/torrents', dir:'', name:'ubuntu-22.04.4-desktop-amd64.iso', kind:'file', size:4.7, age:'7 months ago',
+    why:'<b>No torrent owns this file.</b> Most likely a torrent that was removed from the list without its data.', types:'1 disk image' },
+  { g:'/data/torrents', dir:'sonarr/', name:'docs-old', kind:'empty', size:0, age:'2 months ago', flags:['Empty'],
+    why:'<b>An empty folder</b> that no torrent uses. Left behind after its contents were moved or deleted.', types:'empty' },
+  { g:'/data/torrents', dir:'watch/', name:'archlinux-2025.11.01-x86_64.iso.torrent', kind:'file', size:0.0001, age:'1 year ago', flags:['.torrent'],
+    why:'<b>A .torrent file that is not loaded.</b> Probably left in a watch folder or by a download script. Reading it: <span class="hl">archlinux-2025.11.01-x86_64.iso</span>, 1.2 GB, not in Transmission.', types:'1 torrent file' },
+  { g:'/data/incomplete', dir:'', name:'debian-12.5.0-amd64-DVD-1.iso.part', kind:'file', size:2.3, age:'4 months ago', flags:['Partial'],
+    why:'<b>An unfinished download nobody owns</b>: a torrent removed while it was still downloading. It cannot be resumed without its torrent.', types:'1 partial file' },
+  { g:'/data/incomplete', dir:'', name:'fedora-Workstation-Live-41.iso.part', kind:'file', size:1.2, age:'2 min ago', flags:['Changed 2 min ago'],
+    why:'<b>Changed 2 minutes ago.</b> Something may still be writing it, so Keep is the safer call for now. A later scan will show it again if it stays unowned.', types:'1 partial file' },
+  { g:'Transmission state', dir:'/config/torrents/ + resume/', name:'openstreetmap-planet-2025-06', kind:'state', size:0.00005, age:'6 months ago', flags:['Transmission state'],
+    osub:'3f2a9c…c91e · .torrent + .resume',
+    why:'<b>Transmission’s own copy of a torrent that is no longer loaded</b> (info hash 3f2a9c…c91e). Left behind by a removal that did not finish. Harmless, it only clutters the config folder. Its data is not here; if any is left, it shows up as its own entry.',
+    types:'.torrent 46 kB · .resume 3 kB' },
+  { g:'Transmission state', dir:'/config/resume/', name:'9b1e5d…04a7.resume', kind:'state', size:0.000003, age:'1 year ago', flags:['Transmission state'],
+    osub:'resume data only, no .torrent',
+    why:'<b>Resume data for a torrent Transmission no longer has</b>, without the .torrent next to it, so the name is unknown. Safe to delete.', types:'.resume 3 kB' },
+];
+let dec = {0:'del', 3:'del', 4:'del', 8:'keep'};
+let ocur = 1;
+let tab = 'all';
+let mode = 'review';
+const ogb = v => v >= 1 ? v.toFixed(1)+' GB' : v === 0 ? '0 B' : v >= 0.001 ? Math.round(v*1000)+' MB' : Math.max(1,Math.round(v*1e6))+' kB';
+const icoOf = k => k === 'file' ? 'file' : k === 'state' ? 'gear' : 'folder';
+const marked = d => Object.keys(dec).filter(i=>dec[i]===d).map(Number);
+const delSize = () => marked('del').reduce((a,i)=>a+ORPH[i].size,0);
+const label = o => o.name + (o.kind==='dir'||o.kind==='empty' ? '/' : '');
+const osub = o => o.osub || [o.dir, o.kind==='dir' ? `${o.files.toLocaleString('en')} files` : '', 'changed ' + o.age].filter(Boolean).join(' · ');
+
+function listHtml(st){
+  const show = i => tab==='all' || (tab==='open' ? !dec[i] : dec[i]===tab);
+  let out = '', last = null;
+  ORPH.forEach((o,i) => {
+    if (!show(i)) return;
+    if (o.g !== last) { last = o.g; out += `<div class="rv-grp"><svg class="i" style="width:13px;height:13px"><use href="#i-${o.g.startsWith('/')?'folder':'gear'}"/></svg><span class="mono">${o.g}</span></div>`; }
+    const r = st && st(i);
+    const d = dec[i];
+    out += `<div class="rv-it${d?' '+d:''}${i===ocur&&!st?' ocur':''}${r?.cls?' '+r.cls:''}" data-i="${i}">
+      <span class="rv-mk">${d==='del'?'<svg class="i"><use href="#i-trash"/></svg>':d==='keep'?'<svg class="i"><use href="#i-check"/></svg>':''}</span>
+      <div style="min-width:0"><div class="n">${label(o)}</div><div class="s ${r?'res':''}">${r ? r.text : osub(o)}</div></div>
+      <span class="sz num">${ogb(o.size)}</span></div>`;
+  });
+  return out || '<div class="hint" style="padding:20px">Nothing here.</div>';
+}
+function detailHtml(i){
+  const o = ORPH[i], d = dec[i];
+  const path = o.g.startsWith('/') ? `${o.g}/${o.dir}` : o.dir;
+  return `<div><div class="path">${path}</div><div class="oname">${label(o)}</div></div>
+    <div class="facts">
+      <div><span class="k">Size</span><span class="v num">${ogb(o.size)}</span></div>
+      ${o.kind==='dir'?`<div><span class="k">Files</span><span class="v num">${o.files.toLocaleString('en')}</span></div>`:''}
+      <div><span class="k">Last changed</span><span class="v">${o.age}</span></div>
+      <div><span class="k">Contents</span><span class="v">${o.types}</span></div>
+    </div>
+    ${o.flags ? `<div class="oflags">${o.flags.map(f=>`<span class="oflag">${f}</span>`).join('')}</div>` : ''}
+    <div class="why">${o.why}</div>
+    ${o.kids ? `<div class="otree"><div class="h"><span>Inside</span><span>${o.kind==='dir'?o.files.toLocaleString('en')+' files':''}</span></div>${o.kids.map(([k,n,s])=>`<div class="r"><svg class="i"><use href="#i-${k}"/></svg>${n}<span class="num">${s}</span></div>`).join('')}</div>` : ''}
+    <div class="decide">
+      <button class="btn keep${d==='keep'?' on':''}" data-d="keep"><svg class="i"><use href="#i-check"/></svg>Keep<span class="kbd">K</span></button>
+      <button class="btn del${d==='del'?' on':''}" data-d="del"><svg class="i"><use href="#i-trash"/></svg>Delete<span class="kbd">D</span></button>
+      <div style="flex:1"></div>
+      <span class="hint" style="align-self:center"><span class="kbd">↑</span><span class="kbd">↓</span> move · <span class="kbd">U</span> undecide</span>
+    </div>`;
+}
+function renderReview(st){
+  const n = ORPH.length, done = Object.keys(dec).length;
+  const total = ORPH.reduce((a,o)=>a+o.size,0);
+  document.getElementById('rvtot').textContent = `${n} found · ${ogb(total)} · scanned 14,212 files just now`;
+  document.getElementById('rvprog').innerHTML = `${done} of ${n} decided<span class="track"><i style="width:${Math.round(done/n*100)}%"></i></span>`;
+  const cnt = k => k==='all' ? n : k==='open' ? n-done : marked(k).length;
+  document.getElementById('rvtabs').innerHTML = [['all','All'],['open','Undecided'],['del','Delete'],['keep','Keep']]
+    .map(([k,l])=>`<button data-t="${k}" class="${tab===k?'on':''}">${l}<span class="num">${cnt(k)}</span></button>`).join('');
+  document.getElementById('rvlist').innerHTML = listHtml(st);
+  document.getElementById('rvd').innerHTML = detailHtml(ocur);
+  const dn = marked('del').length, kn = marked('keep').length;
+  const f = document.getElementById('rvf');
+  if (mode === 'deleting') {
+    f.innerHTML = `<div class="rm-bar"><span class="v">Deleting 2 of ${dn}</span><span class="who">ubuntu-22.04.4-desktop-amd64.iso</span><span class="track"><i style="--p:${Math.round(100/dn)}%"></i></span><button class="btn sm ghost">Stop</button></div><div style="flex:1"></div>`;
+  } else if (mode === 'done') {
+    f.innerHTML = `<div class="rm-bar done has-fail"><span class="v">Deleted 1 of 3, 2 not deleted</span><span class="track"><i style="--p:100%"></i></span><button class="btn sm ghost">Dismiss</button></div><div style="flex:1"></div><button class="btn ghost">Scan again</button>`;
+  } else {
+    f.innerHTML = `<span class="sum"><b>${dn}</b> to delete · ${ogb(delSize())}</span><span class="sum">· <b>${kn}</b> to keep</span><span class="sum faint">· ${n-done} undecided stay as they are</span>
+      <div style="flex:1"></div><span class="hint">Keep is remembered: kept paths stay hidden in later scans until they change</span>
+      <button class="btn primary" ${dn?'':'disabled'} style="${dn?'background:var(--err)':'opacity:.5'}" data-go>Delete ${dn||''}…</button>`;
+  }
+}
+function renderSettings(){
+  const b = document.getElementById('sbody'), f = document.getElementById('sfoot');
+  if (mode === 'off') {
+    b.innerHTML = `<div class="empty-st"><svg class="i" style="width:28px;height:28px;color:var(--ink-3)"><use href="#i-folder"/></svg>
+      <div class="t">Folders are not mounted</div>
+      <div style="max-width:440px">Finding orphaned files needs the transmission-ui container to see the folders the daemon writes to (data and its config folder), and permission to delete in them.</div>
+      <div class="howto">user: "1000:1000"                 # the daemon's PUID:PGID
+volumes:
+  - /srv/torrents:/data/torrents   # same paths the daemon sees
+  - /srv/transmission:/config
+environment:
+  BACKEND_DATA_ROOTS: /data/torrents
+  BACKEND_DAEMON_CONFIG: /config</div></div>`;
+    f.innerHTML = `<span class="hint">Documented in README, “Orphaned files”</span><div class="spacer"></div><button class="btn primary">Done</button>`;
+  } else if (mode === 'ready') {
+    b.innerHTML = `<div class="hint" style="margin-bottom:10px">Finds files and folders that no torrent in Transmission owns: data left behind by removed torrents, abandoned partial downloads, stray extras, and Transmission’s own leftover .torrent and .resume files. You decide on each one; nothing is deleted without that.</div>
+      <div class="sec">Scanned</div>
+      <div class="opt"><div class="txt"><div class="l mono">/data/torrents</div><div class="d">412 GB free · 27 torrents</div></div></div>
+      <div class="opt"><div class="txt"><div class="l mono">/data/incomplete</div><div class="d">412 GB free · 2 torrents</div></div></div>
+      <div class="opt"><div class="txt"><div class="l mono">/config</div><div class="d">Transmission state: torrents/, resume/</div></div></div>
+      <div class="sec">Remembered</div>
+      <div class="opt"><div class="txt"><div class="l">4 paths kept in earlier reviews</div><div class="d">Hidden from scans until they change</div></div><div class="ctl"><button class="btn sm ghost">Show</button><button class="btn sm ghost">Forget all</button></div></div>`;
+    f.innerHTML = `<span class="hint">Last scan 3 weeks ago</span><div class="spacer"></div><button class="btn primary"><svg class="i"><use href="#i-search"/></svg>Scan</button>`;
+  } else if (mode === 'scanning') {
+    b.innerHTML = `<div class="empty-st"><div class="spin"></div><div class="t">Scanning</div>
+      <div class="num">14,212 files · 6 s</div><div class="hint mono">/data/torrents/movies/public-domain</div>
+      <div class="hint" style="max-width:420px">Reads names and sizes only. The review opens when it is done.</div></div>`;
+    f.innerHTML = `<div class="spacer"></div><button class="btn">Stop</button>`;
+  } else if (mode === 'clean') {
+    b.innerHTML = `<div class="empty-st"><svg class="i" style="width:28px;height:28px;color:var(--ink-3)"><use href="#i-check"/></svg><div class="t">Nothing new</div>
+      <div>Every file belongs to a torrent, or is one you kept before.</div><div class="hint">scanned 14,212 files · 8 s · just now · 4 kept paths hidden</div></div>`;
+    f.innerHTML = `<div class="spacer"></div><button class="btn ghost">Scan again</button><button class="btn primary">Done</button>`;
+  }
+}
+function render(){
+  const inReview = ['review','confirm','deleting','done'].includes(mode);
+  document.getElementById('settings').hidden = inReview;
+  document.getElementById('review').hidden = !inReview;
+  document.getElementById('confirm').hidden = mode !== 'confirm';
+  if (!inReview) return renderSettings();
+  if (mode === 'deleting') {
+    const st = i => i===0 ? {text:'Deleted', cls:'gone'} : i===4 ? {text:'Deleting…'} : dec[i]==='del' ? {text:'Queued'} : null;
+    return renderReview(st);
+  }
+  if (mode === 'done') {
+    const st = i => i===0 ? {text:'Deleted', cls:'gone'} : i===4 ? {text:'Failed: permission denied', cls:'failed'} : i===3 ? {text:'Kept: changed since the scan', cls:'failed'} : null;
+    return renderReview(st);
+  }
+  renderReview();
+  const dn = marked('del');
+  document.getElementById('ctitle').textContent = `Delete ${dn.length} item${dn.length===1?'':'s'}`;
+  document.getElementById('cgo').textContent = `Delete ${dn.length} · ${ogb(delSize())}`;
+  document.getElementById('clist').innerHTML = dn.map(i=>{ const o=ORPH[i]; return `<div><span class="mono">${o.g.startsWith('/')?o.g+'/'+o.dir:o.dir}${label(o)}</span><span class="num">${ogb(o.size)}</span></div>`; }).join('');
+}
+function decide(d){
+  if (d === 'undo') delete dec[ocur]; else dec[ocur] = d;
+  // jump to the next undecided one, so a review is a run of D and K presses
+  if (d !== 'undo') { for (let k=1;k<=ORPH.length;k++){ const j=(ocur+k)%ORPH.length; if(!dec[j]){ ocur=j; break; } } }
+  render();
+}
+document.getElementById('review').addEventListener('click', e => {
+  if (mode !== 'review') return;
+  const it = e.target.closest('.rv-it'); if (it) { ocur = +it.dataset.i; return render(); }
+  const t = e.target.closest('[data-t]'); if (t) { tab = t.dataset.t; return render(); }
+  const d = e.target.closest('[data-d]'); if (d) return decide(d.dataset.d);
+  if (e.target.closest('[data-go]')) setMode('confirm');
+});
+document.getElementById('confirm').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (b) setMode(b.dataset.c==='go' ? 'deleting' : 'review'); });
+document.addEventListener('keydown', e => {
+  if (mode !== 'review') return;
+  const vis = [...document.querySelectorAll('#rvlist .rv-it')].map(x=>+x.dataset.i), p = vis.indexOf(ocur);
+  if (e.key==='ArrowDown' && p < vis.length-1) { ocur = vis[p+1]; render(); e.preventDefault(); }
+  if (e.key==='ArrowUp' && p > 0) { ocur = vis[p-1]; render(); e.preventDefault(); }
+  if (e.key==='d') decide('del'); if (e.key==='k') decide('keep'); if (e.key==='u') decide('undo');
+});
+function setMode(m){ mode = m; render(); }
+renderRows(null);
+// ?state=off|ready|scanning|review|confirm|deleting|done|clean
+setMode(new URLSearchParams(location.search).get('state') || 'review');
+</script>
