@@ -18,6 +18,7 @@ import (
 	"github.com/trick77/ship/kit/version"
 	"github.com/trick77/transmission-ui/backend/internal/config"
 	"github.com/trick77/transmission-ui/backend/internal/httpapi"
+	"github.com/trick77/transmission-ui/backend/internal/orphans"
 	"github.com/trick77/transmission-ui/backend/internal/proxy"
 )
 
@@ -93,6 +94,15 @@ func run(parent context.Context) error {
 	srv, err := httpapi.New(cfg, oidc, sessions, rpc, ui, log, httpx.Check{Name: "transmission", Run: ready})
 	if err != nil {
 		return err
+	}
+	if len(cfg.DataRoots) > 0 {
+		svc, err := orphans.New(orphans.Options{Roots: cfg.DataRoots, DaemonConfig: cfg.DaemonConfig,
+			Upstream: cfg.RPCUpstream, User: cfg.RPCUser, Pass: cfg.RPCPass, Log: log})
+		if err != nil {
+			return err
+		}
+		srv.SetOrphans(svc.Handler())
+		log.Info("orphan finder on", "roots", len(cfg.DataRoots), "config", cfg.DaemonConfig.Daemon)
 	}
 
 	log.Info("listening", "addr", cfg.Addr, "version", version.String(), "auth", cfg.AuthMode, "upstream", cfg.RPCUpstream)

@@ -18,6 +18,7 @@ import (
 	"github.com/trick77/ship/kit/ratelimit"
 	"github.com/trick77/ship/kit/spa"
 	"github.com/trick77/transmission-ui/backend/internal/config"
+	"github.com/trick77/transmission-ui/backend/internal/orphans"
 	"github.com/trick77/transmission-ui/backend/internal/proxy"
 )
 
@@ -87,7 +88,13 @@ type Server struct {
 
 	// Form login: spaces one client's attempts apart; see handleLoginSubmit.
 	throttle *ratelimit.Throttle
+
+	// orphans serves /api/orphans; nil when the finder is not set up.
+	orphans http.Handler
 }
+
+// SetOrphans mounts the orphan finder's routes.
+func (s *Server) SetOrphans(h http.Handler) { s.orphans = h }
 
 const baseMeta = `<meta name="tmui-base" content="">`
 
@@ -172,6 +179,17 @@ func (s *Server) Handler() http.Handler {
 	// /api/auth/login rather than a browser auth prompt.
 	guard := s.sessions.Guard(s.cfg.OIDCAllowedGroup, refuse(http.StatusUnauthorized), refuse(http.StatusForbidden))
 	mux.Handle(p("POST /transmission/rpc"), httpx.CrossOrigin(guard(s.rpc)))
+	// Every orphan route is registered, set up or not: an unregistered GET
+	// would fall through to the shell and answer 200 with index.html.
+	orph := s.orphans
+	if orph == nil {
+		orph = orphans.Disabled()
+	}
+	orph = httpx.CrossOrigin(guard(http.StripPrefix(s.cfg.BasePath, orph)))
+	for _, route := range []string{"GET /api/orphans", "GET /api/orphans/", "POST /api/orphans/scan",
+		"POST /api/orphans/keep", "DELETE /api/orphans/keep", "POST /api/orphans/delete"} {
+		mux.Handle(p(route), orph)
+	}
 	// Without this, a GET on the RPC path falls through to the SPA handler and
 	// answers 200 with index.html. The daemon's RPC is POST-only. A methodless
 	// pattern here would conflict with "GET /", so spell the method out.
