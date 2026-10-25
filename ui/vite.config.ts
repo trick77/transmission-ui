@@ -22,6 +22,9 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           ...(auth ? { auth } : {}),
         },
+        // The orphan finder is the Go backend's, not the daemon's: only the sim answers it
+        // here. A real daemon 404s, which the UI shows as "not set up".
+        "/api/orphans": { target, changeOrigin: true },
       },
     },
     // Built straight into the Go embed directory, which also holds a tracked .gitkeep so `//go:embed all:dist`

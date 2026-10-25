@@ -7,6 +7,94 @@ import {
   type TorrentDetail,
   type TrackerStat,
 } from "../rpc/types";
+import type { OrphanScan, OrphanStatus } from "../api/orphans";
+
+/**
+ * The backend's orphan routes, beside the daemon. `status: null` is a backend without the
+ * finder set up (404). `onDelete` answers one delete: resolve for 200, or return
+ * `{ status, error }` for a refusal. `scanError` makes the scan stream an error line.
+ */
+export interface FakeOrphans {
+  status: OrphanStatus | null;
+  scan: OrphanScan;
+  scanError?: string;
+  onDelete?: (
+    id: string,
+  ) =>
+    | Promise<void | { status: number; error: string }>
+    | void
+    | { status: number; error: string };
+  calls: { method: string; path: string; body?: Record<string, unknown> }[];
+}
+
+export function orphanScan(o: Partial<OrphanScan> = {}): OrphanScan {
+  return {
+    scan_id: "s1",
+    at: now,
+    took_ms: 800,
+    looked: 1234,
+    hidden_kept: 0,
+    entries: [
+      {
+        id: "e1",
+        group: "/data/torrents",
+        path: "/data/torrents/nasa-apollo-11-mission-audio",
+        kind: "dir",
+        size: 18_400_000_000,
+        files: 2904,
+        mtime: now - 400 * 86400,
+        types: { audio: 2896, document: 8 },
+        children: [
+          { name: "01 - Launch", dir: true, size: 2_600_000_000, files: 412 },
+        ],
+      },
+      {
+        id: "e2",
+        group: "/data/torrents",
+        path: "/data/torrents/Big Buck Bunny (2008) 4K 60fps/bbb-extracted.mkv",
+        kind: "file",
+        size: 7_100_000_000,
+        files: 1,
+        mtime: now - 21 * 86400,
+        flags: ["inside"],
+        inside: "Big Buck Bunny (2008) 4K 60fps",
+        types: { video: 1 },
+      },
+      {
+        id: "e3",
+        group: "/data/torrents",
+        path: "/data/torrents/ubuntu-22.04.4-desktop-amd64.iso",
+        kind: "file",
+        size: 4_700_000_000,
+        files: 1,
+        mtime: now - 200 * 86400,
+        types: { "disk image": 1 },
+      },
+      {
+        id: "e4",
+        group: "Transmission state",
+        path: "/config/resume/abababababababababababababababababababab.resume",
+        kind: "state",
+        size: 3_000,
+        files: 2,
+        mtime: now - 90 * 86400,
+        flags: ["state"],
+        name: "openstreetmap-planet-2025-06",
+        hash: "abababababababababababababababababababab",
+      },
+    ],
+    ...o,
+  };
+}
+
+export function orphanStatus(o: Partial<OrphanStatus> = {}): OrphanStatus {
+  return {
+    roots: [{ path: "/data/torrents", free: 412_000_000_000 }],
+    config: "/config",
+    kept: [],
+    ...o,
+  };
+}
 
 const now = Math.floor(Date.now() / 1000);
 
@@ -314,6 +402,7 @@ export interface FakeDaemon {
   /** Calls of one method. */
   of(method: string): Record<string, unknown>[];
   portOpen: boolean;
+  orphans: FakeOrphans;
   restore(): void;
 }
 
@@ -328,6 +417,7 @@ export function installFakeDaemon(
     session?: Partial<Session>;
     unauthorized?: boolean;
     onRemove?: (ids: number[]) => Promise<void> | void;
+    orphans?: Partial<FakeOrphans>;
   } = {},
 ): FakeDaemon {
   const d: FakeDaemon = {
@@ -336,6 +426,12 @@ export function installFakeDaemon(
     calls: [],
     of: (m) => d.calls.filter((c) => c.method === m).map((c) => c.args),
     portOpen: true,
+    orphans: {
+      status: null,
+      scan: orphanScan(),
+      calls: [],
+      ...opts.orphans,
+    },
     restore: () => {
       fetchMock.mockRestore();
     },
@@ -497,8 +593,10 @@ export function installFakeDaemon(
   };
   const fetchMock = vi
     .spyOn(globalThis, "fetch")
-    .mockImplementation(async (_url, init) => {
+    .mockImplementation(async (url, init) => {
       if (opts.unauthorized) return new Response("", { status: 401 });
+      const u = String(url);
+      if (u.includes("/api/orphans")) return orphanRoute(d.orphans, u, init);
       const headers = (init?.headers ?? {}) as Record<string, string>;
       if (!handshake && !headers["X-Transmission-Session-Id"]) {
         handshake = true;
@@ -535,4 +633,38 @@ export function installFakeDaemon(
       }
     });
   return d;
+}
+
+async function orphanRoute(
+  o: FakeOrphans,
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const path = url.slice(url.indexOf("/api/orphans") + "/api/orphans".length);
+  const method = init?.method ?? "GET";
+  const body = init?.body
+    ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+    : undefined;
+  o.calls.push({ method, path, body });
+  if (!o.status) return Response.json({ error: "not set up" }, { status: 404 });
+  if (method === "GET" && path === "") return Response.json(o.status);
+  if (path === "/scan") {
+    const lines = [
+      JSON.stringify({ progress: { looked: 10, path: "/data/torrents/a" } }),
+      o.scanError
+        ? JSON.stringify({ error: o.scanError })
+        : JSON.stringify({ result: o.scan }),
+    ];
+    return new Response(lines.join("\n") + "\n", {
+      headers: { "Content-Type": "application/x-ndjson" },
+    });
+  }
+  if (path === "/keep" || path === "/unkeep" || path === "/forget")
+    return Response.json({ ok: true });
+  if (path === "/delete") {
+    const r = await o.onDelete?.(String(body?.id));
+    if (r) return Response.json({ error: r.error }, { status: r.status });
+    return Response.json({ ok: true });
+  }
+  return Response.json({ error: "no route" }, { status: 404 });
 }

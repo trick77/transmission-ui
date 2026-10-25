@@ -546,7 +546,77 @@ body.resizing{cursor:col-resize;user-select:none}
 .drop{border:1.5px dashed var(--line);border-radius:var(--r-lg);padding:26px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--ink-2);background:var(--bg)}
 .drop.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .drop .big{width:28px;height:28px}
-
+/* ───────── Orphaned files: Settings entry and the review window ───────── */
+.empty-st{display:grid;place-items:center;text-align:center;gap:10px;padding:40px 24px;color:var(--ink-2)}
+.empty-st .t{font:500 18px/1.3 var(--serif);color:var(--ink)}
+.howto{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;font:12px/1.6 var(--mono);color:var(--ink-2);text-align:left;white-space:pre;overflow:auto;max-width:100%}
+.spin{width:28px;height:28px;border-radius:50%;border:2.5px solid var(--surface-3);border-top-color:var(--ink-2);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rv{width:1120px;max-width:calc(100vw - 32px);height:740px;flex-direction:column}
+.rv-h{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.rv-h .t{font-family:var(--serif);font-weight:500;font-size:20px}
+.rv-h .oprog{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+.rv-h .oprog .track{width:120px;height:4px;border-radius:999px;background:var(--surface-3);overflow:hidden}
+.rv-h .oprog .track i{display:block;height:100%;background:var(--ink-3)}
+.rv-b{display:grid;grid-template-columns:420px minmax(0,1fr);flex:1;min-height:0}
+.rv-l{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--bg)}
+.rv-tabs{display:flex;gap:4px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+.rv-tabs button{font-size:12px;padding:3px 9px;border-radius:999px;color:var(--ink-2)}
+.rv-tabs button.on{background:var(--surface-3);color:var(--ink)}
+.rv-tabs button .num{color:var(--ink-3);margin-left:4px}
+.rv-list{overflow:auto;flex:1;padding:6px}
+.rv-grp{font-size:12px;color:var(--ink-3);padding:10px 8px 4px;display:flex;gap:6px;align-items:center}
+.rv-grp .mono{color:var(--ink-2)}
+.rv-warn{margin:8px 8px 2px;font-size:12px;color:var(--ink-2)}
+.rv-it{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 8px;border-radius:var(--r-sm);cursor:pointer;width:100%;text-align:left}
+.rv-it:hover{background:var(--surface-2)}
+.rv-it.ocur{background:var(--surface-3);box-shadow:inset 2px 0 0 var(--ink-2)}
+.rv-it .rv-mk{width:16px;height:16px;border-radius:50%;border:1.5px dashed var(--ink-3)}
+.rv-it.del .rv-mk,.rv-it.keep .rv-mk{border:0;display:grid;place-items:center}
+.rv-it .rv-mk svg{width:15px;height:15px}
+.rv-it.del .rv-mk svg{color:var(--err)}
+.rv-it.keep .rv-mk svg{color:var(--ink-3)}
+.rv-it .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.rv-it.keep .n{color:var(--ink-3)}
+.rv-it.del .n{text-decoration:line-through;text-decoration-color:rgba(217,88,74,.6)}
+.rv-it .s{font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-it .sz{font-size:12px;color:var(--ink-2)}
+.rv-it.failed .s{color:var(--err)}
+.rv-it.failed .n{text-decoration:none}
+.rv-it.gone{opacity:.35}
+.rv-d{overflow:auto;padding:22px 26px;display:flex;flex-direction:column;gap:16px}
+.rv-d .path{font:12px/1.5 var(--mono);color:var(--ink-3);word-break:break-all}
+.rv-d .oname{font:500 22px/1.25 var(--serif);word-break:break-word}
+.facts{display:flex;gap:22px;flex-wrap:wrap}
+.facts div{display:grid;gap:2px}
+.facts .k{font-size:11px;color:var(--ink-3)}
+.facts .v{font-size:15px}
+.why{border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;background:var(--bg);font-size:13px;color:var(--ink-2);line-height:1.55}
+.why b{color:var(--ink);font-weight:500}
+.otree{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.otree .h{display:flex;font-size:12px;color:var(--ink-3);padding:8px 12px;border-bottom:1px solid var(--line-soft)}
+.otree .h span:last-child{margin-left:auto}
+.otree .r{display:flex;gap:8px;align-items:center;padding:5px 12px;font-size:13px;color:var(--ink-2);border-bottom:1px solid var(--line-soft)}
+.otree .r:last-child{border-bottom:0}
+.otree .r svg{width:13px;height:13px;color:var(--ink-3);flex:none}
+.otree .r .num{margin-left:auto;color:var(--ink-3)}
+.decide{display:flex;gap:10px;margin-top:auto;padding-top:6px}
+.decide .btn{height:38px;padding:0 16px;font-size:14px}
+.decide .btn.keep.on{background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--ink-3)}
+.decide .btn.del{color:var(--err);box-shadow:inset 0 0 0 1px rgba(217,88,74,.45)}
+.decide .btn.del.on{background:var(--err);color:var(--accent-ink);box-shadow:none}
+.kbd{font:11px var(--mono);padding:1px 5px;border-radius:4px;background:var(--surface-3);color:var(--ink-3);margin-left:6px}
+.decide .btn.del.on .kbd{background:rgba(0,0,0,.2);color:var(--accent-ink)}
+.rv-f{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--line);background:var(--bg)}
+.rv-f .sum{font-size:13px;color:var(--ink-2)}
+.rv-f .sum b{color:var(--ink);font-weight:500}
+.oflag{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--surface-3);color:var(--ink-2);white-space:nowrap}
+.oflags{display:flex;gap:6px;flex-wrap:wrap}
+.confirm-list{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);margin:10px 0}
+.confirm-list div{display:flex;gap:10px;padding:6px 10px;border-bottom:1px solid var(--line-soft);font-size:13px}
+.confirm-list div:last-child{border-bottom:0}
+.confirm-list .num{margin-left:auto;color:var(--ink-3);flex:none}
+.kept-list{margin:4px 0 0;font-size:12px;color:var(--ink-2);display:grid;gap:2px}
 </style>
 <svg width="0" height="0" style="position:absolute">
   <defs>
@@ -951,6 +1021,8 @@ function toolbarMenu(anchor){
       <button class="side-item" data-s="network"><span class="lbl">Network</span></button>
       <button class="side-item" data-s="peers"><span class="lbl">Peers</span></button>
       <button class="side-item" data-s="privacy"><span class="lbl">Privacy</span></button>
+      <div class="side-h" style="margin-top:22px">Maintenance</div>
+      <button class="side-item" data-s="orphans"><span class="lbl">Orphaned files</span></button>
       <div class="side-h" style="margin-top:22px">Session</div>
       <div class="hint" style="padding:0 8px;line-height:1.6">transmission-daemon 4.1.3<br>rpc 6.0.1<br>Uptime 6d 14h<br><span class="num">↓ 218 GB · ↑ 391 GB</span><br>Ratio <span class="num">1.79</span></div>
     </nav>
@@ -1041,6 +1113,17 @@ function toolbarMenu(anchor){
           <div class="opt"><div class="txt"><div class="l">Notify when a torrent is added</div></div><div class="ctl"><span class="toggle"></span></div></div>
         </div>
 
+        <div data-s="orphans" hidden>
+          <div class="hint" style="margin-bottom:10px">Finds files and folders that no torrent in Transmission owns: data left behind by removed torrents, abandoned partial downloads, stray extras, and Transmission’s own leftover .torrent and .resume files. You decide on each one; nothing is deleted without that.</div>
+          <div class="sec">Scanned</div>
+          <div class="opt"><div class="txt"><div class="l mono">/data/torrents</div><div class="d">412 GB free</div></div></div>
+          <div class="opt"><div class="txt"><div class="l mono">/data/incomplete</div><div class="d">412 GB free</div></div></div>
+          <div class="opt"><div class="txt"><div class="l mono">/config</div><div class="d">Transmission state: torrents/, resume/</div></div></div>
+          <div class="sec">Remembered</div>
+          <div class="opt"><div class="txt"><div class="l">4 paths kept in earlier reviews</div><div class="d">Hidden from scans until they change</div></div><div class="ctl"><button class="btn sm ghost">Show</button><button class="btn sm ghost">Forget all</button></div></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><span class="hint">Last scan 3 weeks ago</span><div class="spacer"></div><a class="btn primary" href="orphans.html?state=review"><svg class="i"><use href="#i-search"/></svg>Scan</a></div>
+        </div>
+
       </div>
       <div class="modal-f"><span class="hint">Changes apply immediately to the running session</span><div class="spacer"></div><button class="btn primary">Done</button></div>
     </div>
@@ -1052,6 +1135,6 @@ document.getElementById('snav').addEventListener('click', e => { const b = e.tar
   document.querySelectorAll('#snav button').forEach(x=>x.classList.toggle('on', x===b));
   document.querySelectorAll('.modal-b [data-s]').forEach(x=>x.hidden = x.dataset.s !== b.dataset.s);
   document.getElementById('stitle').textContent = b.textContent.trim(); });
-// deep link: ?section=downloads|seeding|queue|network|peers|privacy
+// deep link: ?section=downloads|seeding|queue|network|peers|privacy|orphans
 { const q = new URLSearchParams(location.search).get('section'), b = q && document.querySelector(`#snav [data-s="${q}"]`); if (b) b.click(); }
 </script>

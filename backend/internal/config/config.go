@@ -54,6 +54,11 @@ type Config struct {
 	RPCUser     string
 	RPCPass     string
 
+	// DataRoots and DaemonConfig enable the orphan finder; both empty means it
+	// is off. See loadMounts.
+	DataRoots    []Mount
+	DaemonConfig Mount
+
 	// SecureCookies is false only when the public URL is loopback.
 	SecureCookies bool
 	// GeneratedSessionSecret records that no secret was configured, so the
@@ -140,6 +145,7 @@ func Load() (Config, error) {
 		cfg.SessionKey = []byte(secret)
 	}
 	cfg.RPCUser = r.Required("TRANSMISSION_USER")
+	loadMounts(r, &cfg)
 
 	if err := r.Err(); err != nil {
 		return Config{}, err

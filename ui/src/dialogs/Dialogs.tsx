@@ -5,6 +5,7 @@ import * as api from "../rpc/methods";
 import { bytes } from "../lib/format";
 import { labelCounts } from "../lib/model";
 import { Add } from "./Add";
+import { OrphanReview } from "./OrphanReview";
 import { Settings } from "./Settings";
 import { TextInput, useDismiss } from "../app/ui";
 import {
@@ -70,7 +71,21 @@ export function Dialogs() {
         />
       );
     case "settings":
-      return <Settings onClose={close} section={dialog.section} />;
+      return (
+        <Settings onClose={close} section={dialog.section} scan={dialog.scan} />
+      );
+    case "orphan-review": {
+      // Closing the review lands back on its Settings entry, which is where it came from.
+      const back = (scan?: boolean) =>
+        set({ dialog: { kind: "settings", section: "orphaned files", scan } });
+      return (
+        <OrphanReview
+          scan={dialog.scan}
+          onClose={() => back()}
+          onRescan={() => back(true)}
+        />
+      );
+    }
     case "confirm-remove":
       return <ConfirmRemove ids={dialog.ids} onClose={close} />;
     case "labels":

@@ -11,6 +11,8 @@
       <button class="side-item" data-s="network"><span class="lbl">Network</span></button>
       <button class="side-item" data-s="peers"><span class="lbl">Peers</span></button>
       <button class="side-item" data-s="privacy"><span class="lbl">Privacy</span></button>
+      <div class="side-h" style="margin-top:22px">Maintenance</div>
+      <button class="side-item" data-s="orphans"><span class="lbl">Orphaned files</span></button>
       <div class="side-h" style="margin-top:22px">Session</div>
       <div class="hint" style="padding:0 8px;line-height:1.6">transmission-daemon 4.1.3<br>rpc 6.0.1<br>Uptime 6d 14h<br><span class="num">↓ 218 GB · ↑ 391 GB</span><br>Ratio <span class="num">1.79</span></div>
     </nav>
@@ -101,6 +103,17 @@
           <div class="opt"><div class="txt"><div class="l">Notify when a torrent is added</div></div><div class="ctl"><span class="toggle"></span></div></div>
         </div>
 
+        <div data-s="orphans" hidden>
+          <div class="hint" style="margin-bottom:10px">Finds files and folders that no torrent in Transmission owns: data left behind by removed torrents, abandoned partial downloads, stray extras, and Transmission’s own leftover .torrent and .resume files. You decide on each one; nothing is deleted without that.</div>
+          <div class="sec">Scanned</div>
+          <div class="opt"><div class="txt"><div class="l mono">/data/torrents</div><div class="d">412 GB free</div></div></div>
+          <div class="opt"><div class="txt"><div class="l mono">/data/incomplete</div><div class="d">412 GB free</div></div></div>
+          <div class="opt"><div class="txt"><div class="l mono">/config</div><div class="d">Transmission state: torrents/, resume/</div></div></div>
+          <div class="sec">Remembered</div>
+          <div class="opt"><div class="txt"><div class="l">4 paths kept in earlier reviews</div><div class="d">Hidden from scans until they change</div></div><div class="ctl"><button class="btn sm ghost">Show</button><button class="btn sm ghost">Forget all</button></div></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><span class="hint">Last scan 3 weeks ago</span><div class="spacer"></div><a class="btn primary" href="orphans.html?state=review"><svg class="i"><use href="#i-search"/></svg>Scan</a></div>
+        </div>
+
       </div>
       <div class="modal-f"><span class="hint">Changes apply immediately to the running session</span><div class="spacer"></div><button class="btn primary">Done</button></div>
     </div>
@@ -112,6 +125,6 @@ document.getElementById('snav').addEventListener('click', e => { const b = e.tar
   document.querySelectorAll('#snav button').forEach(x=>x.classList.toggle('on', x===b));
   document.querySelectorAll('.modal-b [data-s]').forEach(x=>x.hidden = x.dataset.s !== b.dataset.s);
   document.getElementById('stitle').textContent = b.textContent.trim(); });
-// deep link: ?section=downloads|seeding|queue|network|peers|privacy
+// deep link: ?section=downloads|seeding|queue|network|peers|privacy|orphans
 { const q = new URLSearchParams(location.search).get('section'), b = q && document.querySelector(`#snav [data-s="${q}"]`); if (b) b.click(); }
 </script>

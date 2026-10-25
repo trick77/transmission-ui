@@ -11,13 +11,15 @@ import {
   type TorrentSummary,
 } from "../rpc/types";
 import type { Adv, SortKey } from "../lib/model";
+import type { OrphanScan } from "../api/orphans";
 import { readLocal, writeLocal } from "../lib/local";
 import { mountOf } from "../lib/paths";
 
 export type Dialog =
   | { kind: "none" }
   | { kind: "add"; magnet?: string; files?: File[] }
-  | { kind: "settings"; section?: string }
+  | { kind: "settings"; section?: string; scan?: boolean }
+  | { kind: "orphan-review"; scan: OrphanScan }
   | { kind: "confirm-remove"; ids: number[] }
   | { kind: "labels"; ids: number[] }
   | { kind: "location"; ids: number[] }

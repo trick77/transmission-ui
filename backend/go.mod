@@ -5,6 +5,7 @@ go 1.27.2
 require (
 	github.com/trick77/ship/kit v0.17.4
 	github.com/trick77/ship/kit/auth v0.3.1
+	golang.org/x/text v0.43.0
 )
 
 require (
