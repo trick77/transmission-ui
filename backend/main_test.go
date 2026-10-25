@@ -16,16 +16,19 @@ import (
 // listener at all is unhealthy too.
 func TestHealthcheck(t *testing.T) {
 	cases := []struct {
-		name      string
-		publicURL string
-		path      string
-		status    int
-		want      int
+		name     string
+		basePath string
+		path     string
+		status   int
+		want     int
 	}{
 		{"ok", "", "/healthz", http.StatusOK, 0},
 		{"redirect is misrouted", "", "/healthz", http.StatusFound, 1},
 		{"not mounted here", "", "/healthz", http.StatusNotFound, 1},
-		{"under a base path", "https://seedbox.example.com/transmission", "/transmission/healthz", http.StatusOK, 0},
+		{"under a base path", "/transmission", "/transmission/healthz", http.StatusOK, 0},
+		// The app refuses to start on a malformed base path; the probe
+		// falls back to the root rather than building a junk URL.
+		{"malformed base path", "transmission/", "/healthz", http.StatusOK, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,7 +45,7 @@ func TestHealthcheck(t *testing.T) {
 			// ":port", as BACKEND_ADDR is usually written: probed on loopback.
 			_, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
 			t.Setenv("BACKEND_ADDR", ":"+port)
-			t.Setenv("BACKEND_PUBLIC_URL", tc.publicURL)
+			t.Setenv("BACKEND_BASE_PATH", tc.basePath)
 
 			if got := healthcheck(); got != tc.want {
 				t.Fatalf("healthcheck() = %d, want %d", got, tc.want)
@@ -58,7 +61,7 @@ func TestHealthcheck(t *testing.T) {
 // a parallel test.
 func TestHealthcheckNoListener(t *testing.T) {
 	t.Setenv("BACKEND_ADDR", ":0")
-	t.Setenv("BACKEND_PUBLIC_URL", "")
+	t.Setenv("BACKEND_BASE_PATH", "")
 
 	if got := healthcheck(); got != 1 {
 		t.Fatalf("healthcheck() = %d, want 1", got)
@@ -76,18 +79,18 @@ func TestRunRejectsUnknownLogLevel(t *testing.T) {
 // A bad LOG_LEVEL does not hide the config faults: one start lists them all.
 func TestRunJoinsLogLevelAndConfigFaults(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "verbose")
-	t.Setenv("BACKEND_PUBLIC_URL", "")
+	t.Setenv("PUBLIC_FQDN", "")
 	t.Setenv("BACKEND_AUTH_MODE", "form")
 	err := run(t.Context())
-	if err == nil || !strings.Contains(err.Error(), "verbose") || !strings.Contains(err.Error(), "BACKEND_PUBLIC_URL") {
-		t.Fatalf("want the LOG_LEVEL and BACKEND_PUBLIC_URL faults together, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "verbose") || !strings.Contains(err.Error(), "PUBLIC_FQDN") {
+		t.Fatalf("want the LOG_LEVEL and PUBLIC_FQDN faults together, got %v", err)
 	}
 }
 
 // Config faults surface from run, all at once.
 func TestRunRejectsBadConfig(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "error")
-	t.Setenv("BACKEND_PUBLIC_URL", "")
+	t.Setenv("PUBLIC_FQDN", "")
 	t.Setenv("BACKEND_AUTH_MODE", "form")
 	if err := run(t.Context()); err == nil {
 		t.Fatal("want a config error")
@@ -107,7 +110,7 @@ func TestRunStopsDuringDiscovery(t *testing.T) {
 	}))
 	defer idp.Close()
 	t.Setenv("LOG_LEVEL", "error")
-	t.Setenv("BACKEND_PUBLIC_URL", "http://127.0.0.1:8080")
+	t.Setenv("PUBLIC_FQDN", "127.0.0.1:8080")
 	t.Setenv("BACKEND_AUTH_MODE", "oidc")
 	t.Setenv("BACKEND_SESSION_SECRET", strings.Repeat("s", 32))
 	t.Setenv("BACKEND_OIDC_ISSUER", idp.URL)
@@ -142,7 +145,7 @@ func TestRunStopsCleanly(t *testing.T) {
 	}
 	t.Setenv("LOG_LEVEL", "error")
 	t.Setenv("BACKEND_ADDR", "127.0.0.1:0")
-	t.Setenv("BACKEND_PUBLIC_URL", "http://127.0.0.1:8080")
+	t.Setenv("PUBLIC_FQDN", "127.0.0.1:8080")
 	t.Setenv("BACKEND_AUTH_MODE", "form")
 	t.Setenv("TRANSMISSION_USER", "user")
 	t.Setenv("TRANSMISSION_PASSWORD", "pass")

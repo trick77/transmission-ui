@@ -26,11 +26,12 @@ fi
 
 go build -C "$ROOT/backend" -o "$ROOT/scripts/transmission-ui" .
 
-# BACKEND_PUBLIC_URL is loopback, so the session cookie is not marked Secure:
+# PUBLIC_FQDN is loopback, so the app serves plain http and the session cookie
+# is not marked Secure:
 # Safari drops a Secure cookie on plain http and the sign-in would loop.
 BACKEND_ADDR="127.0.0.1:$PORT" \
 BACKEND_AUTH_MODE=form \
-BACKEND_PUBLIC_URL="http://127.0.0.1:$PORT" \
+PUBLIC_FQDN="127.0.0.1:$PORT" \
 BACKEND_SESSION_SECRET=e2e-only-not-a-real-secret-32-bytes-or-more \
 TRANSMISSION_RPC_UPSTREAM="${TRANSMISSION_RPC_UPSTREAM:-http://127.0.0.1:9091}" \
 TRANSMISSION_USER="${TRANSMISSION_USER:-dev}" \

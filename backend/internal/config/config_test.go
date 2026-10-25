@@ -17,7 +17,8 @@ func oidcEnv(extra map[string]string) map[string]string {
 	e := map[string]string{
 		"BACKEND_AUTH_MODE":          "oidc",
 		"BACKEND_SESSION_SECRET":     "0123456789abcdef0123456789abcdef",
-		"BACKEND_PUBLIC_URL":         "https://host.example/transmission",
+		"PUBLIC_FQDN":                "host.example",
+		"BACKEND_BASE_PATH":          "/transmission",
 		"BACKEND_OIDC_ISSUER":        "https://idp.example",
 		"BACKEND_OIDC_CLIENT_ID":     "id",
 		"BACKEND_OIDC_CLIENT_SECRET": "secret",
@@ -52,26 +53,33 @@ func TestRedirectURLUnderPrefixIsAccepted(t *testing.T) {
 	if cfg.BasePath != "/transmission" {
 		t.Fatalf("base path: got %q", cfg.BasePath)
 	}
+	if cfg.PublicURL != "https://host.example/transmission" {
+		t.Fatalf("public url: got %q", cfg.PublicURL)
+	}
 	if !cfg.SecureCookies {
 		t.Fatal("https public url should get secure cookies")
 	}
 }
 
-func TestLoopbackPublicURLDropsSecureCookies(t *testing.T) {
-	for _, u := range []string{"http://127.0.0.1:8127", "http://localhost:8127"} {
+// Local runs are plain http on loopback, where a Secure cookie breaks sign-in.
+func TestLoopbackPublicFQDNDropsSecureCookies(t *testing.T) {
+	for _, h := range []string{"127.0.0.1:8127", "localhost:8127", "localhost", "[::1]:8127"} {
 		os.Clearenv()
 		withEnv(t, map[string]string{
 			"BACKEND_AUTH_MODE":     "form",
-			"BACKEND_PUBLIC_URL":    u,
+			"PUBLIC_FQDN":           h,
 			"TRANSMISSION_USER":     "u",
 			"TRANSMISSION_PASSWORD": "p",
 		})
 		cfg, err := Load()
 		if err != nil {
-			t.Fatalf("%s: load: %v", u, err)
+			t.Fatalf("%s: load: %v", h, err)
 		}
 		if cfg.SecureCookies {
-			t.Fatalf("%s: want insecure cookies on loopback", u)
+			t.Fatalf("%s: want insecure cookies on loopback", h)
+		}
+		if cfg.PublicURL != "http://"+h {
+			t.Fatalf("%s: public url %q, want plain http on loopback", h, cfg.PublicURL)
 		}
 	}
 }
@@ -81,7 +89,7 @@ func TestFormModeGeneratesSessionSecret(t *testing.T) {
 	os.Clearenv()
 	withEnv(t, map[string]string{
 		"BACKEND_AUTH_MODE":     "form",
-		"BACKEND_PUBLIC_URL":    "https://host.example",
+		"PUBLIC_FQDN":           "host.example",
 		"TRANSMISSION_USER":     "u",
 		"TRANSMISSION_PASSWORD": "p",
 	})
@@ -122,7 +130,7 @@ func TestFormModeIgnoresAllowedGroup(t *testing.T) {
 	os.Clearenv()
 	withEnv(t, map[string]string{
 		"BACKEND_AUTH_MODE":          "form",
-		"BACKEND_PUBLIC_URL":         "https://host.example",
+		"PUBLIC_FQDN":                "host.example",
 		"BACKEND_OIDC_ALLOWED_GROUP": "media",
 		"TRANSMISSION_USER":          "u",
 		"TRANSMISSION_PASSWORD":      "p",
@@ -150,30 +158,34 @@ func TestMissingOIDCSettingsAreListedInOrder(t *testing.T) {
 	}
 }
 
-// The app is built to sit behind a TLS-terminating reverse proxy. Over plain
-// http the browser drops the Secure session cookie and sign-in loops, so a
-// deployment without one is refused at startup instead, in either auth mode.
-func TestPublicURLMustBeHTTPS(t *testing.T) {
+// The app sits behind a TLS-terminating reverse proxy that routes on the raw
+// PUBLIC_FQDN, so anything but a bare hostname (or loopback host:port for local
+// runs) is refused at startup, naming the variable, in either auth mode.
+func TestPublicFQDNMustBeABareHostname(t *testing.T) {
 	for _, tc := range []struct {
-		name, url string
-		ok        bool
+		name, fqdn string
+		ok         bool
 	}{
-		{"https", "https://host.example", true},
-		{"https with a prefix", "https://host.example/transmission", true},
-		{"https in capitals", "HTTPS://host.example", true},
-		{"https without a host", "https://", false},
-		{"loopback http, for local runs", "http://127.0.0.1:8127", true},
-		{"localhost http", "http://localhost:8127", true},
+		{"hostname", "host.example", true},
+		{"LAN address without a port", "192.168.1.20", true},
+		{"loopback with a port, for local runs", "127.0.0.1:8127", true},
+		{"localhost with a port", "localhost:8127", true},
 		{"unset", "", false},
-		{"plain http on a LAN address", "http://192.168.1.20:8080", false},
-		{"plain http on a hostname", "http://seedbox.lan", false},
-		{"no scheme", "host.example", false},
+		{"with a scheme", "https://host.example", false},
+		{"plain http scheme", "http://host.example", false},
+		{"port on a hostname", "host.example:8443", false},
+		{"port on a LAN address", "192.168.1.20:8080", false},
+		{"userinfo", "user@host.example", false},
+		{"query", "host.example?x", false},
+		{"path", "host.example/transmission", false},
+		{"trailing space", "host.example ", false},
+		{"leading space", " host.example", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			os.Clearenv()
 			withEnv(t, map[string]string{
 				"BACKEND_AUTH_MODE":     "form",
-				"BACKEND_PUBLIC_URL":    tc.url,
+				"PUBLIC_FQDN":           tc.fqdn,
 				"TRANSMISSION_USER":     "u",
 				"TRANSMISSION_PASSWORD": "p",
 			})
@@ -181,21 +193,76 @@ func TestPublicURLMustBeHTTPS(t *testing.T) {
 			if tc.ok && err != nil {
 				t.Fatalf("want it to start, got %v", err)
 			}
-			if !tc.ok && (err == nil || !strings.Contains(err.Error(), "BACKEND_PUBLIC_URL")) {
-				t.Fatalf("want a BACKEND_PUBLIC_URL complaint, got %v", err)
+			if !tc.ok && (err == nil || !strings.Contains(err.Error(), "PUBLIC_FQDN")) {
+				t.Fatalf("want a PUBLIC_FQDN complaint, got %v", err)
 			}
 		})
 	}
 }
 
-func TestPublicURLMustBeHTTPSInOIDCModeToo(t *testing.T) {
+// The base path is the prefix the proxy forwards unstripped; every route and
+// redirect keeps it, so a malformed one is refused rather than half-applied.
+func TestBasePathMustBeAPathPrefix(t *testing.T) {
+	for _, tc := range []struct {
+		name, path string
+		ok         bool
+	}{
+		{"unset", "", true},
+		{"one segment", "/transmission", true},
+		{"two segments", "/apps/transmission", true},
+		{"no leading slash", "transmission", false},
+		{"trailing slash", "/transmission/", false},
+		{"root alone", "/", false},
+		{"empty segment", "//transmission", false},
+		{"query", "/transmission?x", false},
+		{"fragment", "/transmission#x", false},
+		{"space", "/trans mission", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Clearenv()
+			withEnv(t, formEnv(map[string]string{"BACKEND_BASE_PATH": tc.path}))
+			cfg, err := Load()
+			if tc.ok {
+				if err != nil {
+					t.Fatalf("want it to start, got %v", err)
+				}
+				if cfg.BasePath != tc.path || cfg.PublicURL != "https://host.example"+tc.path {
+					t.Fatalf("base %q, public url %q", cfg.BasePath, cfg.PublicURL)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "BACKEND_BASE_PATH") {
+				t.Fatalf("want a BACKEND_BASE_PATH complaint, got %v", err)
+			}
+		})
+	}
+}
+
+// The derived public URL is https: a redirect URL on plain http sits outside it.
+func TestRedirectURLMustUseTheDerivedScheme(t *testing.T) {
 	os.Clearenv()
 	withEnv(t, oidcEnv(map[string]string{
-		"BACKEND_PUBLIC_URL":        "http://host.example/transmission",
 		"BACKEND_OIDC_REDIRECT_URL": "http://host.example/transmission/api/auth/callback",
 	}))
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "must be https") {
-		t.Fatalf("want an https complaint, got %v", err)
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "must sit under") {
+		t.Fatalf("want a redirect-url complaint, got %v", err)
+	}
+}
+
+// BACKEND_PUBLIC_URL is no longer read; a deployment that still sets it is
+// flagged so main can warn instead of silently ignoring it.
+func TestLeftoverPublicURLIsFlagged(t *testing.T) {
+	withEnv(t, oidcEnv(map[string]string{"BACKEND_PUBLIC_URL": "https://host.example/transmission"}))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !cfg.LeftoverPublicURL {
+		t.Fatal("leftover BACKEND_PUBLIC_URL not flagged")
+	}
+	withEnv(t, map[string]string{"BACKEND_PUBLIC_URL": ""})
+	if cfg, _ := Load(); cfg.LeftoverPublicURL {
+		t.Fatal("flagged without BACKEND_PUBLIC_URL")
 	}
 }
 

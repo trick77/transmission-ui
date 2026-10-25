@@ -33,12 +33,13 @@ const minSessionSecret = 32
 // Config is the process configuration, read from the environment at startup.
 type Config struct {
 	Addr string
-	// PublicURL is where the app is reached from outside. When it carries a
-	// path, that path is the prefix the reverse proxy forwards (it is not
-	// stripped), and every route is mounted under it.
+	// PublicURL is where the app is reached from outside:
+	// https://<PUBLIC_FQDN><BACKEND_BASE_PATH>, plain http for a loopback host.
 	PublicURL string
-	BasePath  string
-	AuthMode  AuthMode
+	// BasePath is the prefix the reverse proxy forwards (it is not stripped);
+	// every route is mounted under it.
+	BasePath string
+	AuthMode AuthMode
 
 	SessionKey []byte
 	SessionTTL time.Duration
@@ -61,6 +62,9 @@ type Config struct {
 
 	// SecureCookies is false only when the public URL is loopback.
 	SecureCookies bool
+	// LeftoverPublicURL records that BACKEND_PUBLIC_URL is still set, so the
+	// caller can warn: it is no longer read.
+	LeftoverPublicURL bool
 	// GeneratedSessionSecret records that no secret was configured, so the
 	// caller can warn: every restart invalidates the outstanding sessions.
 	GeneratedSessionSecret bool
@@ -72,8 +76,7 @@ type Config struct {
 func Load() (Config, error) {
 	r := env.New(os.Getenv)
 	cfg := Config{
-		Addr:      r.String("BACKEND_ADDR", ":8080"),
-		PublicURL: r.String("BACKEND_PUBLIC_URL", ""),
+		Addr: r.String("BACKEND_ADDR", ":8080"),
 		AuthMode: AuthMode(r.Enum("BACKEND_AUTH_MODE", string(AuthModeOIDC),
 			string(AuthModeOIDC), string(AuthModeForm))),
 		SessionTTL:                24 * time.Hour,
@@ -82,25 +85,8 @@ func Load() (Config, error) {
 		RPCUpstream:               r.String("TRANSMISSION_RPC_UPSTREAM", "http://transmission:9091"),
 	}
 	secret := r.String("BACKEND_SESSION_SECRET", "")
-	// Deployments sit behind a TLS-terminating proxy (see compose.yaml), but
-	// local runs are plain http on loopback, where a Secure cookie is dropped
-	// by some browsers and the sign-in silently loops. Derive it from the
-	// public URL rather than the mode, and default to secure.
-	cfg.SecureCookies = !isLoopbackURL(cfg.PublicURL)
-	cfg.BasePath = BasePathOf(cfg.PublicURL)
-
-	// The app is meant to sit behind a reverse proxy that terminates TLS: a
-	// form password and the session cookie both cross the wire. Plain http to
-	// anything but this machine cannot even work, because the browser drops
-	// the Secure session cookie and sign-in loops with nothing to explain it.
-	// So refuse to start, and say why.
-	switch {
-	case cfg.PublicURL == "":
-		r.Fail("BACKEND_PUBLIC_URL is required: the https URL your reverse proxy serves this app at")
-	case !isHTTPSURL(cfg.PublicURL) && !isLoopbackURL(cfg.PublicURL):
-		r.Fail("BACKEND_PUBLIC_URL (%s) must be https: run this app behind a reverse proxy that terminates TLS "+
-			"(plain http is accepted for a loopback address only, for local runs)", cfg.PublicURL)
-	}
+	cfg.LeftoverPublicURL = os.Getenv("BACKEND_PUBLIC_URL") != ""
+	loadPublicURL(r, &cfg)
 	switch cfg.AuthMode {
 	case AuthModeOIDC:
 		if secret == "" {
@@ -115,7 +101,7 @@ func Load() (Config, error) {
 		// failure that only shows up once a real login is attempted.
 		if cfg.PublicURL != "" && cfg.OIDCRedirectURL != "" &&
 			!strings.HasPrefix(cfg.OIDCRedirectURL, strings.TrimRight(cfg.PublicURL, "/")+"/") {
-			r.Fail("BACKEND_OIDC_REDIRECT_URL (%s) must sit under BACKEND_PUBLIC_URL (%s)",
+			r.Fail("BACKEND_OIDC_REDIRECT_URL (%s) must sit under https://<PUBLIC_FQDN><BACKEND_BASE_PATH> (%s)",
 				cfg.OIDCRedirectURL, cfg.PublicURL)
 		}
 		cfg.RPCPass = r.String("TRANSMISSION_PASSWORD", "")
@@ -153,38 +139,63 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// BasePathOf extracts the path prefix from the public URL, normalised to
-// either "" or "/prefix" with no trailing slash.
-func BasePathOf(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
+// loadPublicURL derives the public URL from the hostname the proxy routes on
+// and the prefix it forwards; neither is ever configured as a URL a second
+// time. Both are read raw: kit's reader trims, but the proxy matches the raw
+// value, so a stray space must fail here rather than disagree with it.
+func loadPublicURL(r *env.Reader, cfg *Config) {
+	fqdn := os.Getenv("PUBLIC_FQDN")
+	base := os.Getenv("BACKEND_BASE_PATH")
+	// Deployments sit behind a TLS-terminating proxy (see compose.yaml): a
+	// form password and the session cookie both cross the wire, and over plain
+	// http the browser drops the Secure cookie and sign-in loops with nothing
+	// to explain it. Local runs are the one exception, plain http on loopback
+	// with an insecure cookie. Default to secure.
+	cfg.SecureCookies = true
+	scheme := "https"
+	switch {
+	case fqdn == "":
+		r.Fail("PUBLIC_FQDN is required: the hostname your reverse proxy serves this app on")
+		return
+	case isLoopbackHost(fqdn):
+		scheme = "http"
+		cfg.SecureCookies = false
+	case !isBareHost(fqdn):
+		r.Fail("PUBLIC_FQDN (%q) must be a bare hostname such as transmission.example.com: no scheme, port, "+
+			"path or spaces (host:port over plain http is accepted for a loopback address only, for local runs)", fqdn)
+		return
 	}
-	p := strings.TrimRight(u.Path, "/")
-	if p == "/" {
-		return ""
+	if !ValidBasePath(base) {
+		r.Fail("BACKEND_BASE_PATH (%q) must be empty or a path prefix like /transmission: "+
+			"leading slash, no trailing slash, no query, fragment or spaces", base)
+		return
 	}
-	return p
+	cfg.BasePath = base
+	cfg.PublicURL = scheme + "://" + fqdn + base
 }
 
-// isHTTPSURL reports whether the public URL is an https URL with a host. The
-// scheme is compared as parsed, so HTTPS:// counts.
-func isHTTPSURL(raw string) bool {
-	u, err := url.Parse(raw)
-	return err == nil && u.Scheme == "https" && u.Host != ""
+// ValidBasePath reports whether p is "" or a path prefix such as
+// /transmission: what the proxy forwards and every route is mounted under.
+func ValidBasePath(p string) bool {
+	if p == "" {
+		return true
+	}
+	return strings.HasPrefix(p, "/") && !strings.HasSuffix(p, "/") &&
+		!strings.Contains(p, "//") && !strings.ContainsAny(p, "?# \t\r\n")
 }
 
-// isLoopbackURL reports whether the public URL points at this machine, which
-// is the one case where a Secure cookie would break sign-in.
-func isLoopbackURL(raw string) bool {
-	if raw == "" {
-		return false
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return false
-	}
-	if u.Scheme == "https" {
+// isBareHost reports whether v is a hostname and nothing else: no scheme,
+// port, userinfo, path, query or surrounding space.
+func isBareHost(v string) bool {
+	u, err := url.Parse("https://" + v)
+	return err == nil && u.Host == v && u.Hostname() == v
+}
+
+// isLoopbackHost reports whether v is this machine as host[:port], the one
+// case where plain http and an insecure cookie are right.
+func isLoopbackHost(v string) bool {
+	u, err := url.Parse("http://" + v)
+	if err != nil || u.Host != v {
 		return false
 	}
 	host := u.Hostname()
