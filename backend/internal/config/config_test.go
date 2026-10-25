@@ -63,7 +63,7 @@ func TestRedirectURLUnderPrefixIsAccepted(t *testing.T) {
 
 // Local runs are plain http on loopback, where a Secure cookie breaks sign-in.
 func TestLoopbackPublicFQDNDropsSecureCookies(t *testing.T) {
-	for _, h := range []string{"127.0.0.1:8127", "localhost:8127", "localhost", "[::1]:8127"} {
+	for _, h := range []string{"127.0.0.1:8127", "localhost:8127", "localhost", "LOCALHOST:8127", "[::1]:8127"} {
 		os.Clearenv()
 		withEnv(t, map[string]string{
 			"BACKEND_AUTH_MODE":     "form",
@@ -168,6 +168,7 @@ func TestPublicFQDNMustBeABareHostname(t *testing.T) {
 	}{
 		{"hostname", "host.example", true},
 		{"LAN address without a port", "192.168.1.20", true},
+		{"bracketed IPv6 without a port", "[2001:db8::1]", true},
 		{"loopback with a port, for local runs", "127.0.0.1:8127", true},
 		{"localhost with a port", "localhost:8127", true},
 		{"unset", "", false},
@@ -175,6 +176,8 @@ func TestPublicFQDNMustBeABareHostname(t *testing.T) {
 		{"plain http scheme", "http://host.example", false},
 		{"port on a hostname", "host.example:8443", false},
 		{"port on a LAN address", "192.168.1.20:8080", false},
+		{"port on bracketed IPv6", "[2001:db8::1]:8443", false},
+		{"empty port", "host.example:", false},
 		{"userinfo", "user@host.example", false},
 		{"query", "host.example?x", false},
 		{"path", "host.example/transmission", false},
@@ -217,6 +220,8 @@ func TestBasePathMustBeAPathPrefix(t *testing.T) {
 		{"query", "/transmission?x", false},
 		{"fragment", "/transmission#x", false},
 		{"space", "/trans mission", false},
+		{"ServeMux wildcard", "/{name}", false},
+		{"dot segment", "/apps/..", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			os.Clearenv()
@@ -252,6 +257,7 @@ func TestRedirectURLMustUseTheDerivedScheme(t *testing.T) {
 // BACKEND_PUBLIC_URL is no longer read; a deployment that still sets it is
 // flagged so main can warn instead of silently ignoring it.
 func TestLeftoverPublicURLIsFlagged(t *testing.T) {
+	os.Clearenv()
 	withEnv(t, oidcEnv(map[string]string{"BACKEND_PUBLIC_URL": "https://host.example/transmission"}))
 	cfg, err := Load()
 	if err != nil {
@@ -260,9 +266,61 @@ func TestLeftoverPublicURLIsFlagged(t *testing.T) {
 	if !cfg.LeftoverPublicURL {
 		t.Fatal("leftover BACKEND_PUBLIC_URL not flagged")
 	}
-	withEnv(t, map[string]string{"BACKEND_PUBLIC_URL": ""})
-	if cfg, _ := Load(); cfg.LeftoverPublicURL {
+	os.Clearenv()
+	withEnv(t, oidcEnv(nil))
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.LeftoverPublicURL {
 		t.Fatal("flagged without BACKEND_PUBLIC_URL")
+	}
+}
+
+// An unmigrated deployment fails on the missing PUBLIC_FQDN; the error itself
+// says what replaces the old variable, since the start never reaches the warning.
+func TestMissingPublicFQDNNamesTheReplacement(t *testing.T) {
+	os.Clearenv()
+	withEnv(t, map[string]string{
+		"BACKEND_AUTH_MODE":     "form",
+		"BACKEND_PUBLIC_URL":    "https://host.example/transmission",
+		"TRANSMISSION_USER":     "u",
+		"TRANSMISSION_PASSWORD": "p",
+	})
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "PUBLIC_FQDN is required") ||
+		!strings.Contains(err.Error(), "BACKEND_PUBLIC_URL") || !strings.Contains(err.Error(), "BACKEND_BASE_PATH") {
+		t.Fatalf("want the required error to carry the migration hint, got %v", err)
+	}
+}
+
+// A half migration that drops the prefix would mount the app at the root while
+// the proxy forwards /transmission: every page 404s and the healthcheck, which
+// probes the root too, stays green. Refuse it; a matching path only warns.
+func TestLeftoverPublicURLPathMustMatchBasePath(t *testing.T) {
+	for _, tc := range []struct {
+		name, old, base string
+		ok              bool
+	}{
+		{"prefix dropped", "https://host.example/transmission", "", false},
+		{"prefix differs", "https://host.example/transmission", "/torrents", false},
+		{"prefix kept", "https://host.example/transmission/", "/transmission", true},
+		{"no prefix either side", "https://host.example/", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Clearenv()
+			withEnv(t, formEnv(map[string]string{"BACKEND_PUBLIC_URL": tc.old, "BACKEND_BASE_PATH": tc.base}))
+			cfg, err := Load()
+			if tc.ok {
+				if err != nil || !cfg.LeftoverPublicURL {
+					t.Fatalf("want a start with the leftover flagged, got %v (flagged %v)", err, cfg.LeftoverPublicURL)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "BACKEND_PUBLIC_URL") || !strings.Contains(err.Error(), "BACKEND_BASE_PATH") {
+				t.Fatalf("want a refusal naming both, got %v", err)
+			}
+		})
 	}
 }
 

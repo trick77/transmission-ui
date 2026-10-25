@@ -99,7 +99,7 @@ func Load() (Config, error) {
 		// The callback is only mounted under the public URL's path, so a
 		// redirect URL outside it 404s after the round-trip to the IdP -- a
 		// failure that only shows up once a real login is attempted.
-		if cfg.PublicURL != "" && cfg.OIDCRedirectURL != "" &&
+		if cfg.OIDCRedirectURL != "" &&
 			!strings.HasPrefix(cfg.OIDCRedirectURL, strings.TrimRight(cfg.PublicURL, "/")+"/") {
 			r.Fail("BACKEND_OIDC_REDIRECT_URL (%s) must sit under https://<PUBLIC_FQDN><BACKEND_BASE_PATH> (%s)",
 				cfg.OIDCRedirectURL, cfg.PublicURL)
@@ -146,6 +146,7 @@ func Load() (Config, error) {
 func loadPublicURL(r *env.Reader, cfg *Config) {
 	fqdn := os.Getenv("PUBLIC_FQDN")
 	base := os.Getenv("BACKEND_BASE_PATH")
+	leftover := os.Getenv("BACKEND_PUBLIC_URL")
 	// Deployments sit behind a TLS-terminating proxy (see compose.yaml): a
 	// form password and the session cookie both cross the wire, and over plain
 	// http the browser drops the Secure cookie and sign-in loops with nothing
@@ -154,6 +155,12 @@ func loadPublicURL(r *env.Reader, cfg *Config) {
 	cfg.SecureCookies = true
 	scheme := "https"
 	switch {
+	case fqdn == "" && leftover != "":
+		// An unmigrated deployment never reaches main's warning: say it here.
+		r.Fail("PUBLIC_FQDN is required: the hostname your reverse proxy serves this app on; "+
+			"BACKEND_PUBLIC_URL (%s) is no longer read: set PUBLIC_FQDN to its host and BACKEND_BASE_PATH to its path",
+			leftover)
+		return
 	case fqdn == "":
 		r.Fail("PUBLIC_FQDN is required: the hostname your reverse proxy serves this app on")
 		return
@@ -167,28 +174,70 @@ func loadPublicURL(r *env.Reader, cfg *Config) {
 	}
 	if !ValidBasePath(base) {
 		r.Fail("BACKEND_BASE_PATH (%q) must be empty or a path prefix like /transmission: "+
-			"leading slash, no trailing slash, no query, fragment or spaces", base)
+			"leading slash, no trailing slash, segments of letters, digits and ._~- only", base)
 		return
+	}
+	// A half migration that dropped the prefix mounts the app at the root
+	// while the proxy forwards it, and the healthcheck probes the root too, so
+	// it stays green through the outage. A matching path only warns (main).
+	if leftover != "" {
+		if old := leftoverPath(leftover); old != base {
+			r.Fail("BACKEND_PUBLIC_URL (%s) is no longer read, and its path %q differs from BACKEND_BASE_PATH (%q): "+
+				"set BACKEND_BASE_PATH to the prefix the proxy forwards and remove BACKEND_PUBLIC_URL", leftover, old, base)
+			return
+		}
 	}
 	cfg.BasePath = base
 	cfg.PublicURL = scheme + "://" + fqdn + base
 }
 
+// leftoverPath is the path of a leftover BACKEND_PUBLIC_URL, normalised like
+// BACKEND_BASE_PATH: "" or "/prefix" without a trailing slash.
+func leftoverPath(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(u.Path, "/")
+}
+
 // ValidBasePath reports whether p is "" or a path prefix such as
 // /transmission: what the proxy forwards and every route is mounted under.
+// Segments are plain unreserved characters: a brace is a ServeMux wildcard
+// (registering it panics), and dot segments or escapes never match a request.
 func ValidBasePath(p string) bool {
 	if p == "" {
 		return true
 	}
-	return strings.HasPrefix(p, "/") && !strings.HasSuffix(p, "/") &&
-		!strings.Contains(p, "//") && !strings.ContainsAny(p, "?# \t\r\n")
+	if !strings.HasPrefix(p, "/") {
+		return false
+	}
+	for _, seg := range strings.Split(p[1:], "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+		if strings.IndexFunc(seg, notUnreserved) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
-// isBareHost reports whether v is a hostname and nothing else: no scheme,
-// port, userinfo, path, query or surrounding space.
+// notUnreserved reports whether c falls outside RFC 3986's unreserved set.
+func notUnreserved(c rune) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return false
+	default:
+		return !strings.ContainsRune("._~-", c)
+	}
+}
+
+// isBareHost reports whether v is a hostname (or bracketed IPv6 literal) and
+// nothing else: no scheme, port, userinfo, path, query or surrounding space.
 func isBareHost(v string) bool {
 	u, err := url.Parse("https://" + v)
-	return err == nil && u.Host == v && u.Hostname() == v
+	return err == nil && u.Host == v && u.Port() == "" && !strings.HasSuffix(v, ":")
 }
 
 // isLoopbackHost reports whether v is this machine as host[:port], the one
@@ -199,5 +248,5 @@ func isLoopbackHost(v string) bool {
 		return false
 	}
 	host := u.Hostname()
-	return host == "localhost" || net.ParseIP(host).IsLoopback()
+	return strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback()
 }
