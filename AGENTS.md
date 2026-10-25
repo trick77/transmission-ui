@@ -5,7 +5,7 @@
 - `ui/sim/` fake daemon, Node type stripping: no enum, no parameter properties, `.ts` on relative imports, `import type` statement form only.
 - `backend/`: kit / kit/auth for shell, sessions, OIDC, env, logging, probes, errors; no own copies. Errors `httpx.WriteError` `{"error"}` (UI banner reads it). `<base>/healthz` 2xx only; `<base>/readyz` = daemon RPC answers. Probes answer loopback only, no forwarding header (else 404): `BACKEND_ADDR` wildcard or loopback, or `-healthcheck` fails. `BACKEND_SESSION_SECRET` ≥ 32 bytes. Empty env = unset.
 - Auth (`BACKEND_AUTH_MODE`): `oidc` | `form` (`TRANSMISSION_USER`/`TRANSMISSION_PASSWORD`); no auto-login. Gate = `kit/spa` `Gate` on every shell answer, NOT the `GET /` route (unknown paths get the shell: `/settings` would leak). Shell, login, RPC all judge by `Sessions.Authorize`. Signed out: **200 (oidc card) or 302 (form), never 4xx**. `/login`, `POST /login`, `/login-assets/` mount in every mode; POST 404s outside form. Upstream 401 → 502, never passthrough (`WWW-Authenticate` pops the browser dialog).
-- `BACKEND_PUBLIC_URL` path = prefix the proxy forwards, NOT stripped; every route and redirect keeps it. Must be https; loopback http only exception.
+- URL `https://<PUBLIC_FQDN><BACKEND_BASE_PATH>`; FQDN bare, read raw; loopback host:port → http. Base path forwarded unstripped; routes keep it.
 - `compose.yaml` proxy-agnostic: no published port, no proxy config; never add one. `compose.dev.yaml` = throwaway daemon.
 - Orphans (`internal/orphans`): browser sends scan + entry id, never a path; delete rechecks owner + fingerprint, unlinks in `os.Root`. Visible unlisted torrent dir → scan refuses. On demand only.
 

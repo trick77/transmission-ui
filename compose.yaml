@@ -3,8 +3,9 @@
 # NOT a complete deployment. It needs a reverse proxy that terminates TLS, and
 # that part is yours: no port is published here, so the container is reachable
 # only by a proxy attached to a network it shares. See "Reverse proxy" in
-# README.md for what the proxy must do. The app refuses to start unless
-# BACKEND_PUBLIC_URL is https.
+# README.md for what the proxy must do. The app is served at
+# https://<PUBLIC_FQDN><BACKEND_BASE_PATH> and refuses to start without
+# PUBLIC_FQDN.
 #
 # The image is the UI bundle plus a Go backend that
 #   - terminates OIDC against your identity provider and keeps the session in a
@@ -32,7 +33,10 @@ services:
 
     environment:
       BACKEND_ADDR: ":8080"
-      BACKEND_PUBLIC_URL: "${BACKEND_PUBLIC_URL}"
+      PUBLIC_FQDN: "${PUBLIC_FQDN:?set PUBLIC_FQDN in .env, the hostname your proxy serves this app on}"
+      # Path prefix the proxy forwards unstripped, e.g. /transmission; empty
+      # when the app owns the whole hostname.
+      BACKEND_BASE_PATH: "${BACKEND_BASE_PATH:-}"
       BACKEND_SESSION_SECRET: "${BACKEND_SESSION_SECRET:?generate one, e.g. openssl rand -base64 48}"
       # oidc (an identity provider) or form (a login page checked against
       # TRANSMISSION_USER/TRANSMISSION_PASSWORD, for setups with no IdP).
@@ -60,7 +64,7 @@ services:
     #   - /srv/transmission:/config      # the daemon's config folder
 
     healthcheck:
-      # Probes the liveness route <BACKEND_PUBLIC_URL's path>/healthz; only a
+      # Probes the liveness route <BACKEND_BASE_PATH>/healthz; only a
       # 2xx passes, so a 404 or a redirect means the app is not mounted where
       # it thinks it is. The daemon is not probed here (<path>/readyz does
       # that), so a daemon restart does not mark the UI unhealthy. The image

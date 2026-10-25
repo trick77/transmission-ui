@@ -38,16 +38,16 @@ reverse proxy in front is the part you do on your own setup.
 ### Reverse proxy (required, and yours to set up)
 
 The app must run behind a reverse proxy that terminates TLS. This repo does not ship one and does
-not configure yours: add it to your own stack. Without it the app does not start, because
-`BACKEND_PUBLIC_URL` has to be an `https://` URL (plain http is accepted for a loopback address
-only, which is what local development uses).
+not configure yours: add it to your own stack. The app is served at
+`https://<PUBLIC_FQDN><BACKEND_BASE_PATH>` and does not start without `PUBLIC_FQDN`, a bare
+hostname (a loopback `host:port` gets plain http, which is what local development uses).
 
 What you need to do on your side:
 
 1. **Connect the proxy to the container.** Attach the `transmission-ui` service to a Docker network
    your proxy is on and route to port `8080`. If the proxy runs on the host instead, add a `ports:`
    mapping bound to loopback, e.g. `127.0.0.1:8080:8080`.
-2. **Terminate TLS** at the proxy and set `BACKEND_PUBLIC_URL` to the resulting `https://` URL.
+2. **Terminate TLS** at the proxy and set `PUBLIC_FQDN` to the hostname it serves.
 3. **Pass the `Host` header through unchanged.** The app refuses cross-origin POSTs. Current
    browsers state the origin relation themselves (`Sec-Fetch-Site`); for the others the app
    compares `Origin` with `Host`, and a rewritten `Host` then fails sign-in and every RPC call
@@ -92,17 +92,18 @@ repo's `compose.yaml`: that file is a starting point and changes with releases.
 - **`form`** — a login page that accepts the daemon's own RPC credentials (`TRANSMISSION_USER` / `TRANSMISSION_PASSWORD`).
   Nothing extra to provision, and what local development uses.
 - **`oidc`** — an identity provider. Register a confidential client with redirect URI
-  `<BACKEND_PUBLIC_URL>/api/auth/callback`, request the `groups` scope, and optionally gate access
+  `https://<PUBLIC_FQDN><BACKEND_BASE_PATH>/api/auth/callback`, request the `groups` scope, and optionally gate access
   on `BACKEND_OIDC_ALLOWED_GROUP`.
 
 Logout clears the local session; it does not end the session at the identity provider.
 
 ### Behind a path prefix
 
-Set `BACKEND_PUBLIC_URL` to the full external URL, including any path:
+Set `BACKEND_BASE_PATH` to the prefix, next to the hostname:
 
 ```
-BACKEND_PUBLIC_URL=https://seedbox.example.com/transmission
+PUBLIC_FQDN=seedbox.example.com
+BACKEND_BASE_PATH=/transmission
 ```
 
 Every route then mounts under that prefix. The reverse proxy must forward it, not strip it.

@@ -84,6 +84,9 @@ func run(parent context.Context) error {
 			return err
 		}
 	}
+	if cfg.LeftoverPublicURL {
+		log.Warn("BACKEND_PUBLIC_URL is no longer read: set PUBLIC_FQDN (and BACKEND_BASE_PATH for a path prefix) and remove it")
+	}
 	if cfg.GeneratedSessionSecret {
 		log.Warn("BACKEND_SESSION_SECRET is unset: generated a per-process one, so every restart signs everyone out")
 	}
@@ -119,7 +122,11 @@ func healthcheck() int {
 		addr = ":8080"
 	}
 	// Under a base path the probe routes live under it too, so probing the
-	// root would report every prefixed deployment as unhealthy.
-	base := config.BasePathOf(os.Getenv("BACKEND_PUBLIC_URL"))
+	// root would report every prefixed deployment as unhealthy. A malformed
+	// one stops the app from starting at all; probe the root then.
+	base := os.Getenv("BACKEND_BASE_PATH")
+	if !config.ValidBasePath(base) {
+		base = ""
+	}
 	return httpx.Healthcheck(httpx.LocalURL(addr, base+"/healthz"))
 }

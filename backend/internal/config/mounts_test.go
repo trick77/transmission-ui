@@ -8,7 +8,7 @@ import (
 func formEnv(extra map[string]string) map[string]string {
 	e := map[string]string{
 		"BACKEND_AUTH_MODE":     "form",
-		"BACKEND_PUBLIC_URL":    "https://host.example",
+		"PUBLIC_FQDN":           "host.example",
 		"TRANSMISSION_USER":     "u",
 		"TRANSMISSION_PASSWORD": "p",
 	}
