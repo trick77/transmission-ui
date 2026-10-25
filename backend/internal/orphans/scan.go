@@ -18,7 +18,7 @@ type Entry struct {
 	ID    string `json:"id"`
 	Group string `json:"group"` // the root as the daemon names it, or StateGroup
 	Path  string `json:"path"`  // full path as the daemon names it
-	Kind  string `json:"kind"`  // file, dir, empty, symlink, state
+	Kind  string `json:"kind"`  // file, dir, symlink, state
 	Size  int64  `json:"size"`
 	Files int    `json:"files"`
 	MTime int64  `json:"mtime"` // newest change anywhere in it, unix seconds
@@ -116,6 +116,12 @@ func (w *walker) visit(rel string) error {
 			e, err := summarize(w.root, crel, w.seen)
 			if err != nil {
 				w.skip(crel, err)
+				continue
+			}
+			// A folder with no file anywhere in it is structure (a watch folder,
+			// an *arr category nobody has downloaded into yet), not anybody's
+			// leftover data, and deleting it frees nothing. Never offered.
+			if e.Kind == "empty" {
 				continue
 			}
 			w.add(e, key)

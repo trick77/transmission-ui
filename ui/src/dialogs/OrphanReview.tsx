@@ -29,7 +29,7 @@ export function label(o: Orphan): string {
   if (o.kind === "state")
     return o.name || `${o.hash?.slice(0, 6)}…${o.hash?.slice(-4)}`;
   const base = o.path.slice(o.path.lastIndexOf("/") + 1);
-  return o.kind === "dir" || o.kind === "empty" ? base + "/" : base;
+  return o.kind === "dir" ? base + "/" : base;
 }
 
 /** Where it sits below its scanned folder, "" at the top. */
@@ -40,7 +40,6 @@ export function parentRel(o: Orphan): string {
 
 /** "2 video · 1 subtitle", most first. */
 export function contents(o: Orphan): string {
-  if (o.kind === "empty") return "empty";
   if (o.kind === "symlink") return "a symbolic link";
   if (o.kind === "state")
     return `${o.files} Transmission ${o.files === 1 ? "file" : "files"}`;
@@ -93,13 +92,6 @@ export function why(o: Orphan): ReactNode[] {
         Sits in the folder of <b>{o.inside}</b>, which is still in Transmission,
         but is <b>not one of its files</b>. Usually something unpacked or copied
         in by hand. The torrent itself is not touched.{" "}
-      </span>,
-    );
-  } else if (o.kind === "empty") {
-    out.push(
-      <span key="e">
-        <b>An empty folder</b> no torrent uses, left behind after its contents
-        went.{" "}
       </span>,
     );
   } else if (has(o, "torrent")) {

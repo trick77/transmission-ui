@@ -13,7 +13,7 @@ describe('sim orphan routes', () => {
     expect(orphanRoute(s, 'GET', '', '', NOW).body).toMatchObject({ config: '/config', kept: [] })
     const scan = orphanRoute(s, 'POST', '/scan', '', NOW)
     const result = (scan.lines!.at(-1) as { result: { scan_id: string; entries: { id: string }[] } }).result
-    expect(result.entries).toHaveLength(10)
+    expect(result.entries).toHaveLength(9)
     const ref = (id: string) => JSON.stringify({ scan_id: result.scan_id, id })
 
     expect(orphanRoute(s, 'POST', '/keep', ref('e1'), NOW).status).toBe(200)
@@ -36,6 +36,6 @@ describe('sim orphan routes', () => {
     const again = orphanRoute(s, 'POST', '/scan', '', NOW)
     const r2 = (again.lines!.at(-1) as { result: { hidden_kept: number; entries: unknown[] } }).result
     expect(r2.hidden_kept).toBe(1)
-    expect(r2.entries).toHaveLength(8)
+    expect(r2.entries).toHaveLength(7)
   })
 })
