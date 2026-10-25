@@ -183,17 +183,18 @@ func find(r *Result, p string) *Entry {
 func TestScanOffersOnlyWhatNobodyOwns(t *testing.T) {
 	f := newFixture(t)
 	f.file(f.data, "Live/a.mkv", 10)
-	f.file(f.data, "Live/sample/extra.mkv", 5)   // stray inside a live torrent
-	f.file(f.data, "Gone (1957)/movie.mkv", 100) // a removed torrent's folder
-	f.file(f.data, "Gone (1957)/subs/en.srt", 1) //   ... collapsed into one entry
-	f.file(f.data, "single.iso", 7)              // owned single-file torrent
-	f.file(f.data, "stray.iso", 3)               // unowned file at the root
-	f.file(f.inc, "Half/b.mkv.part", 4)          // owned, mid-download in incomplete
-	f.file(f.inc, "abandoned.iso.part", 9)       // nobody's partial
-	f.file(f.data, "movies/Kept/k.mkv", 2)       // owned, under a category folder
-	f.file(f.data, "movies/loose.txt", 1)        // stray in a category folder: not "inside"
-	f.file(f.data, "lost+found/x", 1)            // housekeeping is never listed
-	must(t, os.MkdirAll(filepath.Join(f.data, "empty-dir"), 0o755))
+	f.file(f.data, "Live/sample/extra.mkv", 5)                            // stray inside a live torrent
+	f.file(f.data, "Gone (1957)/movie.mkv", 100)                          // a removed torrent's folder
+	f.file(f.data, "Gone (1957)/subs/en.srt", 1)                          //   ... collapsed into one entry
+	f.file(f.data, "single.iso", 7)                                       // owned single-file torrent
+	f.file(f.data, "stray.iso", 3)                                        // unowned file at the root
+	f.file(f.inc, "Half/b.mkv.part", 4)                                   // owned, mid-download in incomplete
+	f.file(f.inc, "abandoned.iso.part", 9)                                // nobody's partial
+	f.file(f.data, "movies/Kept/k.mkv", 2)                                // owned, under a category folder
+	f.file(f.data, "movies/loose.txt", 1)                                 // stray in a category folder: not "inside"
+	f.file(f.data, "lost+found/x", 1)                                     // housekeeping is never listed
+	must(t, os.MkdirAll(filepath.Join(f.data, "watch"), 0o755))           // empty folders are structure
+	must(t, os.MkdirAll(filepath.Join(f.data, "sonarr/season-1"), 0o755)) //   ... nested ones too
 	f.daemon.set(
 		tor("Live", f.data, "Live/a.mkv"),
 		tor("single.iso", f.data, "single.iso"),
@@ -206,7 +207,6 @@ func TestScanOffersOnlyWhatNobodyOwns(t *testing.T) {
 		filepath.Join(f.data, "Live/sample"),
 		filepath.Join(f.data, "stray.iso"),
 		filepath.Join(f.data, "movies/loose.txt"),
-		filepath.Join(f.data, "empty-dir"),
 		filepath.Join(f.inc, "abandoned.iso.part"),
 	}
 	got := paths(r)
@@ -227,9 +227,6 @@ func TestScanOffersOnlyWhatNobodyOwns(t *testing.T) {
 	}
 	if e := find(r, filepath.Join(f.data, "movies/loose.txt")); e.Inside != "" {
 		t.Fatalf("a category folder is nobody's: %+v", e)
-	}
-	if e := find(r, filepath.Join(f.data, "empty-dir")); e.Kind != "empty" {
-		t.Fatalf("empty folder: %+v", e)
 	}
 	if e := find(r, filepath.Join(f.inc, "abandoned.iso.part")); !slices.Contains(e.Flags, "partial") {
 		t.Fatalf("partial: %+v", e)

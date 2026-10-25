@@ -78,8 +78,6 @@ const ORPH = [
     types:'1 video · 1 subtitle · 1 image · 1 text', kids:[['file','Plan 9 from Outer Space (1957).mkv','6.0 GB'],['file','Plan 9 from Outer Space (1957).en.srt','88 kB'],['file','poster.jpg','412 kB'],['file','README.txt','2 kB']] },
   { g:'/data/torrents', dir:'', name:'ubuntu-22.04.4-desktop-amd64.iso', kind:'file', size:4.7, age:'7 months ago',
     why:'<b>No torrent owns this file.</b> Most likely a torrent that was removed from the list without its data.', types:'1 disk image' },
-  { g:'/data/torrents', dir:'sonarr/', name:'docs-old', kind:'empty', size:0, age:'2 months ago', flags:['Empty'],
-    why:'<b>An empty folder</b> that no torrent uses. Left behind after its contents were moved or deleted.', types:'empty' },
   { g:'/data/torrents', dir:'watch/', name:'archlinux-2025.11.01-x86_64.iso.torrent', kind:'file', size:0.0001, age:'1 year ago', flags:['.torrent'],
     why:'<b>A .torrent file that is not loaded.</b> Probably left in a watch folder or by a download script. Reading it: <span class="hl">archlinux-2025.11.01-x86_64.iso</span>, 1.2 GB, not in Transmission.', types:'1 torrent file' },
   { g:'/data/incomplete', dir:'', name:'debian-12.5.0-amd64-DVD-1.iso.part', kind:'file', size:2.3, age:'4 months ago', flags:['Partial'],
@@ -94,7 +92,7 @@ const ORPH = [
     osub:'resume data only, no .torrent',
     why:'<b>Resume data for a torrent Transmission no longer has</b>, without the .torrent next to it, so the name is unknown. Safe to delete.', types:'.resume 3 kB' },
 ];
-let dec = {0:'del', 3:'del', 4:'del', 8:'keep'};
+let dec = {0:'del', 3:'del', 4:'del', 7:'keep'};
 let ocur = 1;
 let tab = 'all';
 let mode = 'review';
@@ -102,7 +100,7 @@ const ogb = v => v >= 1 ? v.toFixed(1)+' GB' : v === 0 ? '0 B' : v >= 0.001 ? Ma
 const icoOf = k => k === 'file' ? 'file' : k === 'state' ? 'gear' : 'folder';
 const marked = d => Object.keys(dec).filter(i=>dec[i]===d).map(Number);
 const delSize = () => marked('del').reduce((a,i)=>a+ORPH[i].size,0);
-const label = o => o.name + (o.kind==='dir'||o.kind==='empty' ? '/' : '');
+const label = o => o.name + (o.kind==='dir' ? '/' : '');
 const osub = o => o.osub || [o.dir, o.kind==='dir' ? `${o.files.toLocaleString('en')} files` : '', 'changed ' + o.age].filter(Boolean).join(' · ');
 
 function listHtml(st){

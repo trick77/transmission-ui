@@ -13,7 +13,7 @@ export interface Orphan {
   id: string;
   group: string; // the scanned folder, or STATE_GROUP
   path: string;
-  kind: "file" | "dir" | "empty" | "symlink" | "state";
+  kind: "file" | "dir" | "symlink" | "state";
   size: number;
   files: number;
   mtime: number;

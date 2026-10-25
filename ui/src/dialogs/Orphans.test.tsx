@@ -458,7 +458,6 @@ describe("helpers", () => {
   });
 
   it("summarises contents", () => {
-    expect(contents(o({ kind: "empty" }))).toBe("empty");
     expect(contents(o({ kind: "symlink" }))).toBe("a symbolic link");
     expect(contents(o({ kind: "state", files: 1 }))).toBe(
       "1 Transmission file",
@@ -473,7 +472,6 @@ describe("helpers", () => {
     expect(text(o({ flags: ["match"], match: "/mnt/x" }))).toMatch(
       /exact name.*\/mnt\/x.*keep it/,
     );
-    expect(text(o({ kind: "empty" }))).toMatch(/An empty folder/);
     expect(text(o({ flags: ["torrent"], name: "arch.iso" }))).toMatch(
       /not loaded.*It is for arch.iso/,
     );

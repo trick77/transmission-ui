@@ -6,7 +6,7 @@ export interface SimOrphan {
   id: string
   group: string
   path: string
-  kind: 'file' | 'dir' | 'empty' | 'symlink' | 'state'
+  kind: 'file' | 'dir' | 'symlink' | 'state'
   size: number
   files: number
   mtime: number
@@ -60,7 +60,6 @@ export function createOrphans(enabled: boolean, now: number): OrphanStore {
       children: [{ name: 'Plan 9 from Outer Space (1957).mkv', dir: false, size: 6 * GB, files: 1 }] },
     { group: '/data/torrents', path: '/data/torrents/ubuntu-22.04.4-desktop-amd64.iso', kind: 'file', size: 4.7 * GB, files: 1, mtime: now - 210 * DAY,
       types: { 'disk image': 1 } },
-    { group: '/data/torrents', path: '/data/torrents/sonarr/docs-old', kind: 'empty', size: 0, files: 0, mtime: now - 60 * DAY },
     { group: '/data/torrents', path: '/data/torrents/watch/archlinux-2025.11.01-x86_64.iso.torrent', kind: 'file', size: 100e3, files: 1, mtime: now - 365 * DAY,
       flags: ['torrent'], name: 'archlinux-2025.11.01-x86_64.iso', types: { torrent: 1 } },
     { group: '/data/incomplete', path: '/data/incomplete/debian-12.5.0-amd64-DVD-1.iso.part', kind: 'file', size: 2.3 * GB, files: 1, mtime: now - 120 * DAY,
