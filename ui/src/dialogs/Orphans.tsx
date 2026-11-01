@@ -11,7 +11,7 @@ import { Opt, Sec } from "../app/ui";
 import { set, toast } from "../state/store";
 
 /** The setup the finder needs, as the snippet the empty state shows. */
-const SETUP = `user: "1000:1000"                 # the daemon's PUID:PGID
+const SETUP = `user: "PUID:PGID"                 # the uid:gid the daemon runs as
 volumes:
   - /srv/torrents:/data/torrents   # same paths the daemon sees
   - /srv/transmission:/config

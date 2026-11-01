@@ -58,7 +58,7 @@ services:
       # volumes and the user below too; see "Orphaned files" in README.md.
       # BACKEND_DATA_ROOTS: /data/torrents
       # BACKEND_DAEMON_CONFIG: /config
-    # user: "1000:1000"                  # the daemon's PUID:PGID
+    # user: "PUID:PGID"                  # the uid:gid the daemon runs as
     # volumes:
     #   - /srv/torrents:/data/torrents   # the same path the daemon uses
     #   - /srv/transmission:/config      # the daemon's config folder

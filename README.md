@@ -118,7 +118,7 @@ Delete or Keep; nothing is deleted without that, and Keep is remembered. Off unl
 ```yaml
 services:
   transmission-ui:
-    user: "1000:1000"                  # the daemon's PUID:PGID, or deletes are refused
+    user: "PUID:PGID"                  # the uid:gid the daemon runs as, or deletes are refused
     volumes:
       - /srv/torrents:/data/torrents   # the same path the daemon uses
       - /srv/transmission:/config      # the daemon's config folder

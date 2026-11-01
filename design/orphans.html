@@ -1176,7 +1176,7 @@ function renderSettings(){
     b.innerHTML = `<div class="empty-st"><svg class="i" style="width:28px;height:28px;color:var(--ink-3)"><use href="#i-folder"/></svg>
       <div class="t">Folders are not mounted</div>
       <div style="max-width:440px">Finding orphaned files needs the transmission-ui container to see the folders the daemon writes to (data and its config folder), and permission to delete in them.</div>
-      <div class="howto">user: "1000:1000"                 # the daemon's PUID:PGID
+      <div class="howto">user: "PUID:PGID"                 # the uid:gid the daemon runs as
 volumes:
   - /srv/torrents:/data/torrents   # same paths the daemon sees
   - /srv/transmission:/config
