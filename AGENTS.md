@@ -18,6 +18,7 @@
 - `make dev` → `:5173`; target/auth from `ui/.env.local`. `make sim` needs Node ≥ 23.6; knobs `TM_SIM_SEED`, `TM_SIM_COUNT`, `TM_SIM_SPEED`, `TM_SIM_PORT`. Sim names copyright-safe: distros, Blender, PD/CC0, NASA, open data.
 - Gate `make check` (ship master unpinned; local `SHIP_CMD=<binary>`). 75 % floors + patch. `make hooks` once per clone. GitHub never first to find a failure. `[skip patch-coverage]` skips patch only. `sim/`, `e2e/` linted, not prettier-formatted.
 - Commit subjects + PR titles: Go style `area: what` (`ui: …`, `backend: …`, `sim: …`, `design: …`, `ci: …`), gated by ship; release notes list them by area.
+- Fresh clone: `ship hooks` before the first push (check, conform and init install it too); without the pre-push hook a push skips the gate.
 - Tests against `ui/src/test/fakeDaemon.ts`; assert recorded calls, not internals. New source file → a test importing it.
 - e2e not in CI or gate: `make fe-e2e` by hand before a UI-behaviour PR.
 - Visible change → drive the running app, compare to `design/*.html` in Safari.
