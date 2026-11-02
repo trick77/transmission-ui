@@ -3,7 +3,7 @@
 ## Layout
 - `design/` mockups = spec. CSS: edit mock (`design/src/head.html`) first, copy `<style>` to `ui/src/styles/app.css` (fonts → `../assets/fonts/`), `npm run format`.
 - `ui/sim/` fake daemon, Node type stripping: no enum, no parameter properties, `.ts` on relative imports, `import type` statement form only.
-- `backend/`: kit / kit/auth for shell, sessions, OIDC, env, logging, probes, errors; no own copies. Errors `httpx.WriteError` `{"error"}` (UI banner reads it). `<base>/healthz` 2xx only; `<base>/readyz` = daemon RPC answers. Probes answer loopback only, no forwarding header (else 404): `BACKEND_ADDR` wildcard or loopback, or `-healthcheck` fails. `BACKEND_SESSION_SECRET` ≥ 32 bytes. Empty env = unset.
+- `backend/`: kit / kit/auth for shell, sessions, OIDC, env, logging, probes, errors; no own copies. Errors `httpx.WriteError` `{"error"}` (UI banner reads it). `<base>/healthz` 2xx only; `<base>/readyz` = daemon RPC answers. Probes answer loopback only, no forwarding header (else 404): `BACKEND_ADDR` wildcard or loopback, or `-healthcheck` fails.
 - Auth (`BACKEND_AUTH_MODE`): `oidc` | `form` (`TRANSMISSION_USER`/`TRANSMISSION_PASSWORD`); no auto-login. Gate = `kit/spa` `Gate` on every shell answer, NOT the `GET /` route (unknown paths get the shell: `/settings` would leak). Shell, login, RPC all judge by `Sessions.Authorize`. Signed out: **200 (oidc card) or 302 (form), never 4xx**. `/login`, `POST /login`, `/login-assets/` mount in every mode; POST 404s outside form. Upstream 401 → 502, never passthrough (`WWW-Authenticate` pops the browser dialog).
 - URL `https://<PUBLIC_FQDN><BACKEND_BASE_PATH>`; FQDN bare, read raw; loopback host:port → http. Base path forwarded unstripped; routes keep it.
 - `compose.yaml` proxy-agnostic: no published port, no proxy config; never add one. `compose.dev.yaml` = throwaway daemon.
@@ -12,10 +12,9 @@
 ## Daemon
 - Target **4.1.3** (`rpc_version` 19, semver 6.0.1). JSON-RPC 2.0, snake_case, no 4.0.x compat.
 - Real daemon (user's server, `:9091`): never point tests, fixtures or compose at it.
-- Local: `docker compose -f compose.dev.yaml up -d`, creds `dev:devpass`, seed `scripts/fixtures.sh`.
 
 ## Dev / test / ship
-- `make dev` → `:5173`; target/auth from `ui/.env.local`. `make sim` needs Node ≥ 23.6; knobs `TM_SIM_SEED`, `TM_SIM_COUNT`, `TM_SIM_SPEED`, `TM_SIM_PORT`. Sim names copyright-safe: distros, Blender, PD/CC0, NASA, open data.
+- `make dev` target/auth from `ui/.env.local`. Sim names copyright-safe: distros, Blender, PD/CC0, NASA, open data.
 - Gate `make check` (ship master unpinned; local `SHIP_CMD=<binary>`). 75 % floors + patch. `make hooks` once per clone. GitHub never first to find a failure. `[skip patch-coverage]` skips patch only. `sim/`, `e2e/` linted, not prettier-formatted.
 - Commit subjects + PR titles: Go style `area: what` (`ui: …`, `backend: …`, `sim: …`, `design: …`, `ci: …`), gated by ship; release notes list them by area.
 - Fresh clone: `ship hooks` before the first push (check, conform and init install it too); without the pre-push hook a push skips the gate.
@@ -23,7 +22,7 @@
 - e2e not in CI or gate: `make fe-e2e` by hand before a UI-behaviour PR.
 - Visible change → drive the running app, compare to `design/*.html` in Safari.
 - Release by hand only: `gh workflow run Release -f bump=patch`. Merges ship nothing. Ship's master is the only guard.
-- `backend/dist`: vite outDir, tracked `.gitkeep` only (`emptyOutDir: false`, vite config clears the rest). Binary refuses to start without `index.html`: `make fe-build` first. Local run `scripts/backend.sh`.
+- Binary refuses to start without `backend/dist/index.html`: `make fe-build` first. Local run `scripts/backend.sh`.
 
 ## Conventions
 - All RPC via `ui/src/rpc/methods.ts`; daemon's snake_case names, spellings from upstream `docs/rpc-spec.md`, never memory.
