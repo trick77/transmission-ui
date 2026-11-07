@@ -23,6 +23,7 @@
   --ink: #faf9f5;
   --ink-2: #9c9a92; /* --color-muted */
   --ink-3: #6f6d66; /* --color-faint */
+  --rail-label: #97958c; /* ../loom's sidebar section title color */
   --accent: #d97757; /* --color-accent-strong: text/lines on dark */
   --accent-fill: #c25f34; /* --color-accent-fill: buttons, toggles */
   --accent-ink: #faf9f5;
@@ -509,12 +510,14 @@ body.resizing {
   height: 34px;
 }
 
-/* Sidebar headings read as words, not as tracked-out caps. They sit a step below
-   the entries so they label the group instead of competing with it. */
+/* Sidebar headings read as words, not as tracked-out caps: ../loom's sidebar
+   section title, 12/16, weight 400, its label color. They sit a step below the
+   entries so they label the group instead of competing with it. */
 .side-h {
   font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-3);
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--rail-label);
   padding: 0 8px;
   margin: 13px 0 4px;
 }
