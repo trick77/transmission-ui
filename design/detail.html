@@ -16,7 +16,11 @@
   --ink:       #faf9f5;
   --ink-2:     #9c9a92;   /* --color-muted */
   --ink-3:     #6f6d66;   /* --color-faint */
-  --accent:    #d97757;   /* --color-accent-strong: text/lines on dark */
+  --rail-label:#97958c;   /* ../loom's sidebar: section title */
+  --rail:      #c7c5bd;   /* entry text */
+  --rail-hover:#2a2a28;   /* entry hover */
+  --rail-sel:  #10100f;   /* selected entry */
+  --accent:  #d97757;   /* --color-accent-strong: text/lines on dark */
   --accent-fill:#c25f34;  /* --color-accent-fill: buttons, toggles */
   --accent-ink:#faf9f5;
   --accent-soft: rgba(198,97,63,.14);
@@ -157,23 +161,24 @@ body.resizing{cursor:col-resize;user-select:none}
 .signin .btn{width:100%;justify-content:center}
 .signin .logo{width:34px;height:34px}
 
-/* Sidebar headings read as words, not as tracked-out caps. They sit a step below
-   the entries so they label the group instead of competing with it. */
-.side-h{font-size:12px;font-weight:500;color:var(--ink-3);padding:0 8px;margin:13px 0 4px}
+/* Sidebar headings read as words, not as tracked-out caps: ../loom's sidebar
+   section title, 12/16, weight 400, its label color, 20px above and 8px below.
+   They sit a step below the entries so they label the group instead of competing
+   with it. */
+.side-h{font-size:12px;line-height:16px;font-weight:400;color:var(--rail-label);padding:0 8px;margin:20px 0 8px}
 .side-h:first-child{margin-top:0}
-/* Entries carry loom's .ui-sidebar-text scale: 14px / 400 / 20px line-height. */
-/* 24px around a 20px line box = 2px of air top and bottom. 28px was too loose to
-   read the Status list as one group; below 24 the label crowds its own box and the
-   .on pill loses its padding. Section breaks (.side-h) carry the spacing instead. */
-.side-item{display:flex;align-items:center;gap:9px;min-height:24px;padding:0 8px;border-radius:var(--r-sm);color:var(--ink-2);width:100%;text-align:left;font-size:14px;font-weight:400;line-height:20px}
-.side-item:hover{background:var(--surface-2);color:var(--ink)}
-.side-item.on{background:var(--accent-soft);color:var(--accent);font-weight:500;box-shadow:inset 0 0 0 1px rgba(217,119,87,.18)}
+/* Entries are ../loom's sidebar nav entries: 26px, 14/20/400 in the rail color,
+   stacked flush. Hover lights only the background; the selected entry darkens it
+   and keeps its text color, no accent. Section breaks (.side-h) carry the spacing. */
+.side-item{display:flex;align-items:center;gap:9px;min-height:26px;padding:0 8px;border-radius:var(--r-sm);color:var(--rail);width:100%;text-align:left;font-size:14px;font-weight:400;line-height:20px}
+.side-item:hover{background:var(--rail-hover)}
+.side-item.on{background:var(--rail-sel)}
 /* Long hosts and folder names fade out rather than ending in an ellipsis. The mask
    always fades the last 20px of the box; short entries end well before it because
    .lbl is flex:1, so in practice only overflowing text meets the gradient. */
 .side-item .lbl{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent)}
 .side-item .cnt{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
-.side-item.on .cnt{color:var(--accent)}
+.side-item.on .cnt{color:var(--ink-2)}
 /* tracker health in the sidebar */
 .side-item .st{width:7px;height:7px;border-radius:50%;flex:none;margin-left:2px}
 .side-item .st.down{background:var(--err)}
@@ -181,7 +186,7 @@ body.resizing{cursor:col-resize;user-select:none}
 .side-item .sub{font-size:11px;color:var(--ink-3);white-space:nowrap}
 .side-item .sub.down{color:var(--err)}
 /* A tracker row with a sub-line is two 15px lines in the same 0 8px padding every
-   other item uses, so the list keeps one rhythm: 24px for a one-line item, 30px
+   other item uses, so the list keeps one rhythm: 26px for a one-line item, 30px
    here, and no extra air of its own. It was 5px 8px = 45px, which read as a gap. */
 .side-item.two{padding:0 8px;align-items:flex-start}
 .side-item.two .col{flex:1;min-width:0;line-height:15px}
